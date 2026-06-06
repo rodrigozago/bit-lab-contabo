@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>bit-lab.tech</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #0a0a0a;
+      font-family: 'Courier New', monospace;
+      color: #e0e0e0;
+    }
+
+    .container {
+      text-align: center;
+      padding: 2rem;
+    }
+
+    .logo {
+      font-size: 3rem;
+      font-weight: bold;
+      letter-spacing: 0.1em;
+      color: #ffffff;
+    }
+
+    .logo span {
+      color: #4ade80;
+    }
+
+    .tagline {
+      margin-top: 1rem;
+      font-size: 1rem;
+      color: #6b7280;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+    }
+
+    .status {
+      margin-top: 2.5rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: #111;
+      border: 1px solid #1f2937;
+      border-radius: 9999px;
+      padding: 0.4rem 1rem;
+      font-size: 0.85rem;
+      color: #4ade80;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #4ade80;
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo">bit<span>-</span>lab<span>.tech</span></div>
+    <div class="tagline">it works.</div>
+    <div class="status">
+      <div class="dot"></div>
+      online
+    </div>
+  </div>
+</body>
+</html>
