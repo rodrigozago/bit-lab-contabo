@@ -1,0 +1,167 @@
+.page {
+  min-height: 100vh;
+  background: #0a0a0a;
+  color: #e0e0e0;
+  font-family: 'Courier New', monospace;
+  padding: 2rem;
+}
+
+.box {
+  max-width: 360px;
+  margin: 20vh auto 0;
+  border: 1px solid #1f2937;
+  padding: 2rem;
+}
+
+.tag {
+  font-size: 0.75rem;
+  color: #4ade80;
+  letter-spacing: 0.15em;
+  margin-bottom: 1.5rem;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.input {
+  background: #111;
+  border: 1px solid #1f2937;
+  color: #e0e0e0;
+  font-family: 'Courier New', monospace;
+  font-size: 0.9rem;
+  padding: 0.6rem 0.8rem;
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.input:focus {
+  border-color: #4ade80;
+}
+
+.error {
+  font-size: 0.8rem;
+  color: #f87171;
+}
+
+.btn {
+  background: transparent;
+  border: 1px solid #4ade80;
+  color: #4ade80;
+  font-family: 'Courier New', monospace;
+  font-size: 0.85rem;
+  padding: 0.6rem 1rem;
+  cursor: pointer;
+  letter-spacing: 0.1em;
+  transition: background 0.15s;
+}
+
+.btn:hover {
+  background: rgba(74, 222, 128, 0.1);
+}
+
+/* ── logged in ── */
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #1f2937;
+  padding-bottom: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.btnSm {
+  background: transparent;
+  border: 1px solid #374151;
+  color: #9ca3af;
+  font-family: 'Courier New', monospace;
+  font-size: 0.75rem;
+  padding: 0.35rem 0.75rem;
+  cursor: pointer;
+  letter-spacing: 0.08em;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.btnSm:hover {
+  border-color: #4ade80;
+  color: #4ade80;
+}
+
+.info {
+  color: #6b7280;
+  font-size: 0.9rem;
+}
+
+.count {
+  font-size: 0.75rem;
+  color: #6b7280;
+  margin-bottom: 1rem;
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.table th {
+  text-align: left;
+  color: #4ade80;
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #1f2937;
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid #111;
+  vertical-align: middle;
+}
+
+.table tr:hover td {
+  background: #111;
+}
+
+.id {
+  color: #6b7280;
+  width: 2rem;
+}
+
+.date {
+  color: #6b7280;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.btnDel {
+  background: transparent;
+  border: 1px solid #374151;
+  color: #6b7280;
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+  cursor: pointer;
+  font-family: 'Courier New', monospace;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.btnDel:hover {
+  border-color: #f87171;
+  color: #f87171;
+}
