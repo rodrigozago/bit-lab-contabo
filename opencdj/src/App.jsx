@@ -66,14 +66,25 @@ export default function App() {
     return next
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     const next = validate()
     if (Object.keys(next).length > 0) {
       setErrors(next)
       return
     }
-    setSubmitted(true)
+
+    try {
+      const res = await fetch('/api/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      })
+      if (!res.ok) throw new Error()
+      setSubmitted(true)
+    } catch {
+      setErrors({ _global: 'erro ao enviar, tente novamente' })
+    }
   }
 
   return (
@@ -199,6 +210,9 @@ export default function App() {
                 </div>
               ))}
 
+              {errors._global && (
+                <span className={styles.errorMsg}>! {errors._global}</span>
+              )}
               <button type="submit" className={styles.submitBtn}>
                 <span>▶ {frontmatter.submitText}</span>
               </button>
