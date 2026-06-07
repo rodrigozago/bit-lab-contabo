@@ -42,7 +42,15 @@ export default function App() {
   const [formData, setFormData] = useState({})
   const [submitted, setSubmitted] = useState(false)
   const [errors, setErrors] = useState({})
+  const [formOpen, setFormOpen] = useState(true)
   const { displayed: typedSubline, done: typingDone } = useTypewriter(frontmatter.subheadline)
+
+  useEffect(() => {
+    fetch('/api/status')
+      .then(r => r.json())
+      .then(({ open }) => setFormOpen(open))
+      .catch(() => {})
+  }, [])
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value })
@@ -164,7 +172,12 @@ export default function App() {
 
           <div className={styles.sectionTag}>// 02 · INSCRIÇÃO</div>
 
-          {submitted ? (
+          {!formOpen ? (
+            <div className={styles.success}>
+              <div className={styles.successIcon}>△</div>
+              <p>// inscrições encerradas. fique ligado nas próximas edições.</p>
+            </div>
+          ) : submitted ? (
             <div className={styles.success}>
               <div className={styles.successIcon}>△</div>
               <p>{frontmatter.successMessage}</p>

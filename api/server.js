@@ -25,8 +25,11 @@ db.exec(`
   )
 `)
 
+const LIMIT = 6
+
 const insert = db.prepare('INSERT INTO submissions (name, contact, genre) VALUES (@name, @contact, @genre)')
 const selectAll = db.prepare('SELECT * FROM submissions ORDER BY created_at DESC')
+const countAll = db.prepare('SELECT COUNT(*) as count FROM submissions')
 const deleteById = db.prepare('DELETE FROM submissions WHERE id = ?')
 
 app.use(cors())
@@ -34,10 +37,19 @@ app.use(express.json())
 
 // ── público ────────────────────────────────────────────────
 
+app.get('/api/status', (req, res) => {
+  const { count } = countAll.get()
+  res.json({ count, open: count < LIMIT })
+})
+
 app.post('/api/submit', (req, res) => {
   const { name, contact, genre } = req.body
   if (!name || !contact || !genre) {
     return res.status(400).json({ error: 'campos obrigatórios faltando' })
+  }
+  const { count } = countAll.get()
+  if (count >= LIMIT) {
+    return res.status(403).json({ error: 'inscrições encerradas' })
   }
   try {
     const result = insert.run({ name, contact, genre })
