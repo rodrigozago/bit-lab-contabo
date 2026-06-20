@@ -9,6 +9,7 @@ const app = express()
 const PORT = 3001
 
 const ADMIN_HASH = bcrypt.hashSync('pist@ocult@2026', 12)
+const LISTENING_ADMIN_HASH = bcrypt.hashSync('rz123456', 12)
 
 // tokens válidos em memória — expiram ao reiniciar o servidor
 const tokens = new Set()
@@ -25,12 +26,23 @@ db.exec(`
   )
 `)
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS listening_config (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    album TEXT NOT NULL
+  )
+`)
+db.exec(`INSERT OR IGNORE INTO listening_config (id, album) VALUES (1, 'Nenhum álbum')`)
+
 const LIMIT = 6
 
 const insert = db.prepare('INSERT INTO submissions (name, contact, genre) VALUES (@name, @contact, @genre)')
 const selectAll = db.prepare('SELECT * FROM submissions ORDER BY created_at DESC')
 const countAll = db.prepare('SELECT COUNT(*) as count FROM submissions')
 const deleteById = db.prepare('DELETE FROM submissions WHERE id = ?')
+
+const updateAlbum = db.prepare('UPDATE listening_config SET album = @album WHERE id = 1')
+const getAlbum = db.prepare('SELECT album FROM listening_config WHERE id = 1')
 
 app.use(cors())
 app.use(express.json())
@@ -60,6 +72,24 @@ app.post('/api/submit', (req, res) => {
 })
 
 // ── admin ──────────────────────────────────────────────────
+
+// ── listening ──────────────────────────────────────────────
+app.get('/api/listening', (req, res) => {
+  const row = getAlbum.get()
+  res.json({ album: row ? row.album : '' })
+})
+
+app.post('/api/listening', (req, res) => {
+  const { password, album } = req.body
+  if (!password || !bcrypt.compareSync(password, LISTENING_ADMIN_HASH)) {
+    return res.status(401).json({ error: 'senha incorreta' })
+  }
+  if (album === undefined) {
+    return res.status(400).json({ error: 'album faltando' })
+  }
+  updateAlbum.run({ album })
+  res.json({ ok: true })
+})
 
 app.post('/api/admin/login', (req, res) => {
   const { password } = req.body || {}

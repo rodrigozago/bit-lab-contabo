@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bit Lab - Listening</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #000;
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      text-align: center;
+    }
+    img.logo {
+      width: 150px;
+      margin-bottom: 2rem;
+    }
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 400;
+      color: #888;
+      margin-bottom: 0.5rem;
+    }
+    .album {
+      font-size: 3rem;
+      font-weight: 700;
+      padding: 0 1rem;
+    }
+    .admin-link {
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      color: #333;
+      text-decoration: none;
+      font-size: 0.8rem;
+    }
+    .admin-link:hover {
+      color: #888;
+    }
+  </style>
+</head>
+<body>
+  <img src="/logo.svg" alt="Bit Lab Logo" class="logo">
+  <h1>Agora reproduzindo</h1>
+  <div class="album" id="album">Carregando...</div>
+  <a href="/admin.html" class="admin-link">Config</a>
+
+  <script>
+    async function fetchAlbum() {
+      try {
+        const res = await fetch('/api/listening');
+        const data = await res.json();
+        document.getElementById('album').textContent = data.album || 'Nenhum álbum';
+      } catch (err) {
+        document.getElementById('album').textContent = 'Erro ao carregar';
+      }
+    }
+    fetchAlbum();
+    setInterval(fetchAlbum, 10000); // atualiza a cada 10s
+  </script>
+</body>
+</html>
