@@ -164,7 +164,7 @@ export default function App() {
 
           <div className={styles.sectionTag}>// 02 · INSCRIÇÃO</div>
 
-          {true ? (
+          {false ? (
             <div className={styles.success}>
               <div className={styles.successIcon}>△</div>
               <p>// inscrições encerradas. fique ligado nas próximas edições.</p>
