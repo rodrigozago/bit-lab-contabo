@@ -1,3 +1,16 @@
 node_modules/
 opencdj/dist/
 opencdj/hero.mp4
+
+# ponto-studio
+ponto-studio/.env
+ponto-studio/.env.local
+ponto-studio/**/dist/
+ponto-studio/**/node_modules/
+ponto-studio/apps/api/exports/
+ponto-studio/apps/api/uploads/
+ponto-studio/**/__pycache__/
+ponto-studio/**/*.pyc
+ponto-studio/**/.venv/
+
+studio/

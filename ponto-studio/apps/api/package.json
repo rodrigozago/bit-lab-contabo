@@ -1,0 +1,33 @@
+{
+  "name": "@ponto-studio/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "dev": "tsx watch --env-file=../../.env src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@fastify/cors": "^9.0.1",
+    "@fastify/multipart": "^8.3.0",
+    "@fastify/static": "^7.0.4",
+    "@google/genai": "^1.52.0",
+    "@ponto-studio/shared": "workspace:*",
+    "fastify": "^4.28.1",
+    "redis": "^4.7.0",
+    "nanoid": "^5.0.7",
+    "uuid": "^10.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.2",
+    "@types/uuid": "^10.0.0",
+    "tsx": "^4.15.4",
+    "typescript": "^5.4.5",
+    "vitest": "^1.6.1"
+  }
+}

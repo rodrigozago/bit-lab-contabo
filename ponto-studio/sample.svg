@@ -1,0 +1,19 @@
+<svg width="100mm" height="100mm" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" xmlns:inkstitch="http://inkstitch.org/namespace">
+  <!-- 
+    Retângulo com preenchimento Tatami.
+    O worker irá ler os atributos inkstitch:* para gerar os pontos.
+  -->
+  <path
+     d="M 10,10 H 50 V 50 H 10 Z"
+     fill="#E64980"
+     inkstitch:fill_method="tatami_fill"
+     inkstitch:angle="30"
+     inkstitch:line_distance="0.5mm" />
+  <!-- Linha com ponto corrido (running stitch) -->
+  <path
+     d="M 60,60 C 70,80 80,70 90,90"
+     fill="none"
+     stroke="#495057"
+     stroke-width="1"
+     inkstitch:stroke_method="running_stitch" />
+</svg>

@@ -1,0 +1,74 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # sem publicação de porta ao host — usado apenas internamente por api/worker
+    networks:
+      - ponto
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    ports:
+      # porta 3001 já é usada pela api do opencdj nesta VPS — usamos 4001,
+      # e só no loopback (não expõe a API diretamente para fora)
+      - "127.0.0.1:4001:3001"
+    environment:
+      PORT: "3001"
+      PUBLIC_URL: "https://ponto.bit-lab.tech"
+      REDIS_URL: "redis://redis:6379"
+      OPENROUTER_API_KEY: "${OPENROUTER_API_KEY}"
+      NODE_ENV: production
+    volumes:
+      - exports:/app/apps/api/exports
+      - uploads:/app/apps/api/uploads
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - ponto
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: workers/embroidery
+      dockerfile: Dockerfile
+    environment:
+      REDIS_URL: "redis://redis:6379"
+      EXPORTS_DIR: "/exports"
+    volumes:
+      - exports:/exports
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - ponto
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    ports:
+      # nginx da VPS (bit-lab-agents/nginx) faz proxy_pass para cá, igual ao
+      # padrão usado por studio.bit-lab.tech (porta 3002)
+      - "127.0.0.1:3003:80"
+    depends_on:
+      - api
+    networks:
+      - ponto
+    restart: unless-stopped
+
+volumes:
+  exports:
+  uploads:
+
+networks:
+  ponto:
+    driver: bridge

@@ -1,0 +1,25 @@
+# Nunca copiar node_modules para o container — instalados pelo pnpm no build
+**/node_modules
+
+# Artefatos de build locais
+**/dist
+**/.turbo
+
+# Arquivos de ambiente e segredos
+.env
+.env.*
+
+# Logs
+**/*.log
+npm-debug.log*
+
+# Editor e SO
+.DS_Store
+Thumbs.db
+.vscode
+.idea
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
