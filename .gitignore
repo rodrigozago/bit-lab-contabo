@@ -13,4 +13,9 @@ ponto-studio/**/__pycache__/
 ponto-studio/**/*.pyc
 ponto-studio/**/.venv/
 
+# auth
+auth/.env
+auth/node_modules/
+auth/data/
+
 studio/

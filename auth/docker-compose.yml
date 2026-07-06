@@ -1,0 +1,63 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: bitlab_auth
+      POSTGRES_USER: bitlab_auth
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - auth
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bitlab_auth"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    networks:
+      - auth
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  auth:
+    build: .
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: "postgres://bitlab_auth:${POSTGRES_PASSWORD}@postgres:5432/bitlab_auth"
+      REDIS_URL: "redis://redis:6379"
+      ISSUER: "https://auth.bit-lab.tech"
+      COOKIE_DOMAIN: ".bit-lab.tech"
+      SESSION_SECRET: "${SESSION_SECRET}"
+      INITIAL_ADMIN_EMAIL: "${INITIAL_ADMIN_EMAIL}"
+      INITIAL_ADMIN_PASSWORD: "${INITIAL_ADMIN_PASSWORD}"
+      JWKS_PATH: "/app/data/jwks.json"
+      NODE_ENV: production
+      PORT: "4000"
+    ports:
+      # nginx da VPS faz proxy_pass pra cá (auth.bit-lab.tech) — só loopback
+      - "127.0.0.1:4002:4000"
+    volumes:
+      - jwks:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - auth
+
+volumes:
+  pgdata:
+  jwks:
+
+networks:
+  auth:
+    driver: bridge
