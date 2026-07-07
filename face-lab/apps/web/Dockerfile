@@ -14,11 +14,11 @@ COPY apps/web ./apps/web
 COPY tsconfig.base.json ./
 
 WORKDIR /app/packages/shared
-RUN node_modules/.bin/tsc -p tsconfig.json
+RUN pnpm exec tsc -p tsconfig.json
 
 WORKDIR /app/apps/web
-RUN node_modules/.bin/tsc -p tsconfig.json --noEmit
-RUN node_modules/.bin/vite build
+RUN pnpm exec tsc -p tsconfig.json --noEmit
+RUN pnpm exec vite build
 
 # ── Serve estático com nginx (proxy /api → api:3001) ──────────────────────────
 FROM nginx:1.27-alpine AS runtime

@@ -15,10 +15,10 @@ COPY apps/api ./apps/api
 COPY tsconfig.base.json ./
 
 WORKDIR /app/packages/shared
-RUN node_modules/.bin/tsc -p tsconfig.json
+RUN pnpm exec tsc -p tsconfig.json
 
 WORKDIR /app/apps/api
-RUN node_modules/.bin/tsc -p tsconfig.json
+RUN pnpm exec tsc -p tsconfig.json
 
 # ── Runtime ────────────────────────────────────────────────────────────────────
 FROM node:20-alpine AS runtime
