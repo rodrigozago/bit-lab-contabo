@@ -27,30 +27,58 @@ export function Enroll() {
   const [cameraDenied, setCameraDenied] = useState(false);
 
   const stopCamera = useCallback(() => {
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    streamRef.current = null;
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
   }, []);
 
-  useEffect(() => () => stopCamera(), [stopCamera]);
+  useEffect(() => {
+    // Limpeza principal ao desmontar o componente
+    return () => stopCamera();
+  }, [stopCamera]);
 
-  async function startCamera() {
+  function startCamera() {
     setError(null);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: "user" } });
-      streamRef.current = stream;
-      if (videoRef.current) {
+    setCameraDenied(false);
+    setPhase("capturing");
+    setStep(0);
+    setFrames([]);
+    setPreviews([]);
+  }
+
+  useEffect(() => {
+    if (phase !== "capturing") {
+      return;
+    }
+
+    let active = true;
+    async function setupCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: "user" } });
+        if (!active || !videoRef.current) {
+          stream.getTracks().forEach(t => t.stop());
+          return;
+        }
+        streamRef.current = stream;
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
+      } catch (err) {
+        if (active) {
+          setCameraDenied(true);
+          setError("Não consegui acessar a câmera. Você pode enviar fotos suas em vez disso.");
+          setPhase("error"); // Oferece uma saída clara do fluxo
+        }
       }
-      setPhase("capturing");
-      setStep(0);
-      setFrames([]);
-      setPreviews([]);
-    } catch {
-      setCameraDenied(true);
-      setError("Não consegui acessar a câmera. Você pode enviar fotos suas em vez disso.");
     }
-  }
+
+    setupCamera();
+
+    return () => {
+      active = false;
+      stopCamera(); // Garante que a câmera pare ao sair da fase de captura
+    };
+  }, [phase, stopCamera]);
 
   async function captureFrame() {
     const video = videoRef.current;
