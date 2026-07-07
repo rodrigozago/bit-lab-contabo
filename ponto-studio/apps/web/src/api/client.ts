@@ -7,6 +7,8 @@ import type {
   ApiResponse,
   AnalyzeJobStatus,
   LocalAnalyzeParams,
+  EmbroideryElement,
+  CanvasSize,
 } from "@ponto-studio/shared";
 
 const BASE = "/api";
@@ -52,6 +54,12 @@ export const api = {
     },
     poll: (jobId: string) => request<AnalyzeJobStatus>(`/analyze/local/${jobId}`),
   },
+  preview: {
+    // Gera o preview de linhas de ponto de um elemento (mesmo motor do DST)
+    create: (body: { element: EmbroideryElement; canvas: CanvasSize }) =>
+      request<{ jobId: string }>("/preview", { method: "POST", body: JSON.stringify(body) }),
+    poll: (jobId: string) => request<AnalyzeJobStatus>(`/preview/${jobId}`),
+  },
   upload: {
     image: async (file: File): Promise<{ fileId: string; url: string }> => {
       const fd = new FormData();
@@ -77,6 +85,28 @@ export async function pollAnalysisUntilDone(jobId: string, intervalMs = 1000): P
         } else if (job.status === "error") {
           clearInterval(timer);
           reject(new Error(job.errorMessage ?? "Falha na análise da imagem"));
+        }
+      } catch (err) {
+        clearInterval(timer);
+        reject(err);
+      }
+    }, intervalMs);
+  });
+}
+
+/** Aguarda o preview de bordado terminar e resolve com o SVG de pontos. */
+export async function pollPreviewUntilDone(jobId: string, intervalMs = 300): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const timer = setInterval(async () => {
+      try {
+        const job = await api.preview.poll(jobId);
+        if (job.status === "done") {
+          clearInterval(timer);
+          if (!job.svg) return reject(new Error("Preview terminou sem SVG"));
+          resolve(job.svg);
+        } else if (job.status === "error") {
+          clearInterval(timer);
+          reject(new Error(job.errorMessage ?? "Falha ao gerar preview"));
         }
       } catch (err) {
         clearInterval(timer);

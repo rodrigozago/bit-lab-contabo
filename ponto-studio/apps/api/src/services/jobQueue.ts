@@ -143,6 +143,36 @@ export async function enqueueAnalyzeJob(params: {
   return job;
 }
 
+// ── Enqueue: preview de bordado (SVG-entrada → linhas de ponto) ───────────────
+// Grava o SVG anotado em exports/{jobId}.in.svg e enfileira type:"preview".
+// O worker devolve exports/{jobId}.svg (mesmo listener/jobStore).
+export async function enqueuePreviewJob(params: {
+  jobId: string;
+  svgContent: string;
+}): Promise<ExportJob> {
+  const { jobId, svgContent } = params;
+  const now = new Date().toISOString();
+
+  const job: ExportJob = {
+    jobId,
+    projectId: "",
+    format: "DST", // não usado em preview — campo exigido pelo tipo
+    status: "pending",
+    createdAt: now,
+    updatedAt: now,
+  };
+  jobStore.set(jobId, job);
+
+  const inputFile = `${jobId}.in.svg`;
+  writeFileSync(join(EXPORTS_DIR, inputFile), svgContent, "utf-8");
+
+  const payload = JSON.stringify({ type: "preview", jobId, svgFile: inputFile });
+  const pub = await getPublisher();
+  await pub.rPush(JOBS_QUEUE, payload);
+
+  return job;
+}
+
 function updateJob(jobId: string, patch: Partial<ExportJob>): void {
   const existing = jobStore.get(jobId);
   if (!existing) return;

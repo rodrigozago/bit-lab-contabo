@@ -8,6 +8,7 @@ import { projectsRoutes } from "./routes/projects.js";
 import { exportRoutes } from "./routes/export.js";
 import { uploadRoutes } from "./routes/upload.js";
 import { analyzeRoutes } from "./routes/analyze.js";
+import { previewRoutes } from "./routes/preview.js";
 import { startResultListener } from "./services/jobQueue.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -34,6 +35,7 @@ await app.register(projectsRoutes, { prefix: "/api/projects" });
 await app.register(exportRoutes, { prefix: "/api/export" });
 await app.register(uploadRoutes, { prefix: "/api/upload" });
 await app.register(analyzeRoutes, { prefix: "/api/analyze" });
+await app.register(previewRoutes, { prefix: "/api/preview" });
 
 app.get("/health", async () => ({ ok: true, service: "ponto-studio-api" }));
 

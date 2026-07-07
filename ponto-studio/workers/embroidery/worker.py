@@ -21,10 +21,12 @@ import time
 from pathlib import Path
 from typing import Any
 
+import math
+
 import pyembroidery
 import redis
 import svgpathtools
-from svgpathtools import svg2paths2
+from svgpathtools import Line, svg2paths2
 
 # ── Configuração ──────────────────────────────────────────────────────────────
 
@@ -86,72 +88,64 @@ def fill_path_with_stitches(
     angle_deg: float = 45.0,
 ) -> list[tuple[float, float]]:
     """
-    Gera pontos de preenchimento paralelos (tatami/satin simplificado).
-    Usa bounding-box + varredura de linhas paralelas ao ângulo dado.
+    Preenchimento por varredura de linhas paralelas ao ângulo dado, com regra
+    PAR-ÍMPAR: em cada linha, as interseções reais com o contorno são ordenadas
+    e os pontos são emitidos só ENTRE PARES consecutivos (0–1, 2–3, …). Assim,
+    buracos (miolo de letras como a/b/6) adicionam duas interseções e viram
+    lacunas vazias — não são bordados por cima.
     """
-    import math
-
     xmin, xmax, ymin, ymax = path.bbox()
     if xmax == xmin or ymax == ymin:
         return path_to_polyline(path)
 
-    spacing = spacing_mm  # unidades SVG mm
+    spacing = max(spacing_mm, 1e-3)  # unidades SVG
     rad = math.radians(angle_deg)
-    cos_a, sin_a = math.cos(rad), math.sin(rad)
+    dx, dy = math.cos(rad), math.sin(rad)   # direção da linha de varredura
+    px, py = -dy, dx                        # eixo perpendicular (avança entre linhas)
 
-    # Projeta corners no eixo perpendicular ao ângulo
-    corners = [
-        (xmin, ymin), (xmax, ymin), (xmax, ymax), (xmin, ymax)
-    ]
-    perp = [-sin_a, cos_a]
-    projs = [c[0] * perp[0] + c[1] * perp[1] for c in corners]
-    t_min, t_max = min(projs), max(projs)
+    center_x, center_y = (xmin + xmax) / 2, (ymin + ymax) / 2
+    c_dir = center_x * dx + center_y * dy   # projeção do centro no eixo da linha
+    half_len = math.hypot(xmax - xmin, ymax - ymin)  # cobre a bbox inteira
+
+    # faixa do eixo perpendicular sobre os cantos da bbox
+    corners = [(xmin, ymin), (xmax, ymin), (xmax, ymax), (xmin, ymax)]
+    perp_projs = [cx * px + cy * py for cx, cy in corners]
+    t_min, t_max = min(perp_projs), max(perp_projs)
 
     stitches: list[tuple[float, float]] = []
-    t = t_min
-    row = 0
-    while t <= t_max:
-        # Origem da linha de varredura
-        ox = t * perp[0]
-        oy = t * perp[1]
-        # Direção da linha
-        dx, dy = cos_a, sin_a
+    n_rows = int((t_max - t_min) / spacing) + 1
+    for row in range(n_rows + 1):
+        t = t_min + row * spacing
+        # ponto-base da linha: projeção `t` no perp e no centro do eixo da linha
+        bx = t * px + c_dir * dx
+        by = t * py + c_dir * dy
+        scan = Line(
+            complex(bx - dx * half_len, by - dy * half_len),
+            complex(bx + dx * half_len, by + dy * half_len),
+        )
 
-        # Intersecções da linha com o path
-        intersections: list[float] = []
+        # posição `s` de cada interseção ao longo da direção da linha
+        crossings: list[float] = []
         try:
-            for seg in path:
-                # Parametrizar intersecção linha com segmento numericamente
-                for s in range(20):
-                    u = s / 19
-                    pt = seg.point(u)
-                    px, py = pt.real - ox, pt.imag - oy
-                    proj = px * dx + py * dy
-                    intersections.append(proj)
+            for _self_hit, (T_scan, _seg, _t) in path.intersect(scan):
+                pt = scan.point(T_scan)
+                crossings.append((pt.real - bx) * dx + (pt.imag - by) * dy)
         except Exception:
-            pass
-
-        if not intersections:
-            t += spacing
-            row += 1
             continue
 
-        s_min, s_max = min(intersections), max(intersections)
+        crossings.sort()
+        # regra par-ímpar: pontos só ENTRE pares consecutivos (buracos = lacunas)
+        pairs = list(zip(crossings[0::2], crossings[1::2]))
+        if row % 2 == 1:
+            pairs = [(hi, lo) for lo, hi in reversed(pairs)]  # zig-zag
 
-        # Alterna direção para zig-zag
-        if row % 2 == 0:
-            s_range = [s_min + k * spacing for k in range(int((s_max - s_min) / spacing) + 1)]
-        else:
-            s_range = [s_max - k * spacing for k in range(int((s_max - s_min) / spacing) + 1)]
-
-        for s in s_range:
-            px = ox + s * dx
-            py = oy + s * dy
-            if xmin - 1 <= px <= xmax + 1 and ymin - 1 <= py <= ymax + 1:
-                stitches.append((px, py))
-
-        t += spacing
-        row += 1
+        for s_a, s_b in pairs:
+            lo, hi = min(s_a, s_b), max(s_a, s_b)
+            seq = [lo + k * spacing for k in range(int((hi - lo) / spacing) + 1)]
+            if s_a > s_b:
+                seq.reverse()
+            for s in seq:
+                stitches.append((bx + s * dx, by + s * dy))
 
     return stitches if stitches else path_to_polyline(path)
 
@@ -233,16 +227,85 @@ def svg_to_embroidery(svg_path: Path, format_ext: str) -> pyembroidery.EmbPatter
     return pattern
 
 
+# ── Preview: EmbPattern → SVG de linhas de ponto ──────────────────────────────
+
+# comandos que interrompem uma linha contínua de pontos
+_BREAK_COMMANDS = {
+    pyembroidery.JUMP,
+    pyembroidery.COLOR_BREAK,
+    pyembroidery.STOP,
+    pyembroidery.TRIM,
+    pyembroidery.END,
+}
+
+
+def _thread_hex(pattern: pyembroidery.EmbPattern, index: int) -> str:
+    """Cor #rrggbb do fio de índice `index` (fallback preto)."""
+    threads = pattern.threadlist
+    if 0 <= index < len(threads):
+        return "#%06x" % (threads[index].color & 0xFFFFFF)
+    return "#333333"
+
+
+def pattern_to_preview_svg(pattern: pyembroidery.EmbPattern, viewbox: str) -> str:
+    """
+    Renderiza os pontos do EmbPattern como <polyline> (uma por trecho contínuo),
+    coloridas pelo fio atual — mesma aparência de um visualizador DST. As coords
+    do pattern estão em unidades_svg × SCALE_SVG_TO_EMB; dividimos de volta para
+    o espaço do `viewbox` (o mesmo do elemento, para sobrepor no canvas).
+    """
+    polylines: list[str] = []
+    run: list[str] = []
+    color_index = 0
+
+    def flush(color_idx: int) -> None:
+        if len(run) >= 2:
+            polylines.append(
+                f'<polyline points="{" ".join(run)}" fill="none" '
+                f'stroke="{_thread_hex(pattern, color_idx)}" stroke-width="0.8" '
+                f'stroke-linejoin="round" stroke-linecap="round"/>'
+            )
+        run.clear()
+
+    for stitch in pattern.stitches:
+        x, y, cmd = stitch[0], stitch[1], stitch[2]
+        if cmd == pyembroidery.STITCH:
+            run.append(f"{x / SCALE_SVG_TO_EMB:g},{y / SCALE_SVG_TO_EMB:g}")
+        elif cmd in _BREAK_COMMANDS:
+            flush(color_index)
+            if cmd == pyembroidery.COLOR_BREAK:
+                color_index += 1
+    flush(color_index)
+
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{viewbox}">\n  '
+        + "\n  ".join(polylines)
+        + "\n</svg>"
+    )
+
+
+def _svg_viewbox(svg_path: Path) -> str:
+    """Extrai o atributo viewBox do SVG (fallback 0 0 100 100)."""
+    import re
+
+    text = svg_path.read_text(encoding="utf-8")
+    m = re.search(r'viewBox="([^"]+)"', text)
+    return m.group(1) if m else "0 0 100 100"
+
+
 # ── Worker loop ───────────────────────────────────────────────────────────────
 
 def process_job(r: redis.Redis, job_data: dict[str, Any]) -> None:
     job_id: str = job_data["jobId"]
 
-    # Dispatch por tipo: "export" (default, SVG → bordado) ou "analyze"
-    # (imagem → SVG por processamento digital, ver analyze.py)
+    # Dispatch por tipo: "export" (default, SVG → bordado), "analyze"
+    # (imagem → SVG, ver analyze.py) ou "preview" (SVG → linhas de ponto).
     job_type = job_data.get("type", "export")
     if job_type == "analyze":
         process_analyze_job(r, job_data)
+        return
+    if job_type == "preview":
+        process_preview_job(r, job_data)
         return
 
     svg_file: str = job_data["svgFile"]
@@ -313,6 +376,35 @@ def process_analyze_job(r: redis.Redis, job_data: dict[str, Any]) -> None:
 
     except Exception as exc:
         log.exception("Análise %s falhou", job_id)
+        _publish_error(r, job_id, str(exc))
+
+
+def process_preview_job(r: redis.Redis, job_data: dict[str, Any]) -> None:
+    """
+    Preview: SVG-entrada (um elemento anotado com inkstitch, no viewBox
+    original) → mesmo motor de pontos do DST → SVG de linhas em EXPORTS_DIR.
+    """
+    job_id: str = job_data["jobId"]
+    svg_file: str = job_data["svgFile"]  # {jobId}.in.svg gravado pela API
+
+    log.info("Processando preview %s  svg=%s", job_id, svg_file)
+
+    svg_path = EXPORTS_DIR / svg_file
+    if not svg_path.exists():
+        _publish_error(r, job_id, f"SVG de preview não encontrado: {svg_file}")
+        return
+
+    try:
+        pattern = svg_to_embroidery(svg_path, "dst")  # mesmo código do export
+        preview_svg = pattern_to_preview_svg(pattern, _svg_viewbox(svg_path))
+
+        output_file = f"{job_id}.svg"
+        (EXPORTS_DIR / output_file).write_text(preview_svg, encoding="utf-8")
+        log.info("Preview %s concluído → %s (%d pontos)", job_id, output_file, len(pattern.stitches))
+
+        r.publish(RESULTS_CHANNEL, json.dumps({"jobId": job_id, "status": "done", "outputFile": output_file}))
+    except Exception as exc:
+        log.exception("Preview %s falhou", job_id)
         _publish_error(r, job_id, str(exc))
 
 

@@ -181,7 +181,10 @@ def vectorize(quantized_bgr: np.ndarray, params: AnalyzeParams) -> str:
             in_path,
             out_path,
             colormode="color",
-            hierarchical="stacked",
+            # cutout: cada cor exclui as regiões das outras → miolo de letra
+            # (counter) vira buraco real no path daquela cor, preservado no
+            # split por cor. stacked "tampava" o buraco com a forma de trás.
+            hierarchical="cutout",
             mode="spline",
             filter_speckle=4,
             color_precision=8,
