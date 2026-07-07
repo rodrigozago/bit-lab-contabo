@@ -1,0 +1,107 @@
+services:
+  postgres:
+    # pgvector já incluso — embeddings faciais em vector(512)
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: facelab
+      POSTGRES_USER: facelab
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - facelab
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U facelab"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    networks:
+      - facelab
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    ports:
+      # nginx da VPS não proxya direto pra cá (o web proxya /api internamente);
+      # loopback só pra debug/curl — portas 3001-3003/4001-4002 já ocupadas
+      - "127.0.0.1:4003:3001"
+    environment:
+      PORT: "3001"
+      NODE_ENV: production
+      PUBLIC_URL: "${PUBLIC_URL:-https://face.bit-lab.tech}"
+      DATABASE_URL: "postgres://facelab:${POSTGRES_PASSWORD}@postgres:5432/facelab"
+      REDIS_URL: "redis://redis:6379"
+      MEDIA_DIR: "/media"
+      SESSION_SECRET: "${SESSION_SECRET}"
+      OIDC_ISSUER: "${OIDC_ISSUER:-https://auth.bit-lab.tech}"
+      OIDC_CLIENT_ID: "${OIDC_CLIENT_ID:-face-lab}"
+      OIDC_CLIENT_SECRET: "${OIDC_CLIENT_SECRET}"
+      GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID}"
+      GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET}"
+      GOOGLE_REDIRECT_URI: "${GOOGLE_REDIRECT_URI:-https://face.bit-lab.tech/api/google/callback}"
+      GOOGLE_TOKEN_ENC_KEY: "${GOOGLE_TOKEN_ENC_KEY}"
+      MATCH_DISTANCE_THRESHOLD: "${MATCH_DISTANCE_THRESHOLD:-0.4}"
+      INITIAL_ADMIN_EMAIL: "${INITIAL_ADMIN_EMAIL}"
+      RATE_LIMIT_PRODUCER_PER_MIN: "${RATE_LIMIT_PRODUCER_PER_MIN:-30}"
+      RATE_LIMIT_GLOBAL_PER_MIN: "${RATE_LIMIT_GLOBAL_PER_MIN:-60}"
+      RATE_LIMIT_ENROLL_PER_MIN: "${RATE_LIMIT_ENROLL_PER_MIN:-10}"
+    volumes:
+      - media:/media
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - facelab
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: workers/face
+      dockerfile: Dockerfile
+    environment:
+      REDIS_URL: "redis://redis:6379"
+      MEDIA_DIR: "/media"
+      # VPS sem GPU e compartilhada com outros stacks — não sufocar CPU
+      OMP_NUM_THREADS: "2"
+    volumes:
+      - media:/media
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - facelab
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    ports:
+      # nginx da VPS (face.bit-lab.tech) faz proxy_pass pra cá
+      - "127.0.0.1:3004:80"
+    depends_on:
+      - api
+    networks:
+      - facelab
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  media:
+
+networks:
+  facelab:
+    driver: bridge

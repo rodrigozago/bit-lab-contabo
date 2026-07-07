@@ -4,6 +4,7 @@ const { migrate } = require('./db')
 const { bootstrap } = require('./bootstrapAdmin')
 const authRoutes = require('./routes/auth')
 const adminRoutes = require('./routes/admin')
+const interactionRoutes = require('./routes/interaction')
 const oidc = require('./oidc')
 
 const PORT = Number(process.env.PORT || 4000)
@@ -22,6 +23,7 @@ async function main() {
   // rotas próprias primeiro — não colidem com as rotas reservadas do oidc-provider
   app.use('/', authRoutes)
   app.use('/admin', adminRoutes)
+  app.use('/interaction', interactionRoutes)
 
   // provider OIDC real (discovery, jwks, /auth, /token, /userinfo...) — ver src/oidc.js
   app.use(oidc.callback())

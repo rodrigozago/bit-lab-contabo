@@ -2,7 +2,10 @@ const users = require('./models/users')
 const apps = require('./models/apps')
 const appAccess = require('./models/appAccess')
 
-const SEED_APPS = [{ slug: 'ponto-studio', name: 'Ponto Studio' }]
+const SEED_APPS = [
+  { slug: 'ponto-studio', name: 'Ponto Studio' },
+  { slug: 'face-lab', name: 'Face Lab' },
+]
 
 /**
  * No primeiro boot (tabela users vazia): cria o admin inicial a partir do
