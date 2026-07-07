@@ -42,8 +42,11 @@ services:
     environment:
       REDIS_URL: "redis://redis:6379"
       EXPORTS_DIR: "/exports"
+      UPLOADS_DIR: "/uploads"
     volumes:
       - exports:/exports
+      # análise local lê a imagem enviada pela API (somente leitura)
+      - uploads:/uploads:ro
     depends_on:
       redis:
         condition: service_healthy

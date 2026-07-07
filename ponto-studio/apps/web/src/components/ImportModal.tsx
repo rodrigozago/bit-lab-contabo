@@ -1,10 +1,13 @@
 import { useState, useRef, useCallback } from "react";
 import { getCached, saveAnalysis, listAnalyses, removeAnalysis } from "../store/analysisCache.ts";
 import type { CachedAnalysis } from "../store/analysisCache.ts";
+import { api, pollAnalysisUntilDone } from "../api/client.ts";
 
 export interface AnalyzeResult {
   svg: string;
 }
+
+type AnalyzeMethod = "local" | "ai";
 
 export interface ImportConfirmPayload {
   file: File;
@@ -37,6 +40,11 @@ export function ImportModal({ onClose, onConfirm }: Props) {
   const [error, setError] = useState("");
   const [fromCache, setFromCache] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Método de análise: processamento local (default, sem IA) ou IA
+  const [method, setMethod] = useState<AnalyzeMethod>("local");
+  const [colors, setColors] = useState(4);
+  const [minRegionPct, setMinRegionPct] = useState(0.05);
 
   // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -75,14 +83,17 @@ export function ImportModal({ onClose, onConfirm }: Props) {
     if (!file) return;
     setError("");
 
-    // Verifica cache pelo arquivo selecionado
-    const cached = getCached(file);
-    if (cached) {
-      setPreviewUrl(cached.previewDataUrl);
-      setResult({ svg: cached.svg });
-      setFromCache(true);
-      setScreen("preview");
-      return;
+    // Cache só faz atalho no modo IA — no modo local os parâmetros mudam o
+    // resultado (e o processamento é rápido), então analisamos sempre.
+    if (method === "ai") {
+      const cached = getCached(file);
+      if (cached) {
+        setPreviewUrl(cached.previewDataUrl);
+        setResult({ svg: cached.svg });
+        setFromCache(true);
+        setScreen("preview");
+        return;
+      }
     }
 
     setScreen("process");
@@ -96,29 +107,45 @@ export function ImportModal({ onClose, onConfirm }: Props) {
         reader.readAsDataURL(file);
       });
 
-      const form = new FormData();
-      form.append("file", file);
-      const res = await fetch("/api/analyze", { method: "POST", body: form });
+      const svg = method === "local"
+        ? await analyzeLocal(file)
+        : await analyzeWithAi(file);
 
-      if (!res.ok) {
-        const ct = res.headers.get("content-type") ?? "";
-        if (ct.includes("application/json")) {
-          const body = await res.json() as { error?: string };
-          throw new Error(body.error ?? `HTTP ${res.status}`);
-        }
-        throw new Error(`Erro ${res.status} — servidor demorou demais. Tente uma imagem menor.`);
-      }
-
-      const data = await res.json() as AnalyzeResult;
-      saveAnalysis(file, previewDataUrl, data.svg);
+      saveAnalysis(file, previewDataUrl, svg);
       setCachedList(listAnalyses());
       setPreviewUrl(previewDataUrl);
-      setResult(data);
+      setResult({ svg });
       setScreen("preview");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro desconhecido");
       setScreen("upload");
     }
+  }
+
+  async function analyzeLocal(f: File): Promise<string> {
+    if (f.type === "image/svg+xml") {
+      throw new Error("SVG já é vetorial — o processamento local aceita PNG ou JPG.");
+    }
+    const { jobId } = await api.analyze.local(f, { colors, minRegionPct, detail: 2 });
+    return pollAnalysisUntilDone(jobId);
+  }
+
+  async function analyzeWithAi(f: File): Promise<string> {
+    const form = new FormData();
+    form.append("file", f);
+    const res = await fetch("/api/analyze", { method: "POST", body: form });
+
+    if (!res.ok) {
+      const ct = res.headers.get("content-type") ?? "";
+      if (ct.includes("application/json")) {
+        const body = await res.json() as { error?: string };
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
+      throw new Error(`Erro ${res.status} — servidor demorou demais. Tente uma imagem menor.`);
+    }
+
+    const data = await res.json() as AnalyzeResult;
+    return data.svg;
   }
 
   const handleConfirm = useCallback(() => {
@@ -164,8 +191,8 @@ export function ImportModal({ onClose, onConfirm }: Props) {
               <button style={s.newAnalysisBtn} onClick={() => setScreen("upload")}>
                 <span style={s.newAnalysisIcon}>✦</span>
                 <div>
-                  <div style={s.newAnalysisLabel}>Nova análise com IA</div>
-                  <div style={s.newAnalysisHint}>Envia uma nova imagem para o OpenRouter</div>
+                  <div style={s.newAnalysisLabel}>Nova análise</div>
+                  <div style={s.newAnalysisHint}>Processamento local (sem IA) ou análise com IA</div>
                 </div>
               </button>
 
@@ -238,6 +265,45 @@ export function ImportModal({ onClose, onConfirm }: Props) {
                 />
               </div>
 
+              {/* ── Método de análise ── */}
+              <div style={s.methodRow}>
+                <button
+                  style={{ ...s.methodBtn, ...(method === "local" ? s.methodBtnActive : {}) }}
+                  onClick={() => setMethod("local")}
+                >
+                  <span style={s.methodTitle}>⚙️ Processamento local</span>
+                  <span style={s.methodHint}>Rápido, grátis e sempre igual — sem IA</span>
+                </button>
+                <button
+                  style={{ ...s.methodBtn, ...(method === "ai" ? s.methodBtnActive : {}) }}
+                  onClick={() => setMethod("ai")}
+                >
+                  <span style={s.methodTitle}>✦ Análise com IA</span>
+                  <span style={s.methodHint}>Envia a imagem para o OpenRouter</span>
+                </button>
+              </div>
+
+              {method === "local" && (
+                <div style={s.paramsBox}>
+                  <label style={s.paramLabel}>
+                    Nº de cores (linhas de bordado): <strong>{colors}</strong>
+                    <input
+                      type="range" min={2} max={8} step={1} value={colors}
+                      onChange={(e) => setColors(Number(e.target.value))}
+                      style={s.paramSlider}
+                    />
+                  </label>
+                  <label style={s.paramLabel}>
+                    Ignorar detalhes pequenos: <strong>{minRegionPct.toFixed(2)}%</strong>
+                    <input
+                      type="range" min={0} max={1} step={0.05} value={minRegionPct}
+                      onChange={(e) => setMinRegionPct(Number(e.target.value))}
+                      style={s.paramSlider}
+                    />
+                  </label>
+                </div>
+              )}
+
               {error && <p style={s.errorMsg}>⚠ {error}</p>}
 
               <div style={s.actions}>
@@ -247,7 +313,7 @@ export function ImportModal({ onClose, onConfirm }: Props) {
                   onClick={handleAnalyze}
                   disabled={!file}
                 >
-                  Analisar com IA →
+                  {method === "local" ? "Processar imagem →" : "Analisar com IA →"}
                 </button>
               </div>
             </>
@@ -258,7 +324,11 @@ export function ImportModal({ onClose, onConfirm }: Props) {
             <div style={s.processingBox}>
               <div style={s.spinner} />
               <p style={s.processingTitle}>Gerando vetorial de bordado…</p>
-              <p style={s.processingHint}>A IA está convertendo a imagem em paths SVG</p>
+              <p style={s.processingHint}>
+                {method === "local"
+                  ? "Separando as cores em camadas de bordado"
+                  : "A IA está convertendo a imagem em paths SVG"}
+              </p>
             </div>
           )}
 
@@ -385,6 +455,22 @@ const s: Record<string, React.CSSProperties> = {
   dropText: { fontSize: 15, color: "#1a1a1a", fontWeight: 500 },
   dropHint: { fontSize: 13, color: "#9b9b9b" },
   dropzonePreview: { display: "flex", flexDirection: "column", alignItems: "center", gap: 6 },
+  methodRow: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 16 },
+  methodBtn: {
+    display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 3,
+    padding: "12px 14px", borderRadius: 10, textAlign: "left",
+    border: "1.5px solid #e2e0db", background: "#fff", cursor: "pointer",
+  },
+  methodBtnActive: { borderColor: "#7c5cbf", background: "#f5f0ff" },
+  methodTitle: { fontSize: 13, fontWeight: 700, color: "#1a1a1a" },
+  methodHint: { fontSize: 11, color: "#9b9b9b" },
+  paramsBox: {
+    display: "flex", flexDirection: "column", gap: 12,
+    marginTop: 12, padding: "14px 16px",
+    background: "#fafaf9", border: "1px solid #e2e0db", borderRadius: 10,
+  },
+  paramLabel: { fontSize: 13, color: "#1a1a1a", display: "flex", flexDirection: "column", gap: 6 },
+  paramSlider: { width: "100%" },
   thumbImg: { width: 120, height: 80, objectFit: "contain", borderRadius: 8 },
   thumbName: { fontSize: 14, fontWeight: 600, color: "#1a1a1a" },
   thumbChange: { fontSize: 12, color: "#7c5cbf" },

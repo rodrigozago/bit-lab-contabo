@@ -39,6 +39,7 @@ REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379")
 JOBS_QUEUE = "embroidery:jobs"
 RESULTS_CHANNEL = "embroidery:results"
 EXPORTS_DIR = Path(os.environ.get("EXPORTS_DIR", "/exports"))
+UPLOADS_DIR = Path(os.environ.get("UPLOADS_DIR", "/uploads"))
 
 # Mapeamento de formato → extensão pyembroidery
 FORMAT_MAP: dict[str, str] = {
@@ -236,6 +237,14 @@ def svg_to_embroidery(svg_path: Path, format_ext: str) -> pyembroidery.EmbPatter
 
 def process_job(r: redis.Redis, job_data: dict[str, Any]) -> None:
     job_id: str = job_data["jobId"]
+
+    # Dispatch por tipo: "export" (default, SVG → bordado) ou "analyze"
+    # (imagem → SVG por processamento digital, ver analyze.py)
+    job_type = job_data.get("type", "export")
+    if job_type == "analyze":
+        process_analyze_job(r, job_data)
+        return
+
     svg_file: str = job_data["svgFile"]
     fmt: str = job_data.get("format", "DST").upper()
 
@@ -269,6 +278,41 @@ def process_job(r: redis.Redis, job_data: dict[str, Any]) -> None:
 
     except Exception as exc:
         log.exception("Job %s falhou", job_id)
+        _publish_error(r, job_id, str(exc))
+
+
+def process_analyze_job(r: redis.Redis, job_data: dict[str, Any]) -> None:
+    """Análise local: imagem em UPLOADS_DIR → SVG por cor em EXPORTS_DIR."""
+    from analyze import AnalyzeParams, analyze_image
+
+    job_id: str = job_data["jobId"]
+    image_file: str = job_data["imageFile"]
+    raw_params: dict[str, Any] = job_data.get("params", {})
+
+    log.info("Processando análise %s  imagem=%s params=%s", job_id, image_file, raw_params)
+
+    image_path = UPLOADS_DIR / image_file
+    if not image_path.exists():
+        _publish_error(r, job_id, f"Imagem não encontrada: {image_file}")
+        return
+
+    try:
+        params = AnalyzeParams(
+            colors=int(raw_params.get("colors", 4)),
+            min_region_pct=float(raw_params.get("minRegionPct", 0.05)),
+            detail=int(raw_params.get("detail", 2)),
+        )
+        svg = analyze_image(str(image_path), params)
+
+        output_file = f"{job_id}.svg"
+        (EXPORTS_DIR / output_file).write_text(svg, encoding="utf-8")
+        log.info("Análise %s concluída → %s (%d bytes)", job_id, output_file, len(svg))
+
+        result = json.dumps({"jobId": job_id, "status": "done", "outputFile": output_file})
+        r.publish(RESULTS_CHANNEL, result)
+
+    except Exception as exc:
+        log.exception("Análise %s falhou", job_id)
         _publish_error(r, job_id, str(exc))
 
 

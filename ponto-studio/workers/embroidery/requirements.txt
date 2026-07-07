@@ -1,3 +1,6 @@
 pyembroidery>=1.4.36
 redis>=5.0.1
 svgpathtools>=1.6.1
+opencv-python-headless>=4.9.0
+numpy>=1.26.0
+vtracer>=0.6.11

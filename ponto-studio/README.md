@@ -6,11 +6,14 @@
 
 Ponto Studio é uma ferramenta web simples onde qualquer pessoa pode:
 
-1. **Importar** uma imagem (PNG/SVG) como referência
-2. **Analisar** a imagem com IA para gerar paths SVG automáticos
-3. **Desenhar áreas** sobre a imagem no canvas
-4. **Configurar** o tipo de ponto, cor e densidade de cada área
-5. **Exportar** o design em formato compatível com sua máquina de bordado (DST, PES, JEF)
+1. **Importar** uma imagem (PNG/JPG) como referência
+2. **Analisar** a imagem — **processamento local (default, sem IA)** ou via IA:
+   - Local: k-means (OpenCV) separa as cores → limpeza morfológica → VTracer
+     vetoriza → **uma camada de bordado por cor** (regiões desconectadas da
+     mesma cor ficam na mesma camada). Determinístico, rápido e grátis.
+   - IA: envia a imagem ao OpenRouter (requer `OPENROUTER_API_KEY`).
+3. **Configurar** o tipo de ponto, cor e densidade de cada camada/cor
+4. **Exportar** o design em formato compatível com sua máquina de bordado (DST, PES, JEF)
 
 ## Estrutura do Projeto
 
@@ -90,6 +93,25 @@ docker-compose up --build
 | `.DST` | Tajima — universal, compatível com a maioria das máquinas |
 | `.PES` | Brother, Babylock |
 | `.JEF` | Janome, Elna |
+
+## Testes
+
+```bash
+pnpm test                                                    # api + web (vitest)
+docker compose run --rm worker python -m unittest test_analyze -v   # pipeline de análise (Python)
+```
+
+## Fluxo da Análise Local (sem IA)
+
+```
+Imagem (PNG/JPG) → POST /api/analyze/local → uploads/ → RPUSH embroidery:jobs {type:"analyze"}
+                                                            ↓
+                                    Worker Python — analyze.py (k-means → limpeza → VTracer)
+                                                            ↓
+                                    exports/{jobId}.svg (um <g> por cor) → PUBLISH results
+                                                            ↓
+                          Frontend (polling GET /api/analyze/local/:jobId) → camadas por cor
+```
 
 ## Fluxo de Exportação
 

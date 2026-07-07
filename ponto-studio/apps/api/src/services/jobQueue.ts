@@ -2,7 +2,7 @@ import { writeFileSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { createClient } from "redis";
-import type { ExportJob, ExportFormat } from "@ponto-studio/shared";
+import type { ExportJob, ExportFormat, LocalAnalyzeParams } from "@ponto-studio/shared";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const EXPORTS_DIR = join(__dirname, "..", "..", "exports");
@@ -104,6 +104,39 @@ export async function enqueueJob(params: {
 
   // Publica o job na fila do Redis
   const payload = JSON.stringify({ jobId, svgFile, format, projectId });
+  const pub = await getPublisher();
+  await pub.rPush(JOBS_QUEUE, payload);
+
+  return job;
+}
+
+// ── Enqueue: análise local (processamento digital, sem IA) ────────────────────
+// Reusa a mesma fila/canal com type:"analyze" — o worker faz o dispatch.
+// O resultado chega pelo mesmo listener acima ({jobId}.svg em /exports).
+export async function enqueueAnalyzeJob(params: {
+  jobId: string;
+  imageFile: string;
+  analyzeParams: LocalAnalyzeParams;
+}): Promise<ExportJob> {
+  const { jobId, imageFile, analyzeParams } = params;
+  const now = new Date().toISOString();
+
+  const job: ExportJob = {
+    jobId,
+    projectId: "",
+    format: "DST", // não usado em jobs de análise — campo exigido pelo tipo
+    status: "pending",
+    createdAt: now,
+    updatedAt: now,
+  };
+  jobStore.set(jobId, job);
+
+  const payload = JSON.stringify({
+    type: "analyze",
+    jobId,
+    imageFile,
+    params: analyzeParams,
+  });
   const pub = await getPublisher();
   await pub.rPush(JOBS_QUEUE, payload);
 

@@ -21,9 +21,10 @@ export default defineConfig({
   server: {
     port: 3000,
     proxy: {
-      "/api": "http://localhost:3001",
-      "/exports": "http://localhost:3001",
-      "/uploads": "http://localhost:3001",
+      // API do docker compose local (127.0.0.1:4001 → api:3001)
+      "/api": "http://localhost:4001",
+      "/exports": "http://localhost:4001",
+      "/uploads": "http://localhost:4001",
     },
   },
 });

@@ -100,3 +100,22 @@ export interface WorkerJobResult {
   outputFile?: string;
   error?: string;
 }
+
+// ─── Análise local (processamento digital, sem IA) ───────────────────────────
+
+export interface LocalAnalyzeParams {
+  /** Nº de cores/linhas de bordado (2–8) */
+  colors: number;
+  /** Regiões menores que isso (% da área da imagem) são absorvidas */
+  minRegionPct: number;
+  /** 1 = mais liso, 3 = mais detalhe */
+  detail: number;
+}
+
+export interface AnalyzeJobStatus {
+  jobId: string;
+  status: JobStatus;
+  /** SVG resultante, presente quando status === "done" */
+  svg?: string;
+  errorMessage?: string;
+}

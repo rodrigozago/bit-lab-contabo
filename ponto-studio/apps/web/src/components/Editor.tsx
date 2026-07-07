@@ -9,6 +9,7 @@ import "@tldraw/tldraw/tldraw.css";
 import type { EmbroideryProject } from "@ponto-studio/shared";
 import { useProjectStore } from "../store/projectStore.ts";
 import { rectToSvgPath } from "../utils/geometry.ts";
+import { splitSvgByColor } from "../utils/svgLayers.ts";
 import { PropertiesPanel } from "./PropertiesPanel.tsx";
 import { ExportModal } from "./ExportModal.tsx";
 import { ImportModal } from "./ImportModal.tsx";
@@ -225,35 +226,44 @@ export function Editor({ project, onProjectChange, onNewProject }: Props) {
       meta: { layer: 'reference' },
     } as Parameters<typeof tldrawEditor.createShape>[0]);
 
-    const svgBlob = new Blob([result.svg], { type: "image/svg+xml" });
-    const svgDataUrl = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(svgBlob);
-    });
+    // ── Camada 2: áreas do bordado, UMA POR COR ──
+    // O SVG da análise é separado por cor: todas as regiões da mesma cor
+    // (mesmo desconectadas) viram um único elemento/camada, com configuração
+    // de ponto própria. Cada cor ganha um shape empilhado na mesma posição,
+    // vinculado ao elemento via meta.elementId.
+    const colorLayers = splitSvgByColor(result.svg);
+    // fallback: SVG sem paths reconhecíveis → mantém o documento inteiro
+    const layersToCreate = colorLayers.length > 0
+      ? colorLayers
+      : [{ color: "#7c5cbf", svgContent: result.svg }];
 
-    // ── Camada 2: área do bordado ──
-    // Criada automaticamente a partir da análise da IA: o shape exibe os paths
-    // do SVG (a área segue o desenho, não um retângulo) e fica vinculado ao
-    // elemento do projeto via meta.elementId — é ele que vai para a exportação.
-    const elementId = addElement(
-      rectToSvgPath(imgX, imgY, canvasW, canvasH),
-      "#7c5cbf",
-      result.svg
-    );
+    for (const layer of layersToCreate) {
+      const layerBlob = new Blob([layer.svgContent], { type: "image/svg+xml" });
+      const layerDataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(layerBlob);
+      });
 
-    const svgAssetId = AssetRecordType.createId();
-    tldrawEditor.createAssets([{
-      id: svgAssetId, type: "image", typeName: "asset",
-      props: { name: "bordado.svg", src: svgDataUrl, w: canvasW, h: canvasH, mimeType: "image/svg+xml", isAnimated: false },
-      meta: {},
-    }]);
-    tldrawEditor.createShape({
-      type: "image", x: imgX, y: imgY,
-      props: { assetId: svgAssetId, w: canvasW, h: canvasH },
-      meta: { layer: 'embroidery', elementId },
-    } as Parameters<typeof tldrawEditor.createShape>[0]);
+      const elementId = addElement(
+        rectToSvgPath(imgX, imgY, canvasW, canvasH),
+        layer.color,
+        layer.svgContent
+      );
+
+      const svgAssetId = AssetRecordType.createId();
+      tldrawEditor.createAssets([{
+        id: svgAssetId, type: "image", typeName: "asset",
+        props: { name: `bordado-${layer.color}.svg`, src: layerDataUrl, w: canvasW, h: canvasH, mimeType: "image/svg+xml", isAnimated: false },
+        meta: {},
+      }]);
+      tldrawEditor.createShape({
+        type: "image", x: imgX, y: imgY,
+        props: { assetId: svgAssetId, w: canvasW, h: canvasH },
+        meta: { layer: 'embroidery', elementId },
+      } as Parameters<typeof tldrawEditor.createShape>[0]);
+    }
 
     tldrawEditor.zoomToFit();
   }, [tldrawEditor, addElement]);
