@@ -9,6 +9,9 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN
   CREATE TYPE album_status AS ENUM ('pending', 'scanning', 'ready', 'error');
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+-- arquivado: retenção venceu (90 dias sem re-scan) — mídia biométrica apagada,
+-- álbum/fotos/metadados continuam existindo; re-escanear desarquiva
+ALTER TYPE album_status ADD VALUE IF NOT EXISTS 'archived';
 
 DO $$ BEGIN
   CREATE TYPE photo_status AS ENUM ('pending', 'processing', 'done', 'error');
@@ -38,6 +41,15 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS notifications_seen_at timestamptz;
 -- pra quem já tem valor, evita "N fotos novas" retroativas pra contas anteriores ao recurso
 UPDATE users SET notifications_seen_at = now() WHERE notifications_seen_at IS NULL;
 
+-- consentimento LGPD: aceite geral dos Termos/Privacidade + consentimento
+-- ESPECÍFICO pro processamento biométrico facial (Art. 11 — dado sensível, não
+-- pode ser coberto pelo aceite geral). Sem backfill: contas existentes ficam
+-- NULL e caem no gate de consentimento no próximo login, mesmo sendo antigas.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_accepted_at timestamptz;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_version text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS biometric_consent_at timestamptz;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS biometric_consent_version text;
+
 -- uma conta Google por producer; refresh token AES-256-GCM (iv||tag||cipher)
 CREATE TABLE IF NOT EXISTS google_credentials (
   user_id uuid PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
@@ -58,6 +70,12 @@ CREATE TABLE IF NOT EXISTS albums (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS albums_owner_idx ON albums(owner_id);
+
+-- marca d'água nas thumbs, liga/desliga sem reprocessar (composta em tempo de resposta)
+ALTER TABLE albums ADD COLUMN IF NOT EXISTS watermark_enabled boolean NOT NULL DEFAULT true;
+-- atestado do producer de que os convidados do evento foram informados/consentiram
+-- com o reconhecimento facial nas fotos (LGPD — quem aparece nas fotos ainda não logou)
+ALTER TABLE albums ADD COLUMN IF NOT EXISTS guest_consent_attested_at timestamptz;
 
 -- originais NUNCA são armazenados: só metadados, links do Drive e thumb própria
 CREATE TABLE IF NOT EXISTS photos (

@@ -14,6 +14,7 @@ import { galleryRoutes } from "./routes/gallery.js";
 import { mediaRoutes } from "./routes/media.js";
 import { adminRoutes } from "./routes/admin.js";
 import { notificationRoutes } from "./routes/notifications.js";
+import { runRetentionSweep } from "./services/retention.js";
 
 async function main(): Promise<void> {
   await migrate();
@@ -21,6 +22,12 @@ async function main(): Promise<void> {
     await mkdir(join(config.mediaDir, dir), { recursive: true });
   }
   await startResultListener();
+
+  // varredura de retenção: arquiva álbuns sem re-scan há RETENTION_DAYS. Sem
+  // infra nova (sem cron container) — mesmo padrão de serviço de fundo simples
+  // dentro do processo que já usamos pro listener de resultados do worker.
+  setTimeout(() => void runRetentionSweep().catch((err) => console.error("[retention] sweep falhou:", err)), 30_000);
+  setInterval(() => void runRetentionSweep().catch((err) => console.error("[retention] sweep falhou:", err)), 6 * 60 * 60 * 1000);
 
   const app = Fastify({ logger: true, trustProxy: true });
 

@@ -5,7 +5,8 @@ import { api } from "../api";
 import { useAuth } from "../App";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Camera, CheckCircle, ScanFace, Upload } from "lucide-react";
+import { Camera, CheckCircle, ScanFace, Trash2, Upload } from "lucide-react";
+import { toast } from "sonner";
 
 const STEPS = [
   { key: "front", label: "Olhe para a câmera" },
@@ -31,6 +32,8 @@ export function Enroll() {
   const [cameraDenied, setCameraDenied] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [info, setInfo] = useState<EnrollmentInfo | null>(null);
+  const [biometricConsent, setBiometricConsent] = useState(false);
+  const [removing, setRemoving] = useState(false);
 
   useEffect(() => {
     if (me?.hasEnrollment) api<EnrollmentInfo | null>("/api/enrollment").then(setInfo).catch(() => {});
@@ -105,6 +108,7 @@ export function Enroll() {
     setError(null);
     const fd = new FormData();
     fd.append("source", cameraDenied ? "upload" : "webcam");
+    fd.append("consent", String(biometricConsent));
     frames.forEach((f, i) => fd.append("frames", f, `frame_${i}.jpg`));
     try {
       // Mock progress for now, as XHR is needed for real progress
@@ -136,6 +140,21 @@ export function Enroll() {
         }
       } catch { /* segue tentando */ }
     }, 2000);
+  }
+
+  async function removeEnrollment() {
+    if (!info) return;
+    setRemoving(true);
+    try {
+      await api(`/api/enrollment/${info.id}`, { method: "DELETE" });
+      setInfo(null);
+      await refresh();
+      toast.success("Rosto removido. As fotos encontradas automaticamente pra você foram apagadas.");
+    } catch (err) {
+      toast.error("Não deu pra remover", { description: (err as Error).message });
+    } finally {
+      setRemoving(false);
+    }
   }
 
   function reset() {
@@ -185,6 +204,14 @@ export function Enroll() {
               <Button className="mt-8 w-full" variant="outline" onClick={startCamera}>
                 <Camera className="mr-2 h-4 w-4" /> Recadastrar rosto
               </Button>
+              <button
+                type="button"
+                disabled={removing}
+                onClick={removeEnrollment}
+                className="mt-3 flex w-full items-center justify-center gap-1.5 text-sm text-destructive hover:underline disabled:opacity-50"
+              >
+                <Trash2 className="h-3.5 w-3.5" /> {removing ? "Removendo…" : "Remover meu rosto"}
+              </button>
             </>
           );
         }
@@ -194,9 +221,33 @@ export function Enroll() {
             <p className="mt-2 text-muted-foreground">
               Vamos capturar 4 fotos rápidas pela sua webcam. As imagens são usadas apenas para gerar sua referência facial e descartadas em seguida.
             </p>
-            <div className="mt-8 space-y-3">
-              <Button className="w-full" onClick={startCamera}><Camera className="mr-2 h-4 w-4" /> Ligar câmera</Button>
-              <Button className="w-full" variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="mr-2 h-4 w-4" /> Enviar fotos</Button>
+
+            <label className="mt-6 flex items-start gap-3 text-sm">
+              <input
+                type="checkbox"
+                checked={biometricConsent}
+                onChange={(e) => setBiometricConsent(e.target.checked)}
+                className="mt-0.5 h-4 w-4 shrink-0"
+              />
+              Autorizo o processamento do meu rosto para reconhecimento facial, conforme a{" "}
+              <a href="/privacy" target="_blank" rel="noreferrer" className="underline">
+                Política de Privacidade
+              </a>
+              .
+            </label>
+
+            <div className="mt-6 space-y-3">
+              <Button className="w-full" disabled={!biometricConsent} onClick={startCamera}>
+                <Camera className="mr-2 h-4 w-4" /> Ligar câmera
+              </Button>
+              <Button
+                className="w-full"
+                variant="outline"
+                disabled={!biometricConsent}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Upload className="mr-2 h-4 w-4" /> Enviar fotos
+              </Button>
               <input type="file" ref={fileInputRef} accept="image/*" multiple onChange={onFileUpload} className="hidden" />
             </div>
           </>

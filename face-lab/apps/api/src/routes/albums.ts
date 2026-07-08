@@ -18,7 +18,7 @@ async function ownedAlbum(albumId: string, ownerId: string, isAdmin: boolean) {
 }
 
 const ALBUM_SUMMARY_SQL = `
-  SELECT a.id, a.name, a.status, a.error, a.drive_folder_id, a.scanned_at, a.created_at,
+  SELECT a.id, a.name, a.status, a.error, a.drive_folder_id, a.watermark_enabled, a.scanned_at, a.created_at,
          COUNT(p.id)::int AS photo_count,
          COUNT(p.id) FILTER (WHERE p.status = 'done')::int AS done_count,
          COALESCE(SUM(fc.n), 0)::int AS face_count,
@@ -39,6 +39,7 @@ function toAlbumSummary(row: Record<string, unknown>): AlbumSummary {
     doneCount: Number(row["done_count"]),
     faceCount: Number(row["face_count"]),
     peopleCount: Number(row["people_count"]),
+    watermarkEnabled: Boolean(row["watermark_enabled"]),
     scannedAt: row["scanned_at"] ? new Date(row["scanned_at"] as string).toISOString() : null,
     createdAt: new Date(row["created_at"] as string).toISOString(),
   };
@@ -49,10 +50,22 @@ export async function albumRoutes(app: FastifyInstance): Promise<void> {
     const user = await requireProducer(req, reply);
     if (!user) return;
 
-    const { name, driveFolderUrl } = (req.body ?? {}) as { name?: string; driveFolderUrl?: string };
+    const { name, driveFolderUrl, guestConsentAttested, watermarkEnabled } = (req.body ?? {}) as {
+      name?: string;
+      driveFolderUrl?: string;
+      guestConsentAttested?: boolean;
+      watermarkEnabled?: boolean;
+    };
     if (!name?.trim()) return reply.status(400).send({ ok: false, error: "name é obrigatório" });
     const folderId = parseFolderId(driveFolderUrl ?? "");
     if (!folderId) return reply.status(400).send({ ok: false, error: "link de pasta do Drive inválido" });
+    // LGPD: quem aparece nas fotos ainda não logou/consentiu — o producer atesta
+    // que informou/obteve consentimento dos convidados do evento (Art. 11)
+    if (guestConsentAttested !== true) {
+      return reply
+        .status(400)
+        .send({ ok: false, error: "confirme que os convidados foram informados sobre o reconhecimento facial" });
+    }
 
     // valida a pasta com o token do producer antes de criar
     let accessToken: string;
@@ -64,8 +77,9 @@ export async function albumRoutes(app: FastifyInstance): Promise<void> {
     const info = await getFolderInfo(accessToken, folderId);
 
     const { rows } = await pool.query(
-      `INSERT INTO albums (owner_id, name, drive_folder_id) VALUES ($1, $2, $3) RETURNING id`,
-      [user.id, name.trim(), folderId]
+      `INSERT INTO albums (owner_id, name, drive_folder_id, watermark_enabled, guest_consent_attested_at)
+       VALUES ($1, $2, $3, $4, now()) RETURNING id`,
+      [user.id, name.trim(), folderId, watermarkEnabled !== false]
     );
 
     return {
@@ -105,11 +119,18 @@ export async function albumRoutes(app: FastifyInstance): Promise<void> {
     const user = await requireProducer(req, reply);
     if (!user) return;
     const { id } = req.params as { id: string };
-    const { name } = (req.body ?? {}) as { name?: string };
-    if (!name?.trim()) return reply.status(400).send({ ok: false, error: "name é obrigatório" });
+    const { name, watermarkEnabled } = (req.body ?? {}) as { name?: string; watermarkEnabled?: boolean };
+    if (name !== undefined && !name.trim()) return reply.status(400).send({ ok: false, error: "name não pode ser vazio" });
+    if (name === undefined && watermarkEnabled === undefined) {
+      return reply.status(400).send({ ok: false, error: "nada pra atualizar" });
+    }
     const album = await ownedAlbum(id, user.id, user.role === "admin");
     if (!album) return reply.status(404).send({ ok: false, error: "álbum não encontrado" });
-    await pool.query(`UPDATE albums SET name = $2 WHERE id = $1`, [id, name.trim()]);
+
+    await pool.query(
+      `UPDATE albums SET name = COALESCE($2, name), watermark_enabled = COALESCE($3, watermark_enabled) WHERE id = $1`,
+      [id, name?.trim() ?? null, watermarkEnabled ?? null]
+    );
     return { ok: true, data: null };
   });
 

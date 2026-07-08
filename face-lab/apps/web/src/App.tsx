@@ -13,6 +13,9 @@ import { MyAlbumAll } from "./pages/MyAlbumAll";
 import { Producer } from "./pages/Producer";
 import { ProducerAlbum } from "./pages/ProducerAlbum";
 import { Admin } from "./pages/Admin";
+import { Terms } from "./pages/Terms";
+import { Privacy } from "./pages/Privacy";
+import { AcceptTerms } from "./pages/AcceptTerms";
 
 // compat: páginas antigas importam de "../App"
 export { useAuth, loginUrl } from "@/lib/auth";
@@ -24,6 +27,10 @@ function RequireAuth({ children, producer, admin }: { children: JSX.Element; pro
   if (!me) {
     window.location.href = loginUrl(location.pathname);
     return null;
+  }
+  // gate obrigatório: sem aceite dos Termos/Privacidade, nada mais é acessível
+  if (me.needsTermsAcceptance && location.pathname !== "/consent") {
+    return <Navigate to="/consent" replace />;
   }
   const isProducer = me.role === "producer" || me.role === "admin";
   if (admin && me.role !== "admin") return <Navigate to="/" replace />;
@@ -55,6 +62,9 @@ export function App() {
       <Toaster richColors position="bottom-right" />
       <Routes>
         <Route path="/" element={<Landing />} />
+        <Route path="/terms" element={<Terms />} />
+        <Route path="/privacy" element={<Privacy />} />
+        <Route path="/consent" element={<RequireAuth><AcceptTerms /></RequireAuth>} />
 
         <Route element={<AppLayout />}>
           <Route path="/enroll" element={<RequireAuth><Enroll /></RequireAuth>} />

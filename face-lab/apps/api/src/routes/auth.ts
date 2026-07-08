@@ -63,13 +63,17 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     const user = await readSession(req);
     if (!user) return reply.status(401).send({ ok: false, error: "não autenticado" });
 
-    const [enrollment, google] = await Promise.all([
+    const [enrollment, google, terms] = await Promise.all([
       pool.query(
         `SELECT status FROM enrollments WHERE user_id = $1 AND active ORDER BY created_at DESC LIMIT 1`,
         [user.id]
       ),
       getGoogleStatus(user.id),
+      pool.query(`SELECT terms_accepted_at, terms_version FROM users WHERE id = $1`, [user.id]),
     ]);
+
+    const t = terms.rows[0];
+    const needsTermsAcceptance = !t?.terms_accepted_at || t.terms_version !== config.legal.termsVersion;
 
     const me: Me = {
       id: user.id,
@@ -79,7 +83,19 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       hasEnrollment: enrollment.rows[0]?.status === "done",
       enrollmentStatus: enrollment.rows[0]?.status ?? null,
       googleConnected: google.connected,
+      needsTermsAcceptance,
     };
     return { ok: true, data: me };
+  });
+
+  // aceite dos Termos de Uso / Política de Privacidade (gate obrigatório pós-login)
+  app.post("/api/me/accept-terms", async (req, reply) => {
+    const user = await readSession(req);
+    if (!user) return reply.status(401).send({ ok: false, error: "não autenticado" });
+    await pool.query(`UPDATE users SET terms_accepted_at = now(), terms_version = $2 WHERE id = $1`, [
+      user.id,
+      config.legal.termsVersion,
+    ]);
+    return { ok: true, data: null };
   });
 }

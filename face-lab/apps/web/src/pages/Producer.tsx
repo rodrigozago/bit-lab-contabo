@@ -23,6 +23,7 @@ function StatusBadge({ status }: { status: AlbumSummary["status"] }) {
     scanning: { variant: "default", label: "Escaneando..." },
     ready: { variant: "default", label: "Pronto" },
     error: { variant: "destructive", label: "Erro" },
+    archived: { variant: "secondary", label: "Arquivado" },
   };
   const { variant, label } = statusMap[status];
   return <Badge variant={variant}>{label}</Badge>;
@@ -34,7 +35,9 @@ export function Producer() {
   const [albums, setAlbums] = useState<AlbumSummary[]>([]);
   const [name, setName] = useState("");
   const [folderUrl, setFolderUrl] = useState("");
-  
+  const [guestConsent, setGuestConsent] = useState(false);
+  const [watermark, setWatermark] = useState(true);
+
   useEffect(() => {
     const googleError = params.get("googleError");
     if (googleError) toast.error("Falha na conexão com o Google", { description: googleError });
@@ -52,10 +55,12 @@ export function Producer() {
     try {
       const res = await api<{ id: string; folderName: string; linkSharedWarning: string | null }>("/api/albums", {
         method: "POST",
-        body: JSON.stringify({ name, driveFolderUrl: folderUrl }),
+        body: JSON.stringify({ name, driveFolderUrl: folderUrl, guestConsentAttested: guestConsent, watermarkEnabled: watermark }),
       });
       setName("");
       setFolderUrl("");
+      setGuestConsent(false);
+      setWatermark(true);
       toast.success(`Álbum "${res.folderName}" criado.`, { description: res.linkSharedWarning });
       loadAlbums();
     } catch (err) {
@@ -133,12 +138,34 @@ export function Producer() {
                 <Label htmlFor="folder-url">Link da pasta do Google Drive</Label>
                 <Input id="folder-url" type="url" value={folderUrl} onChange={(e) => setFolderUrl(e.target.value)} placeholder="https://drive.google.com/drive/folders/..." required />
               </div>
+
+              <label className="flex items-start gap-3 text-sm">
+                <input
+                  type="checkbox"
+                  checked={watermark}
+                  onChange={(e) => setWatermark(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 shrink-0"
+                />
+                Marca d'água nas miniaturas (dá pra ligar/desligar depois)
+              </label>
+
+              <label className="flex items-start gap-3 text-sm">
+                <input
+                  type="checkbox"
+                  checked={guestConsent}
+                  onChange={(e) => setGuestConsent(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 shrink-0"
+                  required
+                />
+                Confirmo que informei os convidados deste evento sobre o uso de reconhecimento facial nas fotos
+                e obtive o consentimento necessário deles.
+              </label>
             </CardContent>
             <CardFooter className="flex-col items-start gap-4">
                <p className="text-xs text-muted-foreground">
                 Lembre-se de compartilhar a pasta como "qualquer pessoa com o link pode ver" para que os convidados consigam baixar as fotos.
               </p>
-              <Button type="submit">Criar álbum</Button>
+              <Button type="submit" disabled={!guestConsent}>Criar álbum</Button>
             </CardFooter>
           </form>
         </Card>
@@ -163,7 +190,7 @@ export function Producer() {
                 </Button>
                 <Button size="sm" onClick={() => scan(a.id)} disabled={a.status === "scanning"} className="flex-1">
                   {a.status === "scanning" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Bot className="mr-2 h-4 w-4" />}
-                  {a.scannedAt ? "Re-escanear" : "Escanear"}
+                  {a.status === "archived" ? "Desarquivar e re-escanear" : a.scannedAt ? "Re-escanear" : "Escanear"}
                 </Button>
               </div>
             </div>

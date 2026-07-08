@@ -1,7 +1,7 @@
 // ── Contratos compartilhados api ↔ web ↔ worker ────────────────────────────────
 
 export type UserRole = "guest" | "producer" | "admin";
-export type AlbumStatus = "pending" | "scanning" | "ready" | "error";
+export type AlbumStatus = "pending" | "scanning" | "ready" | "error" | "archived";
 export type PhotoStatus = "pending" | "processing" | "done" | "error";
 export type EnrollmentStatus = "pending" | "done" | "error";
 export type MatchStatus = "auto" | "confirmed" | "rejected";
@@ -26,6 +26,8 @@ export interface Me {
   hasEnrollment: boolean;
   enrollmentStatus: EnrollmentStatus | null;
   googleConnected: boolean;
+  // true se falta aceitar os Termos/Privacidade (nunca aceitou ou versão mudou)
+  needsTermsAcceptance: boolean;
 }
 
 export interface AlbumSummary {
@@ -38,6 +40,7 @@ export interface AlbumSummary {
   doneCount: number;
   faceCount: number;
   peopleCount: number;
+  watermarkEnabled: boolean;
   scannedAt: string | null;
   createdAt: string;
 }

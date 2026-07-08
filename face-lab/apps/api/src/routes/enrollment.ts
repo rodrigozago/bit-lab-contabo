@@ -32,16 +32,21 @@ export async function enrollmentRoutes(app: FastifyInstance): Promise<void> {
       return reply.status(429).send({ ok: false, error: "muitos cadastros de rosto agora — tente de novo em 1 minuto" });
     }
 
+    const { rows: consentRows } = await pool.query(`SELECT biometric_consent_at FROM users WHERE id = $1`, [user.id]);
+    const hadConsent = Boolean(consentRows[0]?.biometric_consent_at);
+
     const enrollmentId = uuid();
     const frameDir = join(config.mediaDir, "enroll", enrollmentId);
     await mkdir(frameDir, { recursive: true });
 
     let frameCount = 0;
     let source = "webcam";
+    let consentField = "";
     try {
       for await (const part of req.parts()) {
         if (part.type !== "file") {
           if (part.fieldname === "source" && typeof part.value === "string") source = part.value;
+          if (part.fieldname === "consent" && typeof part.value === "string") consentField = part.value;
           continue;
         }
         if (frameCount >= MAX_FRAMES) {
@@ -57,9 +62,23 @@ export async function enrollmentRoutes(app: FastifyInstance): Promise<void> {
       throw err;
     }
 
+    // LGPD Art. 11 — consentimento específico pro processamento biométrico,
+    // separado do aceite geral dos Termos. Só exige de quem nunca consentiu.
+    if (!hadConsent && consentField !== "true") {
+      await rm(frameDir, { recursive: true, force: true }).catch(() => {});
+      return reply.status(400).send({ ok: false, error: "é necessário autorizar o processamento do seu rosto" });
+    }
+
     if (frameCount < MIN_FRAMES) {
       await rm(frameDir, { recursive: true, force: true }).catch(() => {});
       return reply.status(400).send({ ok: false, error: `envie pelo menos ${MIN_FRAMES} frames` });
+    }
+
+    if (!hadConsent) {
+      await pool.query(`UPDATE users SET biometric_consent_at = now(), biometric_consent_version = $2 WHERE id = $1`, [
+        user.id,
+        config.legal.biometricConsentVersion,
+      ]);
     }
 
     // um enrollment ativo por usuário: desativa os anteriores (matches auto são

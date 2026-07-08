@@ -1,10 +1,11 @@
 import { createReadStream } from "fs";
-import { stat } from "fs/promises";
+import { readFile, stat } from "fs/promises";
 import { join } from "path";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply } from "fastify";
 import { pool } from "../db.js";
 import { config } from "../config.js";
 import { requireUser } from "../guards.js";
+import { applyWatermark } from "../services/watermark.js";
 
 // Thumbs/crops são derivados de dados biométricos — nunca públicos.
 // thumbs/<photoId>.webp: dono do álbum, admin, ou usuário PARTICIPANTE do álbum
@@ -24,7 +25,7 @@ export async function mediaRoutes(app: FastifyInstance): Promise<void> {
     const photoId = m[1];
 
     const { rows } = await pool.query(
-      `SELECT p.thumb_path FROM photos p
+      `SELECT p.thumb_path, a.watermark_enabled FROM photos p
        JOIN albums a ON a.id = p.album_id
        WHERE p.id = $1 AND (
          $3 OR a.owner_id = $2 OR EXISTS (
@@ -32,9 +33,9 @@ export async function mediaRoutes(app: FastifyInstance): Promise<void> {
            WHERE p2.album_id = p.album_id AND mt.user_id = $2 AND mt.status <> 'rejected'))`,
       [photoId, user.id, user.role === "admin"]
     );
-    const thumbPath = rows[0]?.thumb_path as string | undefined;
-    if (!thumbPath) return reply.status(404).send({ ok: false, error: "não encontrado" });
-    return sendWebp(reply, join(config.mediaDir, thumbPath));
+    const row = rows[0] as { thumb_path: string | null; watermark_enabled: boolean } | undefined;
+    if (!row?.thumb_path) return reply.status(404).send({ ok: false, error: "não encontrado" });
+    return sendWebp(reply, join(config.mediaDir, row.thumb_path), row.watermark_enabled);
   });
 
   app.get("/api/media/crops/:file", async (req, reply) => {
@@ -56,18 +57,22 @@ export async function mediaRoutes(app: FastifyInstance): Promise<void> {
     );
     const cropPath = rows[0]?.crop_path as string | undefined;
     if (!cropPath) return reply.status(404).send({ ok: false, error: "não encontrado" });
-    return sendWebp(reply, join(config.mediaDir, cropPath));
+    // crops nunca levam marca d'água — são recortes de 160px só pra UI interna (faixa de pessoas)
+    return sendWebp(reply, join(config.mediaDir, cropPath), false);
   });
 }
 
-async function sendWebp(reply: import("fastify").FastifyReply, absPath: string) {
+async function sendWebp(reply: FastifyReply, absPath: string, watermark: boolean) {
   try {
     await stat(absPath);
   } catch {
     return reply.status(404).send({ ok: false, error: "arquivo não existe" });
   }
-  return reply
-    .type("image/webp")
-    .header("Cache-Control", "private, max-age=86400")
-    .send(createReadStream(absPath));
+
+  reply.type("image/webp").header("Cache-Control", "private, max-age=86400");
+
+  if (!watermark) return reply.send(createReadStream(absPath));
+
+  const composed = await applyWatermark(await readFile(absPath));
+  return reply.send(composed);
 }

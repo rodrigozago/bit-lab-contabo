@@ -36,4 +36,18 @@ export const config = {
     globalPerMin: Number(process.env["RATE_LIMIT_GLOBAL_PER_MIN"] ?? 60),
     enrollPerMin: Number(process.env["RATE_LIMIT_ENROLL_PER_MIN"] ?? 10),
   },
+
+  // dias sem re-scan até um álbum ser arquivado (mídia biométrica apagada, metadados ficam)
+  retentionDays: Number(process.env["RETENTION_DAYS"] ?? 90),
+
+  // bump manual quando o texto de Termos/Privacidade mudar de forma material —
+  // usuários com terms_version diferente caem no gate de consentimento de novo
+  legal: {
+    termsVersion: "1.0",
+    biometricConsentVersion: "1.0",
+  },
+
+  watermark: {
+    text: process.env["WATERMARK_TEXT"] ?? "FACE LAB",
+  },
 };

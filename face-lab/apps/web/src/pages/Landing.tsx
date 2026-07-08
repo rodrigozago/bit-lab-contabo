@@ -1,4 +1,4 @@
-import { Navigate, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { useAuth, loginUrl } from "../App";
 import { Button } from "@/components/ui/button";
 import { ScanFace, FolderSync, ImagePlus, ShieldCheck } from "lucide-react";
@@ -87,7 +87,13 @@ export function Landing() {
 
       {/* Footer */}
       <div className="border-t px-6 py-10">
-        <p className="text-center text-xs text-muted-foreground">Face Lab</p>
+        <div className="flex flex-col items-center gap-2 text-xs text-muted-foreground">
+          <p>Face Lab</p>
+          <div className="flex gap-4">
+            <Link to="/terms" className="hover:text-foreground">Termos de Uso</Link>
+            <Link to="/privacy" className="hover:text-foreground">Política de Privacidade</Link>
+          </div>
+        </div>
       </div>
     </div>
   );

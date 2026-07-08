@@ -78,6 +78,19 @@ export function ProducerAlbum() {
     if (!timer.current) window.location.reload();
   }
 
+  async function toggleWatermark() {
+    if (!album) return;
+    const next = !album.watermarkEnabled;
+    setAlbum({ ...album, watermarkEnabled: next });
+    try {
+      await api(`/api/albums/${id}`, { method: "PATCH", body: JSON.stringify({ watermarkEnabled: next }) });
+      toast.success(next ? "Marca d'água ligada." : "Marca d'água desligada.");
+    } catch (err) {
+      setAlbum(album); // reverte
+      toast.error("Não deu pra atualizar", { description: (err as Error).message });
+    }
+  }
+
   const pct = status && status.total > 0 ? Math.round((status.done / status.total) * 100) : 0;
 
   return (
@@ -86,7 +99,17 @@ export function ProducerAlbum() {
         <ChevronLeft className="h-4 w-4" />
         Voltar para Álbuns
       </Link>
-      <h1 className="heading-editorial mt-4">{album?.name ?? "Álbum"}</h1>
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <h1 className="heading-editorial">{album?.name ?? "Álbum"}</h1>
+        {album?.status === "archived" && <Badge variant="secondary">Arquivado</Badge>}
+      </div>
+
+      {album && (
+        <label className="mt-3 flex w-fit items-center gap-2 text-sm text-muted-foreground">
+          <input type="checkbox" checked={album.watermarkEnabled} onChange={toggleWatermark} className="h-4 w-4" />
+          Marca d'água nas miniaturas
+        </label>
+      )}
 
       {status && (
         <div className="mt-6 rounded-lg border p-4">
@@ -100,7 +123,7 @@ export function ProducerAlbum() {
               ) : (
                 <RefreshCw className="mr-2 h-4 w-4" />
               )}
-              {status.album === "scanning" ? "Escaneando…" : "Re-escanear"}
+              {status.album === "scanning" ? "Escaneando…" : status.album === "archived" ? "Desarquivar e re-escanear" : "Re-escanear"}
             </Button>
           </div>
           <Progress value={pct} className="mt-3" />
