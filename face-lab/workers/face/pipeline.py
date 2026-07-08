@@ -17,7 +17,7 @@ import numpy as np
 from PIL import Image, ImageOps
 
 MEDIA_DIR = Path(os.environ.get("MEDIA_DIR", "/media"))
-DET_SCORE_MIN = 0.5          # descarta detecções fracas (falsos positivos)
+DET_SCORE_MIN = float(os.environ.get("DET_SCORE_MIN", "0.5"))  # descarta detecções fracas
 DET_MAX_SIDE = 2560          # downscale pra detecção em fotos gigantes (RAM)
 THUMB_SIZE = 320
 CROP_SIZE = 160

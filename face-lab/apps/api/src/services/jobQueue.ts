@@ -12,6 +12,7 @@ import { getRedis, newSubscriber } from "../redis.js";
 import { pool, toVector } from "../db.js";
 import { config } from "../config.js";
 import { matchPhotoFaces, matchEnrollment } from "./matching.js";
+import { assignPeopleForPhoto } from "./clustering.js";
 
 // Mesmo formato do ponto-studio (RPUSH fila + PUBLISH resultados), mas os
 // resultados persistem no Postgres — nada de estado em memória.
@@ -72,6 +73,8 @@ async function handlePhotoResult(result: PhotoFacesResult): Promise<void> {
       client.release();
     }
 
+    // agrupa em pessoas ANTES do match (o filtro "não sou eu" é por pessoa)
+    await assignPeopleForPhoto(photoId);
     await matchPhotoFaces(photoId);
   }
 

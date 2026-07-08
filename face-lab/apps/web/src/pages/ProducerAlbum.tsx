@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { useParams, Link } from "react-router-dom";
-import type { AlbumSummary, PhotoItem, ScanStatus } from "@face-lab/shared";
+import type { AlbumSummary, PersonSummary, PhotoItem, ScanStatus } from "@face-lab/shared";
 import { api } from "../api";
 
 export function ProducerAlbum() {
@@ -8,16 +8,32 @@ export function ProducerAlbum() {
   const [album, setAlbum] = useState<AlbumSummary | null>(null);
   const [status, setStatus] = useState<ScanStatus | null>(null);
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
+  const [people, setPeople] = useState<PersonSummary[]>([]);
+  const [personId, setPersonId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const personRef = useRef<string | null>(null);
+  personRef.current = personId;
 
-  function loadPhotos() {
-    api<PhotoItem[]>(`/api/albums/${id}/photos`).then(setPhotos).catch(() => {});
+  function loadPhotos(selectedPerson: string | null = personRef.current) {
+    const qs = selectedPerson ? `?personId=${selectedPerson}` : "";
+    api<PhotoItem[]>(`/api/albums/${id}/photos${qs}`).then(setPhotos).catch(() => {});
+  }
+
+  function loadPeople() {
+    api<PersonSummary[]>(`/api/albums/${id}/people`).then(setPeople).catch(() => {});
+  }
+
+  function selectPerson(pid: string | null) {
+    const next = pid === personId ? null : pid;
+    setPersonId(next);
+    loadPhotos(next);
   }
 
   useEffect(() => {
     api<AlbumSummary>(`/api/albums/${id}`).then(setAlbum).catch((e) => setError(String(e.message)));
-    loadPhotos();
+    loadPhotos(null);
+    loadPeople();
 
     timer.current = setInterval(async () => {
       try {
@@ -25,6 +41,7 @@ export function ProducerAlbum() {
         setStatus(s);
         if (s.album !== "scanning") {
           loadPhotos();
+          loadPeople();
           if (s.pending === 0 && timer.current) {
             clearInterval(timer.current);
             timer.current = null;
@@ -64,6 +81,31 @@ export function ProducerAlbum() {
           </div>
           <div className="progress"><div style={{ width: `${pct}%` }} /></div>
         </div>
+      )}
+
+      {people.length > 0 && (
+        <>
+          <h2 style={{ marginTop: 0 }}>{people.length} pessoa{people.length === 1 ? "" : "s"} no álbum</h2>
+          <div className="people-strip">
+            {people.map((pe) => (
+              <button
+                key={pe.id}
+                type="button"
+                className={`person-chip ${personId === pe.id ? "selected" : ""}`}
+                onClick={() => selectPerson(pe.id)}
+                title={`${pe.faceCount} rosto(s)`}
+              >
+                {pe.coverCropUrl ? <img src={pe.coverCropUrl} alt="pessoa" /> : <span style={{ width: 36 }} />}
+                {pe.photoCount} foto{pe.photoCount === 1 ? "" : "s"}
+              </button>
+            ))}
+            {personId && (
+              <button type="button" className="person-chip" onClick={() => selectPerson(null)}>
+                ✕ limpar filtro
+              </button>
+            )}
+          </div>
+        </>
       )}
 
       <div className="grid photos">

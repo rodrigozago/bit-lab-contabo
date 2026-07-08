@@ -4,6 +4,7 @@ import { pool } from "../db.js";
 import { config } from "../config.js";
 import { requireAdmin } from "../guards.js";
 import { rematchAll } from "../services/matching.js";
+import { reclusterAlbum, reclusterAll } from "../services/clustering.js";
 
 // admin não entra aqui: é gerenciado só no bit-lab-auth (is_admin) e espelhado no login
 const ROLES = new Set(["guest", "producer"]);
@@ -53,6 +54,19 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     return { ok: true, data: { matches: inserted, threshold: config.matchDistanceThreshold } };
   });
 
+  // reagrupa faces em pessoas (backfill de álbuns antigos / re-tune do threshold)
+  app.post("/api/admin/recluster", async (req, reply) => {
+    const admin = await requireAdmin(req, reply);
+    if (!admin) return;
+    const { albumId } = req.query as { albumId?: string };
+    if (albumId) {
+      const people = await reclusterAlbum(albumId);
+      return { ok: true, data: { albums: 1, people, threshold: config.clusterDistanceThreshold } };
+    }
+    const result = await reclusterAll();
+    return { ok: true, data: { ...result, threshold: config.clusterDistanceThreshold } };
+  });
+
   app.get("/api/admin/stats", async (req, reply) => {
     const admin = await requireAdmin(req, reply);
     if (!admin) return;
@@ -76,6 +90,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
           globalPerMin: config.rate.globalPerMin,
           enrollPerMin: config.rate.enrollPerMin,
           matchDistanceThreshold: config.matchDistanceThreshold,
+          clusterDistanceThreshold: config.clusterDistanceThreshold,
         },
       },
     };

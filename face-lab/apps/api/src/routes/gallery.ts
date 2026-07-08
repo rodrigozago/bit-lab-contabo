@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import type { MyAlbum, MyPhoto } from "@face-lab/shared";
 import { pool } from "../db.js";
 import { requireUser } from "../guards.js";
+import { confirmAndExpand, rejectPerson } from "../services/matching.js";
 
 export async function galleryRoutes(app: FastifyInstance): Promise<void> {
   // álbuns em que o usuário aparece (≥1 match não-rejeitado)
@@ -27,16 +28,21 @@ export async function galleryRoutes(app: FastifyInstance): Promise<void> {
     const user = await requireUser(req, reply);
     if (!user) return;
     const { id } = req.params as { id: string };
+    // 1 linha por foto com o MELHOR match (confirmado primeiro, depois menor
+    // distância) — bbox + dimensões pra desenhar o quadrado no rosto certo
     const { rows } = await pool.query(
-      `SELECT p.id, p.name, p.thumb_path, p.web_view_link, p.web_content_link, p.taken_at,
-              (ARRAY_AGG(m.face_id ORDER BY m.distance))[1] AS face_id,
-              MIN(m.distance)::real AS distance
-       FROM matches m
-       JOIN faces f ON f.id = m.face_id
-       JOIN photos p ON p.id = f.photo_id
-       WHERE m.user_id = $1 AND m.status <> 'rejected' AND p.album_id = $2
-       GROUP BY p.id
-       ORDER BY p.taken_at NULLS LAST, p.name`,
+      `SELECT * FROM (
+         SELECT DISTINCT ON (p.id)
+                p.id, p.name, p.thumb_path, p.web_view_link, p.web_content_link,
+                p.taken_at, p.width, p.height,
+                m.face_id, m.distance, m.status AS match_status, f.bbox
+         FROM matches m
+         JOIN faces f ON f.id = m.face_id
+         JOIN photos p ON p.id = f.photo_id
+         WHERE m.user_id = $1 AND m.status <> 'rejected' AND p.album_id = $2
+         ORDER BY p.id, (m.status = 'confirmed') DESC, m.distance ASC
+       ) best
+       ORDER BY best.taken_at NULLS LAST, best.name`,
       [user.id, id]
     );
     const photos: MyPhoto[] = rows.map((r) => ({
@@ -47,21 +53,33 @@ export async function galleryRoutes(app: FastifyInstance): Promise<void> {
       webContentLink: r.web_content_link,
       faceId: r.face_id,
       distance: r.distance,
+      matchStatus: r.match_status,
+      faceBbox: r.bbox ?? null,
+      photoWidth: r.width,
+      photoHeight: r.height,
       takenAt: r.taken_at ? new Date(r.taken_at).toISOString() : null,
     }));
     return { ok: true, data: photos };
   });
 
-  // "não sou eu" — a foto some da galeria do usuário e o rematch preserva a decisão
+  // "sou eu" — confirma e expande (pessoa inteira + probe global). O usuário
+  // "treina" o sistema: a face confirmada vira referência pra matches futuros.
+  app.post("/api/my/matches/:faceId/confirm", async (req, reply) => {
+    const user = await requireUser(req, reply);
+    if (!user) return;
+    const { faceId } = req.params as { faceId: string };
+    const added = await confirmAndExpand(faceId, user.id);
+    if (added < 0) return reply.status(404).send({ ok: false, error: "match não encontrado" });
+    return { ok: true, data: { newMatches: added } };
+  });
+
+  // "não sou eu" — rejeita a pessoa inteira (cluster) neste e em matches futuros
   app.post("/api/my/matches/:faceId/reject", async (req, reply) => {
     const user = await requireUser(req, reply);
     if (!user) return;
     const { faceId } = req.params as { faceId: string };
-    const { rowCount } = await pool.query(
-      `UPDATE matches SET status = 'rejected' WHERE face_id = $1 AND user_id = $2`,
-      [faceId, user.id]
-    );
-    if (!rowCount) return reply.status(404).send({ ok: false, error: "match não encontrado" });
+    const ok = await rejectPerson(faceId, user.id);
+    if (!ok) return reply.status(404).send({ ok: false, error: "match não encontrado" });
     return { ok: true, data: null };
   });
 }

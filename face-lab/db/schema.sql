@@ -82,6 +82,28 @@ CREATE TABLE IF NOT EXISTS faces (
   embedding vector(512) NOT NULL
 );
 CREATE INDEX IF NOT EXISTS faces_photo_idx ON faces(photo_id);
+
+-- "pessoa" = cluster de faces do mesmo álbum (centroide = média L2-normalizada)
+CREATE TABLE IF NOT EXISTS people (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  album_id uuid NOT NULL REFERENCES albums(id) ON DELETE CASCADE,
+  centroid vector(512) NOT NULL,
+  face_count int NOT NULL DEFAULT 0,
+  cover_face_id uuid,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS people_album_idx ON people(album_id);
+
+ALTER TABLE faces ADD COLUMN IF NOT EXISTS person_id uuid REFERENCES people(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS faces_person_idx ON faces(person_id);
+
+-- "não sou eu" por pessoa — persiste pra faces futuras do mesmo cluster
+CREATE TABLE IF NOT EXISTS rejected_people (
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  person_id uuid NOT NULL REFERENCES people(id) ON DELETE CASCADE,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, person_id)
+);
 -- sem índice vetorial por enquanto (scan exato ok até ~100k faces);
 -- quando crescer: CREATE INDEX faces_embedding_idx ON faces USING hnsw (embedding vector_cosine_ops);
 

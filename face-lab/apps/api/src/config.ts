@@ -28,6 +28,8 @@ export const config = {
   },
 
   matchDistanceThreshold: Number(process.env["MATCH_DISTANCE_THRESHOLD"] ?? 0.4),
+  // clustering pessoa↔face: mais frouxo que o match (pose/luz variam num evento)
+  clusterDistanceThreshold: Number(process.env["CLUSTER_DISTANCE_THRESHOLD"] ?? 0.45),
 
   rate: {
     producerPerMin: Number(process.env["RATE_LIMIT_PRODUCER_PER_MIN"] ?? 30),

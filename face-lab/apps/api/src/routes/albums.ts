@@ -21,7 +21,8 @@ const ALBUM_SUMMARY_SQL = `
   SELECT a.id, a.name, a.status, a.error, a.drive_folder_id, a.scanned_at, a.created_at,
          COUNT(p.id)::int AS photo_count,
          COUNT(p.id) FILTER (WHERE p.status = 'done')::int AS done_count,
-         COALESCE(SUM(fc.n), 0)::int AS face_count
+         COALESCE(SUM(fc.n), 0)::int AS face_count,
+         (SELECT COUNT(*)::int FROM people pe WHERE pe.album_id = a.id) AS people_count
   FROM albums a
   LEFT JOIN photos p ON p.album_id = a.id
   LEFT JOIN LATERAL (SELECT COUNT(*)::int AS n FROM faces f WHERE f.photo_id = p.id) fc ON true
@@ -37,6 +38,7 @@ function toAlbumSummary(row: Record<string, unknown>): AlbumSummary {
     photoCount: Number(row["photo_count"]),
     doneCount: Number(row["done_count"]),
     faceCount: Number(row["face_count"]),
+    peopleCount: Number(row["people_count"]),
     scannedAt: row["scanned_at"] ? new Date(row["scanned_at"] as string).toISOString() : null,
     createdAt: new Date(row["created_at"] as string).toISOString(),
   };
@@ -168,7 +170,8 @@ export async function albumRoutes(app: FastifyInstance): Promise<void> {
     return { ok: true, data: status };
   });
 
-  app.get("/api/albums/:id/photos", async (req, reply) => {
+  // pessoas do álbum (clusters) — capa + contagens, pra faixa de filtro na UI
+  app.get("/api/albums/:id/people", async (req, reply) => {
     const user = await requireProducer(req, reply);
     if (!user) return;
     const { id } = req.params as { id: string };
@@ -176,10 +179,41 @@ export async function albumRoutes(app: FastifyInstance): Promise<void> {
     if (!album) return reply.status(404).send({ ok: false, error: "álbum não encontrado" });
 
     const { rows } = await pool.query(
+      `SELECT pe.id, pe.face_count, pe.cover_face_id,
+              (SELECT COUNT(DISTINCT f.photo_id)::int FROM faces f WHERE f.person_id = pe.id) AS photo_count
+       FROM people pe WHERE pe.album_id = $1 ORDER BY pe.face_count DESC`,
+      [id]
+    );
+    return {
+      ok: true,
+      data: rows.map((r) => ({
+        id: r.id,
+        faceCount: r.face_count,
+        photoCount: r.photo_count,
+        coverCropUrl: r.cover_face_id ? `/api/media/crops/${r.cover_face_id}.webp` : null,
+      })),
+    };
+  });
+
+  app.get("/api/albums/:id/photos", async (req, reply) => {
+    const user = await requireProducer(req, reply);
+    if (!user) return;
+    const { id } = req.params as { id: string };
+    const { personId } = req.query as { personId?: string };
+    const album = await ownedAlbum(id, user.id, user.role === "admin");
+    if (!album) return reply.status(404).send({ ok: false, error: "álbum não encontrado" });
+
+    const params: unknown[] = [id];
+    let personFilter = "";
+    if (personId) {
+      params.push(personId);
+      personFilter = `AND EXISTS (SELECT 1 FROM faces pf WHERE pf.photo_id = p.id AND pf.person_id = $2)`;
+    }
+    const { rows } = await pool.query(
       `SELECT p.id, p.name, p.status, p.thumb_path, p.web_view_link, p.web_content_link, p.taken_at,
               (SELECT COUNT(*)::int FROM faces f WHERE f.photo_id = p.id) AS face_count
-       FROM photos p WHERE p.album_id = $1 ORDER BY p.taken_at NULLS LAST, p.name`,
-      [id]
+       FROM photos p WHERE p.album_id = $1 ${personFilter} ORDER BY p.taken_at NULLS LAST, p.name`,
+      params
     );
     const photos: PhotoItem[] = rows.map((r) => ({
       id: r.id,

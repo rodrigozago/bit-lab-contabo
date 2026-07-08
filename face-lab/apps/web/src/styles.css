@@ -101,6 +101,28 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 4px
   overflow: hidden;
 }
 .photo-card img { width: 100%; aspect-ratio: 4/3; object-fit: cover; display: block; background: var(--panel-2); }
+
+/* galeria do usuário: frame com aspect ratio REAL da foto pro bbox alinhar */
+.photo-frame { position: relative; width: 100%; background: var(--panel-2); }
+.photo-frame img { width: 100%; height: 100%; aspect-ratio: auto; object-fit: fill; display: block; }
+.face-box {
+  position: absolute;
+  border: 2px solid var(--accent-2);
+  border-radius: 4px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+.face-box.confirmed { border-color: var(--ok); }
+
+/* faixa de pessoas (clusters) no álbum do producer */
+.people-strip { display: flex; gap: 10px; flex-wrap: wrap; margin: 12px 0 20px; }
+.person-chip {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--panel); border: 1px solid #2a2a2e; border-radius: 999px;
+  padding: 4px 12px 4px 4px; cursor: pointer; color: var(--text); font-size: 13px;
+}
+.person-chip img { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; background: var(--panel-2); }
+.person-chip.selected { border-color: var(--accent); background: var(--panel-2); }
 .photo-card .meta { padding: 8px 10px; font-size: 12px; color: var(--muted); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .photo-card .meta .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
 

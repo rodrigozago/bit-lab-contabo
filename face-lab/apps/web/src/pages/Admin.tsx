@@ -16,6 +16,7 @@ interface Stats {
     globalPerMin: number;
     enrollPerMin: number;
     matchDistanceThreshold: number;
+    clusterDistanceThreshold: number;
   };
 }
 
@@ -39,9 +40,19 @@ export function Admin() {
   }
 
   async function rematch() {
-    setMsg("Recalculando…");
-    const r = await api<{ matches: number; threshold: number }>("/api/admin/rematch", { method: "POST" });
+    setMsg("Recalculando matches…");
+    const r = await api<{ matches: number; threshold: number }>("/api/admin/rematch", { method: "POST", body: JSON.stringify({}) });
     setMsg(`Rematch concluído: ${r.matches} matches (threshold ${r.threshold}).`);
+    load();
+  }
+
+  async function recluster() {
+    setMsg("Reagrupando pessoas (pode demorar em álbuns grandes)…");
+    const r = await api<{ albums: number; people: number; threshold: number }>("/api/admin/recluster", {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    setMsg(`Recluster concluído: ${r.people} pessoas em ${r.albums} álbum(ns) (threshold ${r.threshold}).`);
     load();
   }
 
@@ -60,14 +71,15 @@ export function Admin() {
           <div className="card">
             <p className="notice" style={{ margin: 0, fontSize: 12 }}>
               Limites/min: producer {stats.limits.producerPerMin} · global {stats.limits.globalPerMin} · enroll {stats.limits.enrollPerMin}<br />
-              Threshold: {stats.limits.matchDistanceThreshold}
+              Threshold match: {stats.limits.matchDistanceThreshold} · cluster: {stats.limits.clusterDistanceThreshold}
             </p>
           </div>
         </div>
       )}
 
-      <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 16 }}>
+      <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 16, flexWrap: "wrap" }}>
         <button onClick={rematch}>Recalcular matches (rematch)</button>
+        <button className="ghost" onClick={recluster}>Reagrupar pessoas (recluster)</button>
         {msg && <span className="notice">{msg}</span>}
       </div>
 

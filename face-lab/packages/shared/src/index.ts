@@ -35,8 +35,17 @@ export interface AlbumSummary {
   photoCount: number;
   doneCount: number;
   faceCount: number;
+  peopleCount: number;
   scannedAt: string | null;
   createdAt: string;
+}
+
+// cluster de faces (mesma pessoa) dentro de um álbum
+export interface PersonSummary {
+  id: string;
+  faceCount: number;
+  photoCount: number;
+  coverCropUrl: string | null;
 }
 
 export interface PhotoItem {
@@ -72,6 +81,11 @@ export interface MyPhoto {
   webContentLink: string | null;
   faceId: string;
   distance: number;
+  matchStatus: "auto" | "confirmed";
+  // pra desenhar o quadrado sobre o rosto (coords em px da foto original)
+  faceBbox: { x: number; y: number; w: number; h: number } | null;
+  photoWidth: number | null;
+  photoHeight: number | null;
   takenAt: string | null;
 }
 

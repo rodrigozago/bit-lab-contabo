@@ -109,7 +109,7 @@ export function Producer() {
               {statusBadge(a.status)}
             </div>
             <p className="notice" style={{ margin: "8px 0" }}>
-              {a.doneCount}/{a.photoCount} fotos · {a.faceCount} rostos
+              {a.doneCount}/{a.photoCount} fotos · {a.peopleCount} pessoa{a.peopleCount === 1 ? "" : "s"} · {a.faceCount} rostos
             </p>
             {a.error && <p className="error" style={{ fontSize: 12 }}>{a.error}</p>}
             <div style={{ display: "flex", gap: 8 }}>
