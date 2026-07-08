@@ -2,7 +2,7 @@ import type { MyPhoto } from "@face-lab/shared";
 import { Check, Download, ExternalLink, ThumbsDown, ThumbsUp, X } from "lucide-react";
 import { Button } from "./ui/button";
 
-function FaceBox({ photo }: { photo: MyPhoto }) {
+export function FaceBox({ photo }: { photo: MyPhoto }) {
   const { faceBbox: b, photoWidth: w, photoHeight: h } = photo;
   if (!b || !w || !h) return null;
   const confirmed = photo.matchStatus === "confirmed";
@@ -37,10 +37,10 @@ export function PhotoCard({ photo, isBusy, onConfirm, onReject, onClick }: Photo
       onClick={onClick}
     >
       <img
-        src={photo.thumbUrl}
+        src={photo.thumbUrl ?? undefined}
         alt={photo.name}
-        width={photo.photoWidth}
-        height={photo.photoHeight}
+        width={photo.photoWidth ?? undefined}
+        height={photo.photoHeight ?? undefined}
         className="w-full h-auto"
         loading="lazy"
       />

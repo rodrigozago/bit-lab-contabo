@@ -65,7 +65,7 @@ export function Producer() {
 
   async function scan(id: string) {
     toast.info("Escaneamento solicitado...");
-    await api(``/api/albums`/${id}`/scan``, { method: "POST" });
+    await api(`/api/albums/${id}/scan`, { method: "POST" });
     // Optimistic update
     setAlbums(albums.map(a => a.id === id ? { ...a, status: 'scanning' } : a));
     setTimeout(loadAlbums, 2000); // refresh after a bit
@@ -162,7 +162,7 @@ export function Producer() {
                 {a.error && <p className="text-sm text-destructive">{a.error}</p>}
               </CardContent>
               <CardFooter className="gap-2">
-                <Button asChild variant="outline" className="flex-1"><Link to={``/producer/albums`/${`a.id`}`}>Abrir</Link></Button>
+                <Button asChild variant="outline" className="flex-1"><Link to={`/producer/albums/${a.id}`}>Abrir</Link></Button>
                 <Button onClick={() => scan(a.id)} disabled={a.status === "scanning"} className="flex-1">
                   {a.status === "scanning" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Bot className="mr-2 h-4 w-4" />}
                   {a.scannedAt ? "Re-escanear" : "Escanear"}

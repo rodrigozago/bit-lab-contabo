@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { FaceBox, type Bbox } from "@/components/PhotoCard";
+import { FaceBox } from "@/components/PhotoCard";
+import type { Bbox, MyPhoto } from "@face-lab/shared";
 
 interface PhotoDialogProps {
   open: boolean;
@@ -26,6 +27,13 @@ export function PhotoDialog({
   confirmed,
   actions,
 }: PhotoDialogProps) {
+  const photo: Partial<MyPhoto> = {
+    faceBbox: bbox,
+    photoWidth: photoWidth,
+    photoHeight: photoHeight,
+    matchStatus: confirmed ? "confirmed" : "auto",
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl p-0">
@@ -35,7 +43,7 @@ export function PhotoDialog({
           style={photoWidth && photoHeight ? { aspectRatio: `${photoWidth} / ${photoHeight}` } : undefined}
         >
           {thumbUrl && <img src={thumbUrl} alt={name} className="block h-full w-full object-contain" />}
-          <FaceBox bbox={bbox} width={photoWidth} height={photoHeight} confirmed={confirmed} />
+          <FaceBox photo={photo as MyPhoto} />
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3 px-5 pb-5">
           <p className="text-sm italic text-muted-foreground">{name}</p>

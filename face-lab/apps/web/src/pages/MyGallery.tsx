@@ -3,12 +3,6 @@ import { Link } from "react-router-dom";
 import type { MyAlbum as MyAlbumType } from "@face-lab/shared";
 import { api } from "../api";
 import { useAuth } from "../App";
-
-import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import type { MyAlbum as MyAlbumType } from "@face-lab/shared";
-import { api } from "../api";
-import { useAuth } from "../App";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertTriangle } from "lucide-react";

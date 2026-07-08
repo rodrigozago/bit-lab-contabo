@@ -6,6 +6,8 @@ export type PhotoStatus = "pending" | "processing" | "done" | "error";
 export type EnrollmentStatus = "pending" | "done" | "error";
 export type MatchStatus = "auto" | "confirmed" | "rejected";
 
+export type Bbox = { x: number; y: number; w: number; h: number };
+
 export interface ApiOk<T> {
   ok: true;
   data: T;
@@ -83,7 +85,7 @@ export interface MyPhoto {
   distance: number;
   matchStatus: "auto" | "confirmed";
   // pra desenhar o quadrado sobre o rosto (coords em px da foto original)
-  faceBbox: { x: number; y: number; w: number; h: number } | null;
+  faceBbox: Bbox | null;
   photoWidth: number | null;
   photoHeight: number | null;
   takenAt: string | null;
@@ -117,7 +119,7 @@ export interface EnrollJob {
 export type WorkerJob = ProcessPhotoJob | EnrollJob;
 
 export interface FaceResult {
-  bbox: { x: number; y: number; w: number; h: number };
+  bbox: Bbox;
   detScore: number;
   cropPath: string; // relativo a MEDIA_DIR, ex: crops/<uuid>.webp
   embedding: number[]; // 512 floats, L2-normalizado

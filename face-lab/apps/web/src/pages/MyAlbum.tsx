@@ -90,7 +90,7 @@ export function MyAlbum() {
                 <DialogTitle>{dialogPhoto.name}</DialogTitle>
               </DialogHeader>
               <div className="mt-4">
-                <img src={dialogPhoto.thumbUrl} alt={dialogPhoto.name} className="w-full h-auto rounded-md" />
+                <img src={dialogPhoto.thumbUrl ?? undefined} alt={dialogPhoto.name} className="w-full h-auto rounded-md" />
               </div>
               <div className="mt-4 flex items-center justify-center gap-2">
                 {dialogPhoto.matchStatus === 'confirmed' ? (

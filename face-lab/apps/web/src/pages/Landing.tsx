@@ -1,5 +1,6 @@
 import { Navigate, useSearchParams } from "react-router-dom";
 import { useAuth, loginUrl } from "../App";
+import { Button } from "@/components/ui/button";
 
 export function Landing() {
   const { me, loading } = useAuth();
