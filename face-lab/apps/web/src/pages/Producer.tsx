@@ -2,15 +2,30 @@ import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import type { AlbumSummary } from "@face-lab/shared";
 import { api } from "../api";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { toast } from "sonner";
+import { Bot, Check, Loader2 } from "lucide-react";
 
 interface GoogleStatus {
   connected: boolean;
   googleEmail: string | null;
+  googlePicture: string | null;
 }
 
-function statusBadge(s: AlbumSummary["status"]) {
-  const map: Record<AlbumSummary["status"], string> = { pending: "", scanning: "warn", ready: "ok", error: "err" };
-  return <span className={`badge ${map[s]}`}>{s}</span>;
+function StatusBadge({ status }: { status: AlbumSummary["status"] }) {
+  const statusMap: Record<AlbumSummary["status"], { variant: "default" | "secondary" | "destructive"; label: string }> = {
+    pending: { variant: "secondary", label: "Pendente" },
+    scanning: { variant: "default", label: "Escaneando..." },
+    ready: { variant: "default", label: "Pronto" },
+    error: { variant: "destructive", label: "Erro" },
+  };
+  const { variant, label } = statusMap[status];
+  return <Badge variant={variant}>{label}</Badge>;
 }
 
 export function Producer() {
@@ -19,21 +34,21 @@ export function Producer() {
   const [albums, setAlbums] = useState<AlbumSummary[]>([]);
   const [name, setName] = useState("");
   const [folderUrl, setFolderUrl] = useState("");
-  const [msg, setMsg] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(params.get("googleError"));
+  
+  useEffect(() => {
+    const googleError = params.get("googleError");
+    if (googleError) toast.error("Falha na conexão com o Google", { description: googleError });
+
+    api<GoogleStatus>("/api/google/status").then(setGoogle).catch(() => setGoogle({ connected: false, googleEmail: null, googlePicture: null }));
+    loadAlbums();
+  }, [params]);
 
   function loadAlbums() {
-    api<AlbumSummary[]>("/api/albums").then(setAlbums).catch((e) => setError(String(e.message)));
+    api<AlbumSummary[]>("/api/albums").then(setAlbums).catch((e) => toast.error("Erro ao carregar álbuns", { description: e.message }));
   }
-  useEffect(() => {
-    api<GoogleStatus>("/api/google/status").then(setGoogle).catch(() => setGoogle({ connected: false, googleEmail: null }));
-    loadAlbums();
-  }, []);
 
   async function createAlbum(e: React.FormEvent) {
     e.preventDefault();
-    setError(null);
-    setMsg(null);
     try {
       const res = await api<{ id: string; folderName: string; linkSharedWarning: string | null }>("/api/albums", {
         method: "POST",
@@ -41,87 +56,130 @@ export function Producer() {
       });
       setName("");
       setFolderUrl("");
-      setMsg(`Álbum criado a partir da pasta "${res.folderName}".${res.linkSharedWarning ? " ⚠️ " + res.linkSharedWarning : ""}`);
+      toast.success(`Álbum "${res.folderName}" criado.`, { description: res.linkSharedWarning });
       loadAlbums();
     } catch (err) {
-      setError(String((err as Error).message));
+      toast.error("Erro ao criar álbum", { description: (err as Error).message });
     }
   }
 
   async function scan(id: string) {
-    await api(`/api/albums/${id}/scan`, { method: "POST" });
-    loadAlbums();
+    toast.info("Escaneamento solicitado...");
+    await api(``/api/albums`/${id}`/scan``, { method: "POST" });
+    // Optimistic update
+    setAlbums(albums.map(a => a.id === id ? { ...a, status: 'scanning' } : a));
+    setTimeout(loadAlbums, 2000); // refresh after a bit
   }
 
   return (
-    <div className="container">
-      <h1>Producer</h1>
-      <p className="sub">Crie álbuns a partir de pastas do seu Google Drive. As fotos ficam no seu Drive — indexamos os rostos e guardamos só miniaturas e os links.</p>
-
-      {error && <p className="error">{error}</p>}
-      {msg && <p className="notice">{msg}</p>}
-
-      <div className="card" style={{ marginBottom: 24 }}>
-        <h2 style={{ marginTop: 0 }}>Google Drive</h2>
-        {google?.connected ? (
-          <p className="notice">
-            Conectado como <strong>{google.googleEmail}</strong>{" "}
-            <button
-              className="ghost small"
-              onClick={async () => {
-                await api("/api/google", { method: "DELETE" });
-                setGoogle({ connected: false, googleEmail: null });
-              }}
-            >
-              Desconectar
-            </button>
-          </p>
-        ) : (
-          <>
-            <p className="notice">Conecte sua conta Google (somente leitura do Drive) para criar álbuns.</p>
-            <a className="btn" href="/api/google/connect">Conectar Google Drive</a>
-          </>
-        )}
+    <div className="space-y-8">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Producer</h1>
+        <p className="mt-1 text-muted-foreground">Crie e gerencie seus álbuns a partir do Google Drive.</p>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Conexão com Google Drive</CardTitle>
+          <CardDescription>
+            Conecte sua conta Google para que possamos ler as pastas de fotos que você nos indicar.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {google?.connected ? (
+            <div className="flex items-center gap-4">
+              <Avatar>
+                <AvatarImage src={google.googlePicture!} />
+                <AvatarFallback>{google.googleEmail?.charAt(0).toUpperCase()}</AvatarFallback>
+              </Avatar>
+              <div className="flex-grow">
+                <p className="font-semibold">{google.googleEmail}</p>
+                <p className="text-sm text-muted-foreground">Conectado com sucesso.</p>
+              </div>
+              <Button
+                variant="ghost"
+                onClick={async () => {
+                  await api("/api/google", { method: "DELETE" });
+                  setGoogle({ connected: false, googleEmail: null, googlePicture: null });
+                  toast.info("Conta Google desconectada.");
+                }}
+              >
+                Desconectar
+              </Button>
+            </div>
+          ) : (
+            <Button asChild>
+              <a href="/api/google/connect">Conectar Google Drive</a>
+            </Button>
+          )}
+        </CardContent>
+      </Card>
 
       {google?.connected && (
-        <div className="card" style={{ marginBottom: 24 }}>
-          <h2 style={{ marginTop: 0 }}>Novo álbum</h2>
+        <Card>
+          <CardHeader>
+            <CardTitle>Novo álbum</CardTitle>
+            <CardDescription>
+              Cole o link de uma pasta do seu Google Drive para iniciar a criação de um álbum.
+            </CardDescription>
+          </CardHeader>
           <form onSubmit={createAlbum}>
-            <label>Nome do álbum / evento</label>
-            <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Casamento Ana & João" required />
-            <label>Link da pasta do Google Drive</label>
-            <input type="url" value={folderUrl} onChange={(e) => setFolderUrl(e.target.value)} placeholder="https://drive.google.com/drive/folders/..." required />
-            <p className="notice" style={{ fontSize: 12 }}>
-              Compartilhe a pasta como "qualquer pessoa com o link: leitor" para os convidados conseguirem baixar as fotos.
-            </p>
-            <button type="submit" style={{ marginTop: 12 }}>Criar álbum</button>
+            <CardContent className="space-y-4">
+              <div className="space-y-1">
+                <Label htmlFor="album-name">Nome do álbum / evento</Label>
+                <Input id="album-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Casamento Ana & João" required />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="folder-url">Link da pasta do Google Drive</Label>
+                <Input id="folder-url" type="url" value={folderUrl} onChange={(e) => setFolderUrl(e.target.value)} placeholder="https://drive.google.com/drive/folders/..." required />
+              </div>
+            </CardContent>
+            <CardFooter className="flex-col items-start gap-4">
+               <p className="text-xs text-muted-foreground">
+                Lembre-se de compartilhar a pasta como "qualquer pessoa com o link pode ver" para que os convidados consigam baixar as fotos.
+              </p>
+              <Button type="submit">Criar álbum</Button>
+            </CardFooter>
           </form>
-        </div>
+        </Card>
       )}
 
-      <h2>Álbuns</h2>
-      <div className="grid cols-3">
-        {albums.map((a) => (
-          <div key={a.id} className="card">
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <strong>{a.name}</strong>
-              {statusBadge(a.status)}
-            </div>
-            <p className="notice" style={{ margin: "8px 0" }}>
-              {a.doneCount}/{a.photoCount} fotos · {a.peopleCount} pessoa{a.peopleCount === 1 ? "" : "s"} · {a.faceCount} rostos
+      <div>
+        <h2 className="text-2xl font-semibold tracking-tight">Seus Álbuns</h2>
+        <div className="mt-4 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {albums.map((a) => (
+            <Card key={a.id}>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg">{a.name}</CardTitle>
+                  <StatusBadge status={a.status} />
+                </div>
+                <CardDescription>
+                  {a.doneCount}/{a.photoCount} fotos · {a.peopleCount} pessoas · {a.faceCount} rostos
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {a.error && <p className="text-sm text-destructive">{a.error}</p>}
+              </CardContent>
+              <CardFooter className="gap-2">
+                <Button asChild variant="outline" className="flex-1"><Link to={``/producer/albums`/${`a.id`}`}>Abrir</Link></Button>
+                <Button onClick={() => scan(a.id)} disabled={a.status === "scanning"} className="flex-1">
+                  {a.status === "scanning" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Bot className="mr-2 h-4 w-4" />}
+                  {a.scannedAt ? "Re-escanear" : "Escanear"}
+                </Button>
+              </CardFooter>
+            </Card>
+          ))}
+        </div>
+        {albums.length === 0 && (
+          <div className="mt-4 rounded-lg border border-dashed py-12 text-center">
+            <h3 className="font-semibold tracking-tight">Nenhum álbum criado</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Use o formulário acima para criar seu primeiro álbum.
             </p>
-            {a.error && <p className="error" style={{ fontSize: 12 }}>{a.error}</p>}
-            <div style={{ display: "flex", gap: 8 }}>
-              <Link className="btn small ghost" to={`/producer/albums/${a.id}`}>Abrir</Link>
-              <button className="small" onClick={() => scan(a.id)} disabled={a.status === "scanning"}>
-                {a.status === "scanning" ? "Escaneando…" : a.scannedAt ? "Re-escanear" : "Escanear"}
-              </button>
-            </div>
           </div>
-        ))}
+        )}
       </div>
-      {albums.length === 0 && <p className="notice">Nenhum álbum ainda.</p>}
     </div>
   );
 }

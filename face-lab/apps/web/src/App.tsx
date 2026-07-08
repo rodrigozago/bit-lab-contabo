@@ -10,6 +10,8 @@ import { Producer } from "./pages/Producer";
 import { ProducerAlbum } from "./pages/ProducerAlbum";
 import { Admin } from "./pages/Admin";
 
+import { AppLayout } from "./components/AppLayout";
+
 interface AuthState {
   me: Me | null;
   loading: boolean;
@@ -22,37 +24,6 @@ export const useAuth = () => useContext(AuthContext);
 export function loginUrl(returnTo?: string): string {
   const rt = returnTo ?? window.location.pathname;
   return `/api/auth/login?returnTo=${encodeURIComponent(rt)}`;
-}
-
-function Nav() {
-  const { me } = useAuth();
-  const isProducer = me?.role === "producer" || me?.role === "admin";
-  return (
-    <nav className="nav">
-      <Link to="/" className="brand">📸 Face Lab</Link>
-      {me && <Link to="/me">Minhas fotos</Link>}
-      {me && <Link to="/enroll">Meu rosto</Link>}
-      {isProducer && <Link to="/producer">Producer</Link>}
-      {me?.role === "admin" && <Link to="/admin">Admin</Link>}
-      <span className="spacer" />
-      {me ? (
-        <>
-          <span className="who">{me.email}</span>
-          <button
-            className="ghost small"
-            onClick={async () => {
-              const r = await api<{ ssoLogoutUrl: string }>("/api/auth/logout", { method: "POST", body: JSON.stringify({}) });
-              window.location.href = r.ssoLogoutUrl; // derruba o SSO no auth e volta
-            }}
-          >
-            Sair
-          </button>
-        </>
-      ) : (
-        <a className="btn small" href={loginUrl("/")}>Entrar</a>
-      )}
-    </nav>
-  );
 }
 
 function RequireAuth({ children, producer, admin }: { children: JSX.Element; producer?: boolean; admin?: boolean }) {
@@ -90,17 +61,22 @@ export function App() {
 
   return (
     <AuthContext.Provider value={{ me, loading, refresh }}>
-      <Nav />
       <Routes>
         <Route path="/" element={<Landing />} />
-        <Route path="/enroll" element={<RequireAuth><Enroll /></RequireAuth>} />
-        <Route path="/me" element={<RequireAuth><MyGallery /></RequireAuth>} />
-        <Route path="/me/albums/:id" element={<RequireAuth><MyAlbum /></RequireAuth>} />
-        <Route path="/producer" element={<RequireAuth producer><Producer /></RequireAuth>} />
-        <Route path="/producer/albums/:id" element={<RequireAuth producer><ProducerAlbum /></RequireAuth>} />
-        <Route path="/admin" element={<RequireAuth admin><Admin /></RequireAuth>} />
+        
+        {/* Routes inside the new layout */}
+        <Route element={<AppLayout />}>
+          <Route path="/enroll" element={<RequireAuth><Enroll /></RequireAuth>} />
+          <Route path="/me" element={<RequireAuth><MyGallery /></RequireAuth>} />
+          <Route path="/me/albums/:id" element={<RequireAuth><MyAlbum /></RequireAuth>} />
+          <Route path="/producer" element={<RequireAuth producer><Producer /></RequireAuth>} />
+          <Route path="/producer/albums/:id" element={<RequireAuth producer><ProducerAlbum /></RequireAuth>} />
+          <Route path="/admin" element={<RequireAuth admin><Admin /></RequireAuth>} />
+        </Route>
+        
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AuthContext.Provider>
   );
 }
+

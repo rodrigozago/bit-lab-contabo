@@ -1,65 +1,87 @@
-import type { ReactNode } from "react";
-import { cn } from "@/lib/utils";
+import type { MyPhoto } from "@face-lab/shared";
+import { Check, Download, ExternalLink, ThumbsDown, ThumbsUp, X } from "lucide-react";
+import { Button } from "./ui/button";
 
-export interface Bbox {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}
-
-// quadrado sobre o rosto — coords em % da foto original
-export function FaceBox({
-  bbox,
-  width,
-  height,
-  confirmed,
-}: {
-  bbox: Bbox | null | undefined;
-  width: number | null | undefined;
-  height: number | null | undefined;
-  confirmed?: boolean;
-}) {
-  if (!bbox || !width || !height) return null;
+function FaceBox({ photo }: { photo: MyPhoto }) {
+  const { faceBbox: b, photoWidth: w, photoHeight: h } = photo;
+  if (!b || !w || !h) return null;
+  const confirmed = photo.matchStatus === "confirmed";
   return (
     <div
-      className={cn("face-box", confirmed && "confirmed")}
+      className={`absolute border-2 box-content pointer-events-none
+        ${confirmed ? "border-green-500" : "border-primary"}`}
       style={{
-        left: `${(bbox.x / width) * 100}%`,
-        top: `${(bbox.y / height) * 100}%`,
-        width: `${(bbox.w / width) * 100}%`,
-        height: `${(bbox.h / height) * 100}%`,
+        left: `${(b.x / w) * 100}%`,
+        top: `${(b.y / h) * 100}%`,
+        width: `${(b.w / w) * 100}%`,
+        height: `${(b.h / h) * 100}%`,
       }}
     />
   );
 }
 
 interface PhotoCardProps {
-  thumbUrl: string | null;
-  alt: string;
-  photoWidth?: number | null;
-  photoHeight?: number | null;
-  bbox?: Bbox | null;
-  confirmed?: boolean;
-  onOpen?: () => void;
-  footer?: ReactNode; // barra de ações/badges sob a imagem
+  photo: MyPhoto;
+  isBusy: boolean;
+  onConfirm: (faceId: string) => void;
+  onReject: (faceId: string) => void;
+  onClick: () => void;
 }
 
-/** Card de foto do grid masonry — imagem limpa em proporção natural + bbox opcional. */
-export function PhotoCard({ thumbUrl, alt, photoWidth, photoHeight, bbox, confirmed, onOpen, footer }: PhotoCardProps) {
+export function PhotoCard({ photo, isBusy, onConfirm, onReject, onClick }: PhotoCardProps) {
+  const isConfirmed = photo.matchStatus === "confirmed";
+
   return (
-    <figure className="group mb-5 break-inside-avoid">
-      <button
-        type="button"
-        onClick={onOpen}
-        className={cn("relative block w-full overflow-hidden bg-muted", onOpen && "cursor-zoom-in")}
-        style={photoWidth && photoHeight ? { aspectRatio: `${photoWidth} / ${photoHeight}` } : undefined}
-        disabled={!onOpen}
-      >
-        {thumbUrl && <img src={thumbUrl} alt={alt} loading="lazy" className="block h-auto w-full" />}
-        <FaceBox bbox={bbox} width={photoWidth} height={photoHeight} confirmed={confirmed} />
-      </button>
-      {footer && <figcaption className="mt-1.5 flex items-center gap-1 text-xs text-muted-foreground">{footer}</figcaption>}
-    </figure>
+    <div 
+      className="group relative break-inside-avoid overflow-hidden rounded-lg cursor-pointer"
+      onClick={onClick}
+    >
+      <img
+        src={photo.thumbUrl}
+        alt={photo.name}
+        width={photo.photoWidth}
+        height={photo.photoHeight}
+        className="w-full h-auto"
+        loading="lazy"
+      />
+      <FaceBox photo={photo} />
+
+      {/* Overlay + Actions, visible on hover/group-hover */}
+      <div className="absolute inset-0 bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
+        <div className="absolute bottom-0 left-0 w-full p-2">
+          <div className="flex items-center justify-center gap-1 rounded-md bg-background/80 p-1 backdrop-blur-sm">
+            {isConfirmed ? (
+               <div className="flex items-center gap-2 text-sm text-green-600 font-bold px-2">
+                <Check size={16} /> Você
+              </div>
+            ) : (
+              <Button size="sm" variant="ghost" disabled={isBusy} onClick={(e) => { e.stopPropagation(); onConfirm(photo.faceId); }}>
+                <ThumbsUp size={16} className="mr-1" /> Sou eu
+              </Button>
+            )}
+             <Button size="sm" variant="ghost" disabled={isBusy} onClick={(e) => { e.stopPropagation(); onReject(photo.faceId); }}>
+                <ThumbsDown size={16} className="mr-1" /> Não sou eu
+            </Button>
+            
+            <div className="flex-grow" />
+
+            {photo.webContentLink && (
+              <Button size="icon" variant="ghost" asChild>
+                <a href={photo.webContentLink} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
+                  <Download size={16} />
+                </a>
+              </Button>
+            )}
+            {photo.webViewLink && (
+              <Button size="icon" variant="ghost" asChild>
+                <a href={photo.webViewLink} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
+                  <ExternalLink size={16} />
+                </a>
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

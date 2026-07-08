@@ -2,32 +2,18 @@ import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import type { MyPhoto } from "@face-lab/shared";
 import { api } from "../api";
-
-// quadrado sobre o rosto que o sistema diz ser o usuário (coords em % da foto)
-function FaceBox({ photo }: { photo: MyPhoto }) {
-  const { faceBbox: b, photoWidth: w, photoHeight: h } = photo;
-  if (!b || !w || !h) return null;
-  const confirmed = photo.matchStatus === "confirmed";
-  return (
-    <div
-      className={`face-box ${confirmed ? "confirmed" : ""}`}
-      style={{
-        left: `${(b.x / w) * 100}%`,
-        top: `${(b.y / h) * 100}%`,
-        width: `${(b.w / w) * 100}%`,
-        height: `${(b.h / h) * 100}%`,
-      }}
-      title={confirmed ? "você (confirmado)" : "é você?"}
-    />
-  );
-}
+import { toast } from "sonner";
+import { Check, ChevronLeft, Download, ExternalLink, ThumbsDown, ThumbsUp } from "lucide-react";
+import { PhotoCard } from "@/components/PhotoCard";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 export function MyAlbum() {
   const { id } = useParams<{ id: string }>();
   const [photos, setPhotos] = useState<MyPhoto[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<string | null>(null); // faceId em ação
-  const [notice, setNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [dialogPhoto, setDialogPhoto] = useState<MyPhoto | null>(null);
 
   function load() {
     api<MyPhoto[]>(`/api/my/albums/${id}/photos`).then(setPhotos).catch((e) => setError(String(e.message)));
@@ -38,8 +24,9 @@ export function MyAlbum() {
     setBusy(faceId);
     try {
       const r = await api<{ newMatches: number }>(`/api/my/matches/${faceId}/confirm`, { method: "POST", body: JSON.stringify({}) });
-      setNotice(r.newMatches > 0 ? `Confirmado! Encontramos mais ${r.newMatches} foto(s) com você.` : "Confirmado!");
-      load(); // a expansão pode ter adicionado fotos neste álbum
+      toast.success(r.newMatches > 0 ? `Confirmado! Encontramos mais ${r.newMatches} foto(s) com você.` : "Confirmado!");
+      setDialogPhoto(null);
+      load();
     } finally {
       setBusy(null);
     }
@@ -49,57 +36,91 @@ export function MyAlbum() {
     setBusy(faceId);
     try {
       await api(`/api/my/matches/${faceId}/reject`, { method: "POST", body: JSON.stringify({}) });
-      setNotice("Ok — removemos todas as fotos dessa pessoa da sua galeria.");
-      load(); // rejeição é por pessoa: outras fotos podem ter saído também
+      toast.info("Ok — removemos todas as fotos dessa pessoa da sua galeria.");
+      setDialogPhoto(null);
+      load();
     } finally {
       setBusy(null);
     }
   }
 
   return (
-    <div className="container">
-      <p><Link to="/me">← Meus álbuns</Link></p>
-      <h1>Fotos com você</h1>
-      <p className="sub">O quadrado marca qual rosto achamos que é você — confirme ou corrija.</p>
-      {error && <p className="error">{error}</p>}
-      {notice && <p className="notice">{notice}</p>}
-
-      <div className="grid photos">
+    <div>
+      <Link to="/me" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+        <ChevronLeft className="h-4 w-4" />
+        Voltar para Meus Álbuns
+      </Link>
+      <h1 className="mt-4 text-3xl font-bold tracking-tight">Fotos com você</h1>
+      <p className="mt-1 text-muted-foreground">O quadrado marca qual rosto achamos que é você — confirme ou corrija.</p>
+      
+      {error && <p className="mt-4 text-sm text-destructive">{error}</p>}
+      
+      <div className="mt-8 columns-1 gap-4 space-y-4 sm:columns-2 lg:columns-3 xl:columns-4">
         {photos?.map((p) => (
-          <div key={p.id} className="photo-card">
-            <div
-              className="photo-frame"
-              style={p.photoWidth && p.photoHeight ? { aspectRatio: `${p.photoWidth} / ${p.photoHeight}` } : undefined}
-            >
-              {p.thumbUrl && <img src={p.thumbUrl} alt={p.name} loading="lazy" />}
-              <FaceBox photo={p} />
+          <PhotoCard 
+            key={p.id}
+            photo={p}
+            isBusy={busy === p.faceId}
+            onConfirm={confirm}
+            onReject={reject}
+            onClick={() => setDialogPhoto(p)}
+          />
+        ))}
+         {!photos && !error && Array.from({ length: 9 }).map((_, i) => (
+            <div key={i} className="break-inside-avoid">
+                <div className="aspect-[4/3] w-full animate-pulse bg-secondary/80 rounded-lg" />
             </div>
-            <div className="meta">
-              <span className="name">{p.name}</span>
-              {p.matchStatus === "confirmed" ? (
-                <span className="badge ok">✓ você</span>
-              ) : (
-                <span className="badge">dist {p.distance.toFixed(2)}</span>
-              )}
-            </div>
-            <div className="meta">
-              {p.webContentLink && <a className="btn small" href={p.webContentLink} target="_blank" rel="noreferrer">Baixar</a>}
-              {p.webViewLink && <a className="btn small ghost" href={p.webViewLink} target="_blank" rel="noreferrer">Ver no Drive</a>}
-            </div>
-            <div className="meta">
-              {p.matchStatus !== "confirmed" && (
-                <button className="small" disabled={busy === p.faceId} onClick={() => confirm(p.faceId)}>
-                  Sou eu
-                </button>
-              )}
-              <button className="ghost small" disabled={busy === p.faceId} onClick={() => reject(p.faceId)}>
-                Não sou eu
-              </button>
-            </div>
-          </div>
         ))}
       </div>
-      {photos && photos.length === 0 && <p className="notice">Nenhuma foto aqui.</p>}
+
+      {photos && photos.length === 0 && (
+        <div className="mt-8 rounded-lg border border-dashed py-20 text-center">
+            <h3 className="font-semibold tracking-tight">Nenhuma foto encontrada</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              As fotos deste álbum podem ter sido removidas após você rejeitar um rosto.
+            </p>
+        </div>
+      )}
+
+      <Dialog open={!!dialogPhoto} onOpenChange={(open) => !open && setDialogPhoto(null)}>
+        <DialogContent className="max-w-4xl">
+          {dialogPhoto && (
+            <>
+              <DialogHeader>
+                <DialogTitle>{dialogPhoto.name}</DialogTitle>
+              </DialogHeader>
+              <div className="mt-4">
+                <img src={dialogPhoto.thumbUrl} alt={dialogPhoto.name} className="w-full h-auto rounded-md" />
+              </div>
+              <div className="mt-4 flex items-center justify-center gap-2">
+                {dialogPhoto.matchStatus === 'confirmed' ? (
+                  <div className="flex items-center gap-2 text-sm text-green-600 font-bold px-2">
+                    <Check size={16} /> Você (Confirmado)
+                  </div>
+                ) : (
+                  <Button size="sm" disabled={busy === dialogPhoto.faceId} onClick={() => confirm(dialogPhoto.faceId)}>
+                    <ThumbsUp size={16} className="mr-1" /> Sou eu
+                  </Button>
+                )}
+                <Button size="sm" variant="outline" disabled={busy === dialogPhoto.faceId} onClick={() => reject(dialogPhoto.faceId)}>
+                  <ThumbsDown size={16} className="mr-1" /> Não sou eu
+                </Button>
+                <div className="flex-grow" />
+                {dialogPhoto.webContentLink && (
+                  <Button size="icon" variant="ghost" asChild>
+                    <a href={dialogPhoto.webContentLink} target="_blank" rel="noreferrer"><Download size={16} /></a>
+                  </Button>
+                )}
+                {dialogPhoto.webViewLink && (
+                  <Button size="icon" variant="ghost" asChild>
+                    <a href={dialogPhoto.webViewLink} target="_blank" rel="noreferrer"><ExternalLink size={16} /></a>
+                  </Button>
+                )}
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

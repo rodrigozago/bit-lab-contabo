@@ -2,13 +2,15 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../App";
+import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
+import { Camera, CheckCircle, Upload } from "lucide-react";
 
-// Passos guiados de captura — o usuário se posiciona em cada ângulo
 const STEPS = [
-  { key: "front", label: "Olhe pra frente" },
+  { key: "front", label: "Olhe para a câmera" },
   { key: "left", label: "Vire um pouco à esquerda" },
   { key: "right", label: "Vire um pouco à direita" },
-  { key: "smile", label: "Sorria :)" },
+  { key: "smile", label: "Agora, sorria" },
 ];
 
 type Phase = "idle" | "capturing" | "review" | "uploading" | "processing" | "done" | "error";
@@ -17,6 +19,7 @@ export function Enroll() {
   const { refresh } = useAuth();
   const navigate = useNavigate();
   const videoRef = useRef<HTMLVideoElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
   const [phase, setPhase] = useState<Phase>("idle");
@@ -25,18 +28,14 @@ export function Enroll() {
   const [previews, setPreviews] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [cameraDenied, setCameraDenied] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   const stopCamera = useCallback(() => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
-    }
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
   }, []);
 
-  useEffect(() => {
-    // Limpeza principal ao desmontar o componente
-    return () => stopCamera();
-  }, [stopCamera]);
+  useEffect(() => stopCamera, [stopCamera]);
 
   function startCamera() {
     setError(null);
@@ -48,36 +47,22 @@ export function Enroll() {
   }
 
   useEffect(() => {
-    if (phase !== "capturing") {
-      return;
-    }
-
+    if (phase !== "capturing") return;
     let active = true;
-    async function setupCamera() {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: "user" } });
-        if (!active || !videoRef.current) {
-          stream.getTracks().forEach(t => t.stop());
-          return;
-        }
+    navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: "user" } })
+      .then(stream => {
+        if (!active || !videoRef.current) return stream.getTracks().forEach(t => t.stop());
         streamRef.current = stream;
         videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      } catch (err) {
+        videoRef.current.play();
+      }).catch(() => {
         if (active) {
           setCameraDenied(true);
-          setError("Não consegui acessar a câmera. Você pode enviar fotos suas em vez disso.");
-          setPhase("error"); // Oferece uma saída clara do fluxo
+          setError("Não foi possível acessar a câmera.");
+          setPhase("error");
         }
-      }
-    }
-
-    setupCamera();
-
-    return () => {
-      active = false;
-      stopCamera(); // Garante que a câmera pare ao sair da fase de captura
-    };
+      });
+    return () => { active = false; stopCamera(); };
   }, [phase, stopCamera]);
 
   async function captureFrame() {
@@ -105,7 +90,7 @@ export function Enroll() {
     const files = Array.from(e.target.files ?? []);
     if (files.length === 0) return;
     setFrames(files);
-    setPreviews(files.map((f) => URL.createObjectURL(f)));
+    setPreviews(files.map(URL.createObjectURL));
     setPhase("review");
   }
 
@@ -116,7 +101,10 @@ export function Enroll() {
     fd.append("source", cameraDenied ? "upload" : "webcam");
     frames.forEach((f, i) => fd.append("frames", f, `frame_${i}.jpg`));
     try {
+      // Mock progress for now, as XHR is needed for real progress
+      setUploadProgress(50);
       await api<{ enrollmentId: string }>("/api/enrollment", { method: "POST", body: fd });
+      setUploadProgress(100);
       setPhase("processing");
       pollStatus();
     } catch (err) {
@@ -133,15 +121,13 @@ export function Enroll() {
           clearInterval(timer);
           await refresh();
           setPhase("done");
-          setTimeout(() => navigate("/me"), 1200);
+          setTimeout(() => navigate("/me"), 2000);
         } else if (e?.status === "error") {
           clearInterval(timer);
-          setError(e.error ?? "não conseguimos processar seu rosto");
+          setError(e.error ?? "Não conseguimos processar seu rosto");
           setPhase("error");
         }
-      } catch {
-        // segue tentando
-      }
+      } catch { /* segue tentando */ }
     }, 2000);
   }
 
@@ -151,63 +137,90 @@ export function Enroll() {
     setFrames([]);
     setPreviews([]);
     setError(null);
+    setUploadProgress(0);
   }
 
+  const renderContent = () => {
+    switch (phase) {
+      case "idle":
+        return (
+          <>
+            <h2 className="text-2xl font-semibold tracking-tight">Cadastre seu rosto</h2>
+            <p className="mt-2 text-muted-foreground">
+              Vamos capturar 4 fotos rápidas pela sua webcam. As imagens são usadas apenas para gerar sua referência facial e descartadas em seguida.
+            </p>
+            <div className="mt-8 space-y-3">
+              <Button className="w-full" onClick={startCamera}><Camera className="mr-2 h-4 w-4" /> Ligar câmera</Button>
+              <Button className="w-full" variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="mr-2 h-4 w-4" /> Enviar fotos</Button>
+              <input type="file" ref={fileInputRef} accept="image/*" multiple onChange={onFileUpload} className="hidden" />
+            </div>
+          </>
+        );
+      case "capturing":
+        return (
+          <>
+            <div className="text-center">
+              <h3 className="text-lg font-semibold">{STEPS[step]?.label}</h3>
+              <p className="text-sm text-muted-foreground">{step + 1} / {STEPS.length}</p>
+            </div>
+            <video ref={videoRef} muted playsInline className="mt-4 w-full rounded-md border" />
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <Button onClick={captureFrame}>Capturar</Button>
+              <Button variant="ghost" onClick={reset}>Cancelar</Button>
+            </div>
+            {previews.length > 0 && (
+                <div className="mt-4 flex justify-center gap-2">
+                    {previews.map((src, i) => <img key={i} src={src} alt={`frame ${i}`} className="h-16 w-16 rounded-md border object-cover" />)}
+                </div>
+            )}
+          </>
+        );
+      case "review":
+        return (
+          <>
+            <h3 className="text-lg font-semibold">Revise as fotos</h3>
+            <div className="mt-4 grid grid-cols-4 gap-2">
+              {previews.map((src, i) => <img key={i} src={src} alt={`frame ${i}`} className="w-full rounded-md border object-cover" />)}
+            </div>
+            <div className="mt-6 grid grid-cols-2 gap-2">
+              <Button onClick={submit}>Enviar e cadastrar</Button>
+              <Button variant="outline" onClick={reset}>Refazer</Button>
+            </div>
+          </>
+        );
+      case "uploading":
+      case "processing":
+        return (
+            <div className="text-center">
+                <h3 className="text-lg font-semibold">{phase === 'uploading' ? 'Enviando...' : 'Processando seu rosto...'}</h3>
+                <p className="mt-2 text-sm text-muted-foreground">Isso pode levar um minuto. Não feche esta página.</p>
+                <Progress value={phase === 'uploading' ? uploadProgress : undefined} className={`mt-4 ${phase === 'processing' ? 'animate-pulse' : ''}`} />
+            </div>
+        )
+      case "done":
+        return (
+            <div className="text-center">
+                <CheckCircle className="mx-auto h-12 w-12 text-green-500" />
+                <h3 className="mt-4 text-lg font-semibold">Rosto cadastrado!</h3>
+                <p className="mt-2 text-sm text-muted-foreground">Redirecionando para sua galeria...</p>
+            </div>
+        )
+      case "error":
+        return (
+            <div className="text-center">
+                <h3 className="text-lg font-semibold text-destructive">Ocorreu um erro</h3>
+                <p className="mt-2 text-sm text-muted-foreground">{error}</p>
+                <Button className="mt-6" onClick={reset}>Tentar de novo</Button>
+            </div>
+        )
+    }
+  };
+
   return (
-    <div className="container">
-      <h1>Cadastrar meu rosto</h1>
-      <p className="sub">
-        Capturamos alguns ângulos do seu rosto para te reconhecer nas fotos. As imagens são usadas
-        só para gerar sua referência facial — os frames originais são descartados após o processamento.
-      </p>
-
-      {error && <p className="error">{error}</p>}
-
-      {phase === "idle" && (
-        <div className="card">
-          <p className="notice">Vamos capturar 4 fotos rápidas pela webcam.</p>
-          <button onClick={startCamera}>Ligar câmera</button>
-          <p className="notice" style={{ marginTop: 16 }}>Sem câmera? Envie de 3 a 8 fotos suas (rosto nítido, sozinho no quadro):</p>
-          <input type="file" accept="image/*" multiple onChange={onFileUpload} />
-        </div>
-      )}
-
-      {phase === "capturing" && (
-        <div className="card webcam-stage">
-          <p><strong>{STEPS[step]?.label}</strong> ({step + 1}/{STEPS.length})</p>
-          <video ref={videoRef} muted playsInline />
-          <div style={{ marginTop: 12 }}>
-            <button onClick={captureFrame}>Capturar</button>{" "}
-            <button className="ghost" onClick={reset}>Cancelar</button>
-          </div>
-          <div className="frames-strip">
-            {previews.map((src, i) => <img key={i} src={src} alt={`frame ${i}`} />)}
-          </div>
-        </div>
-      )}
-
-      {phase === "review" && (
-        <div className="card">
-          <p><strong>Revise as capturas</strong></p>
-          <div className="frames-strip">
-            {previews.map((src, i) => <img key={i} src={src} alt={`frame ${i}`} />)}
-          </div>
-          <div style={{ marginTop: 16 }}>
-            <button onClick={submit}>Enviar e cadastrar</button>{" "}
-            <button className="ghost" onClick={reset}>Refazer</button>
-          </div>
-        </div>
-      )}
-
-      {(phase === "uploading" || phase === "processing") && (
-        <div className="card"><p className="notice">{phase === "uploading" ? "Enviando…" : "Processando seu rosto…"}</p></div>
-      )}
-
-      {phase === "done" && (
-        <div className="card"><p style={{ color: "var(--ok)" }}>Rosto cadastrado! Redirecionando…</p></div>
-      )}
-
-      {phase === "error" && <button onClick={reset}>Tentar de novo</button>}
+    <div className="flex justify-center">
+      <div className="w-full max-w-md rounded-lg border p-6 shadow-sm bg-card">
+        {renderContent()}
+      </div>
     </div>
   );
 }
