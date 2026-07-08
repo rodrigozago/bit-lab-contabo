@@ -40,7 +40,13 @@ services:
       PORT: "3001"
       NODE_ENV: production
       PUBLIC_URL: "${PUBLIC_URL:-https://face.bit-lab.tech}"
-      DATABASE_URL: "postgres://facelab:${POSTGRES_PASSWORD}@postgres:5432/facelab"
+      # PG* discretos em vez de DATABASE_URL: senha com caractere especial
+      # (@ / # etc.) quebraria o parse da URL de conexão
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGUSER: facelab
+      PGPASSWORD: "${POSTGRES_PASSWORD}"
+      PGDATABASE: facelab
       REDIS_URL: "redis://redis:6379"
       MEDIA_DIR: "/media"
       SESSION_SECRET: "${SESSION_SECRET}"
@@ -52,7 +58,6 @@ services:
       GOOGLE_REDIRECT_URI: "${GOOGLE_REDIRECT_URI:-https://face.bit-lab.tech/api/google/callback}"
       GOOGLE_TOKEN_ENC_KEY: "${GOOGLE_TOKEN_ENC_KEY}"
       MATCH_DISTANCE_THRESHOLD: "${MATCH_DISTANCE_THRESHOLD:-0.4}"
-      INITIAL_ADMIN_EMAIL: "${INITIAL_ADMIN_EMAIL}"
       RATE_LIMIT_PRODUCER_PER_MIN: "${RATE_LIMIT_PRODUCER_PER_MIN:-30}"
       RATE_LIMIT_GLOBAL_PER_MIN: "${RATE_LIMIT_GLOBAL_PER_MIN:-60}"
       RATE_LIMIT_ENROLL_PER_MIN: "${RATE_LIMIT_ENROLL_PER_MIN:-10}"

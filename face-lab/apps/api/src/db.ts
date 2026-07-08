@@ -6,7 +6,11 @@ import { config } from "./config.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-export const pool = new pg.Pool({ connectionString: config.databaseUrl });
+// PGHOST/PGUSER/PGPASSWORD/PGDATABASE (compose) têm precedência — o pg lê
+// nativamente e a senha não passa por parse de URL. DATABASE_URL é o fallback dev.
+export const pool = process.env["PGHOST"]
+  ? new pg.Pool()
+  : new pg.Pool({ connectionString: config.databaseUrl });
 
 /** Aplica db/schema.sql (idempotente) em todo boot — sem framework de migração por ora. */
 export async function migrate(): Promise<void> {

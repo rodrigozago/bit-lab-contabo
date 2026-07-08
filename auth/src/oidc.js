@@ -49,7 +49,7 @@ const configuration = {
   },
   claims: {
     openid: ['sub'],
-    email: ['email', 'email_verified'],
+    email: ['email', 'email_verified', 'is_admin'],
   },
   interactions: {
     url: (_ctx, interaction) => `/interaction/${interaction.uid}`,
@@ -63,7 +63,7 @@ const configuration = {
     return {
       accountId: id,
       async claims() {
-        return { sub: id, email: user.email, email_verified: true }
+        return { sub: id, email: user.email, email_verified: true, is_admin: user.is_admin }
       },
     }
   },

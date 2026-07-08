@@ -61,10 +61,11 @@ export async function startAuth(returnTo: string): Promise<AuthStart> {
 export interface AuthClaims {
   sub: string;
   email: string;
+  isAdmin: boolean;
   returnTo: string;
 }
 
-/** Troca o code por tokens e devolve as claims do ID token. */
+/** Troca o code por tokens e devolve as claims do usuário. */
 export async function finishAuth(callbackParams: Record<string, string>): Promise<AuthClaims> {
   const oidc = await getOidcClient();
   const state = callbackParams["state"];
@@ -80,11 +81,18 @@ export async function finishAuth(callbackParams: Record<string, string>): Promis
     state,
     code_verifier: verifier,
   });
-  const claims = tokenSet.claims();
-  if (!claims.sub) throw new Error("ID token sem sub");
+  const idClaims = tokenSet.claims();
+  if (!idClaims.sub) throw new Error("ID token sem sub");
+
+  // Claims de scope (email, is_admin) vêm do endpoint USERINFO, não do ID token:
+  // o oidc-provider segue a conformidade OIDC e, com userinfo habilitado, o ID
+  // token carrega só o sub. tokenSet.claims() sozinho devolveria email vazio.
+  const userinfo = await oidc.userinfo(tokenSet);
+
   return {
-    sub: claims.sub,
-    email: String(claims["email"] ?? ""),
+    sub: idClaims.sub,
+    email: String(userinfo["email"] ?? idClaims["email"] ?? ""),
+    isAdmin: Boolean(userinfo["is_admin"] ?? idClaims["is_admin"]),
     returnTo: returnTo || "/",
   };
 }

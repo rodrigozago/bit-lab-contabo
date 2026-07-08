@@ -28,19 +28,22 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       return reply.redirect(`/?authError=${encodeURIComponent(msg ?? "acesso negado")}`);
     }
 
-    const { sub, email, returnTo } = await finishAuth(params);
+    const { sub, email, isAdmin, returnTo } = await finishAuth(params);
 
-    // upsert por sub; INITIAL_ADMIN_EMAIL promove a admin no login (só se ainda guest)
-    const adminEmail = config.initialAdminEmail || null;
+    // upsert por sub; espelha is_admin do auth nos dois sentidos a cada login:
+    // ganhou is_admin lá → admin aqui; perdeu → cai pra guest (producer local não é afetado)
     const { rows } = await pool.query(
       `INSERT INTO users (oidc_sub, email, role)
-       VALUES ($1, $2, CASE WHEN $3::text IS NOT NULL AND lower($2) = $3 THEN 'admin'::user_role ELSE 'guest'::user_role END)
+       VALUES ($1, $2, CASE WHEN $3 THEN 'admin'::user_role ELSE 'guest'::user_role END)
        ON CONFLICT (oidc_sub) DO UPDATE
          SET email = EXCLUDED.email,
-             role = CASE WHEN $3::text IS NOT NULL AND lower(EXCLUDED.email) = $3 AND users.role = 'guest'
-                         THEN 'admin'::user_role ELSE users.role END
+             role = CASE
+               WHEN $3 THEN 'admin'::user_role
+               WHEN users.role = 'admin' THEN 'guest'::user_role
+               ELSE users.role
+             END
        RETURNING id`,
-      [sub, email, adminEmail]
+      [sub, email, isAdmin]
     );
 
     await createSession(reply, rows[0].id);

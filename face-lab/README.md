@@ -48,7 +48,8 @@ ALLOW_SELF_SIGNUP=true
 ```bash
 cp .env.example .env
 # preencha: senhas, OIDC_CLIENT_SECRET (== FACE_LAB_OIDC_SECRET do auth),
-# GOOGLE_CLIENT_ID/SECRET, GOOGLE_TOKEN_ENC_KEY (openssl rand -hex 32), INITIAL_ADMIN_EMAIL
+# GOOGLE_CLIENT_ID/SECRET, GOOGLE_TOKEN_ENC_KEY (openssl rand -hex 32)
+# (admins do auth — is_admin — entram como admin no face-lab automaticamente)
 ```
 
 ### 4. Subir

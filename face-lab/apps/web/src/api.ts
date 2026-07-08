@@ -12,7 +12,9 @@ export class ApiError extends Error {
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     credentials: "same-origin",
-    headers: init?.body instanceof FormData ? undefined : { "Content-Type": "application/json" },
+    headers: init?.body
+      ? (init.body instanceof FormData ? undefined : { "Content-Type": "application/json" })
+      : undefined,
     ...init,
   });
   let body: ApiResponse<T> | null = null;

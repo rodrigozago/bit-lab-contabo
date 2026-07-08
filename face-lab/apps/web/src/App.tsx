@@ -41,7 +41,7 @@ function Nav() {
           <button
             className="ghost small"
             onClick={async () => {
-              await api("/api/auth/logout", { method: "POST" });
+              await api("/api/auth/logout", { method: "POST", body: JSON.stringify({}) });
               window.location.href = "/";
             }}
           >

@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import type { AdminUser, UserRole } from "@face-lab/shared";
 import { api } from "../api";
-import { useAuth } from "../App";
 
 interface Stats {
   users: number;
@@ -20,10 +19,10 @@ interface Stats {
   };
 }
 
-const ROLES: UserRole[] = ["guest", "producer", "admin"];
+// admin é gerenciado no bit-lab-auth (is_admin) — aqui só guest ↔ producer
+const ROLES: UserRole[] = ["guest", "producer"];
 
 export function Admin() {
-  const { me } = useAuth();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -82,9 +81,13 @@ export function Admin() {
               <tr key={u.id}>
                 <td>{u.email}</td>
                 <td>
-                  <select value={u.role} disabled={u.id === me?.id} onChange={(e) => changeRole(u.id, e.target.value as UserRole)}>
-                    {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
-                  </select>
+                  {u.role === "admin" ? (
+                    <span className="badge ok" title="gerenciado no bit-lab-auth (is_admin)">admin · via auth</span>
+                  ) : (
+                    <select value={u.role} onChange={(e) => changeRole(u.id, e.target.value as UserRole)}>
+                      {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+                    </select>
+                  )}
                 </td>
                 <td>{u.hasEnrollment ? <span className="badge ok">sim</span> : <span className="badge">não</span>}</td>
                 <td className="notice">{new Date(u.createdAt).toLocaleDateString("pt-BR")}</td>

@@ -28,7 +28,6 @@ export const config = {
   },
 
   matchDistanceThreshold: Number(process.env["MATCH_DISTANCE_THRESHOLD"] ?? 0.4),
-  initialAdminEmail: (process.env["INITIAL_ADMIN_EMAIL"] ?? "").toLowerCase(),
 
   rate: {
     producerPerMin: Number(process.env["RATE_LIMIT_PRODUCER_PER_MIN"] ?? 30),

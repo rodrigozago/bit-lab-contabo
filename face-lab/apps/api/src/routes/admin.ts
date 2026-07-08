@@ -5,7 +5,8 @@ import { config } from "../config.js";
 import { requireAdmin } from "../guards.js";
 import { rematchAll } from "../services/matching.js";
 
-const ROLES = new Set(["guest", "producer", "admin"]);
+// admin não entra aqui: é gerenciado só no bit-lab-auth (is_admin) e espelhado no login
+const ROLES = new Set(["guest", "producer"]);
 
 export async function adminRoutes(app: FastifyInstance): Promise<void> {
   app.get("/api/admin/users", async (req, reply) => {
@@ -31,12 +32,17 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     if (!admin) return;
     const { id } = req.params as { id: string };
     const { role } = (req.body ?? {}) as { role?: string };
-    if (!role || !ROLES.has(role)) return reply.status(400).send({ ok: false, error: "role inválido" });
-    if (id === admin.id && role !== "admin") {
-      return reply.status(400).send({ ok: false, error: "não dá pra rebaixar a si mesmo" });
+    if (!role || !ROLES.has(role)) {
+      return reply.status(400).send({ ok: false, error: "role inválido — admin é gerenciado no bit-lab-auth" });
     }
-    const { rowCount } = await pool.query(`UPDATE users SET role = $2 WHERE id = $1`, [id, role]);
-    if (!rowCount) return reply.status(404).send({ ok: false, error: "usuário não encontrado" });
+    // não mexe em quem é admin (papel governado pelo is_admin do auth)
+    const { rowCount } = await pool.query(
+      `UPDATE users SET role = $2 WHERE id = $1 AND role <> 'admin'`,
+      [id, role]
+    );
+    if (!rowCount) {
+      return reply.status(400).send({ ok: false, error: "usuário não encontrado ou é admin (gerencie no bit-lab-auth)" });
+    }
     return { ok: true, data: null };
   });
 
