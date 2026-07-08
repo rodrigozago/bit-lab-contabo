@@ -1,16 +1,31 @@
-import { useEffect, useState, useRef } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { Link, useParams } from "react-router-dom";
 import type { AlbumSummary, PersonSummary, PhotoItem, ScanStatus } from "@face-lab/shared";
 import { api } from "../api";
+import { toast } from "sonner";
+import { ChevronLeft, Loader2, RefreshCw, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { PhotoDialog } from "@/components/PhotoDialog";
+
+function PhotoBadge({ photo }: { photo: PhotoItem }) {
+  if (photo.status === "done") {
+    return <Badge variant="secondary">{photo.faceCount} rosto{photo.faceCount === 1 ? "" : "s"}</Badge>;
+  }
+  if (photo.status === "error") return <Badge variant="destructive">erro</Badge>;
+  return <Badge variant="outline">{photo.status === "processing" ? "processando…" : "na fila"}</Badge>;
+}
 
 export function ProducerAlbum() {
   const { id } = useParams<{ id: string }>();
   const [album, setAlbum] = useState<AlbumSummary | null>(null);
   const [status, setStatus] = useState<ScanStatus | null>(null);
-  const [photos, setPhotos] = useState<PhotoItem[]>([]);
+  const [photos, setPhotos] = useState<PhotoItem[] | null>(null);
   const [people, setPeople] = useState<PersonSummary[]>([]);
   const [personId, setPersonId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [dialogPhoto, setDialogPhoto] = useState<PhotoItem | null>(null);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
   const personRef = useRef<string | null>(null);
   personRef.current = personId;
@@ -31,7 +46,7 @@ export function ProducerAlbum() {
   }
 
   useEffect(() => {
-    api<AlbumSummary>(`/api/albums/${id}`).then(setAlbum).catch((e) => setError(String(e.message)));
+    api<AlbumSummary>(`/api/albums/${id}`).then(setAlbum).catch((e) => toast.error("Erro ao carregar álbum", { description: e.message }));
     loadPhotos(null);
     loadPeople();
 
@@ -48,84 +63,126 @@ export function ProducerAlbum() {
           }
         }
       } catch {
-        // ignora
+        // ignora falha de poll
       }
     }, 2500);
     return () => {
       if (timer.current) clearInterval(timer.current);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   async function scan() {
-    await api(`/api/albums/${id}/scan`, { method: "POST" });
+    await api(`/api/albums/${id}/scan`, { method: "POST", body: JSON.stringify({}) });
+    toast.info("Escaneamento iniciado.");
     if (!timer.current) window.location.reload();
   }
 
   const pct = status && status.total > 0 ? Math.round((status.done / status.total) * 100) : 0;
 
   return (
-    <div className="container">
-      <p><Link to="/producer">← Producer</Link></p>
-      <h1>{album?.name ?? "Álbum"}</h1>
-      {error && <p className="error">{error}</p>}
+    <div>
+      <Link to="/producer" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+        <ChevronLeft className="h-4 w-4" />
+        Voltar para Álbuns
+      </Link>
+      <h1 className="mt-4 text-3xl font-bold tracking-tight">{album?.name ?? "Álbum"}</h1>
 
       {status && (
-        <div className="card" style={{ marginBottom: 20 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-            <span className="notice">
+        <div className="mt-6 rounded-lg border p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">
               {status.done}/{status.total} processadas · {status.errors} erros · {status.pending} na fila
-            </span>
-            <button className="small" onClick={scan} disabled={status.album === "scanning"}>
+            </p>
+            <Button size="sm" onClick={scan} disabled={status.album === "scanning"}>
+              {status.album === "scanning" ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="mr-2 h-4 w-4" />
+              )}
               {status.album === "scanning" ? "Escaneando…" : "Re-escanear"}
-            </button>
+            </Button>
           </div>
-          <div className="progress"><div style={{ width: `${pct}%` }} /></div>
+          <Progress value={pct} className="mt-3" />
         </div>
       )}
 
       {people.length > 0 && (
-        <>
-          <h2 style={{ marginTop: 0 }}>{people.length} pessoa{people.length === 1 ? "" : "s"} no álbum</h2>
-          <div className="people-strip">
+        <div className="mt-8">
+          <h2 className="text-sm font-medium uppercase tracking-widest text-muted-foreground">
+            {people.length} pessoa{people.length === 1 ? "" : "s"} no álbum
+          </h2>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
             {people.map((pe) => (
               <button
                 key={pe.id}
                 type="button"
-                className={`person-chip ${personId === pe.id ? "selected" : ""}`}
                 onClick={() => selectPerson(pe.id)}
                 title={`${pe.faceCount} rosto(s)`}
+                className={`flex items-center gap-2 rounded-full border py-1 pl-1 pr-3 text-sm transition-colors hover:bg-secondary ${
+                  personId === pe.id ? "border-foreground bg-secondary" : ""
+                }`}
               >
-                {pe.coverCropUrl ? <img src={pe.coverCropUrl} alt="pessoa" /> : <span style={{ width: 36 }} />}
+                <Avatar className="h-8 w-8">
+                  {pe.coverCropUrl && <AvatarImage src={pe.coverCropUrl} alt="pessoa" />}
+                  <AvatarFallback>?</AvatarFallback>
+                </Avatar>
                 {pe.photoCount} foto{pe.photoCount === 1 ? "" : "s"}
               </button>
             ))}
             {personId && (
-              <button type="button" className="person-chip" onClick={() => selectPerson(null)}>
-                ✕ limpar filtro
-              </button>
+              <Button variant="ghost" size="sm" onClick={() => selectPerson(null)}>
+                <X className="mr-1 h-4 w-4" /> Limpar filtro
+              </Button>
             )}
           </div>
-        </>
+        </div>
       )}
 
-      <div className="grid photos">
-        {photos.map((p) => (
-          <div key={p.id} className="photo-card">
-            {p.thumbUrl ? <img src={p.thumbUrl} alt={p.name} loading="lazy" /> : <div style={{ aspectRatio: "4/3", background: "var(--panel-2)" }} />}
-            <div className="meta">
-              <span className="name">{p.name}</span>
-              {p.status === "done" ? (
-                <span className="badge ok">{p.faceCount} rosto{p.faceCount === 1 ? "" : "s"}</span>
-              ) : p.status === "error" ? (
-                <span className="badge err">erro</span>
+      <div className="mt-8 columns-1 gap-4 space-y-4 sm:columns-2 lg:columns-3 xl:columns-4">
+        {photos?.map((p) => (
+          <figure key={p.id} className="break-inside-avoid">
+            <button
+              type="button"
+              className="block w-full cursor-zoom-in overflow-hidden rounded-lg bg-secondary"
+              onClick={() => setDialogPhoto(p)}
+              disabled={!p.thumbUrl}
+            >
+              {p.thumbUrl ? (
+                <img src={p.thumbUrl} alt={p.name} loading="lazy" className="h-auto w-full" />
               ) : (
-                <span className="badge warn">{p.status}</span>
+                <div className="aspect-[4/3] w-full" />
               )}
-            </div>
-          </div>
+            </button>
+            <figcaption className="mt-1.5 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+              <span className="truncate">{p.name}</span>
+              <PhotoBadge photo={p} />
+            </figcaption>
+          </figure>
         ))}
+        {!photos &&
+          Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className="break-inside-avoid">
+              <div className="aspect-[4/3] w-full animate-pulse rounded-lg bg-secondary/80" />
+            </div>
+          ))}
       </div>
-      {photos.length === 0 && <p className="notice">Nenhuma foto ainda — clique em escanear.</p>}
+
+      {photos && photos.length === 0 && (
+        <div className="mt-8 rounded-lg border border-dashed py-20 text-center">
+          <h3 className="font-semibold tracking-tight">Nenhuma foto {personId ? "desta pessoa" : "ainda"}</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {personId ? "Limpe o filtro para ver todas as fotos." : "Clique em re-escanear para buscar as fotos da pasta do Drive."}
+          </p>
+        </div>
+      )}
+
+      <PhotoDialog
+        open={!!dialogPhoto}
+        onOpenChange={(open) => !open && setDialogPhoto(null)}
+        thumbUrl={dialogPhoto?.thumbUrl ?? null}
+        name={dialogPhoto?.name ?? ""}
+      />
     </div>
   );
 }

@@ -73,6 +73,7 @@ export interface MyAlbum {
   id: string;
   name: string;
   matchCount: number;
+  coverUrl: string | null; // thumb de uma foto matched do próprio usuário
 }
 
 export interface MyPhoto {

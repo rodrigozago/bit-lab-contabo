@@ -39,10 +39,10 @@ export function PhotoDialog({
       <DialogContent className="max-w-4xl p-0">
         <DialogTitle className="sr-only">{name}</DialogTitle>
         <div
-          className="relative max-h-[78vh] overflow-hidden bg-muted"
+          className="relative overflow-hidden bg-muted"
           style={photoWidth && photoHeight ? { aspectRatio: `${photoWidth} / ${photoHeight}` } : undefined}
         >
-          {thumbUrl && <img src={thumbUrl} alt={name} className="block h-full w-full object-contain" />}
+          {thumbUrl && <img src={thumbUrl} alt={name} className="block max-h-[78vh] w-full object-contain" />}
           <FaceBox photo={photo as MyPhoto} />
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3 px-5 pb-5">

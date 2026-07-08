@@ -50,8 +50,9 @@ export function MyGallery() {
           {albums?.map((a) => (
             <Link key={a.id} to={`/me/albums/${a.id}`} className="group">
               <Card className="overflow-hidden transition-all group-hover:shadow-md group-hover:-translate-y-1">
-                <div className="aspect-[4/3] w-full bg-secondary" />
-                {/* TODO: Usar a.coverImageUrl quando disponível */}
+                <div className="aspect-[4/3] w-full bg-secondary">
+                  {a.coverUrl && <img src={a.coverUrl} alt={a.name} loading="lazy" className="h-full w-full object-cover" />}
+                </div>
                 <CardHeader>
                   <CardTitle className="text-base">{a.name}</CardTitle>
                   <CardDescription>

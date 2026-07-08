@@ -67,15 +67,3 @@
   }
 }
 
-/* ── Peças que utilitários não cobrem ────────────────────────────────────────── */
-
-/* quadrado sobre o rosto (coords em % vindas da API) */
-.face-box {
-  position: absolute;
-  border: 1.5px solid #111;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.7);
-  pointer-events: none;
-}
-.face-box.confirmed {
-  border-color: var(--ok);
-}

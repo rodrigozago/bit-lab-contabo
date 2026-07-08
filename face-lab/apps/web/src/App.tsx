@@ -1,7 +1,10 @@
-import { createContext, useContext, useEffect, useState, useCallback } from "react";
-import { Routes, Route, Link, Navigate, useLocation } from "react-router-dom";
+import { useEffect, useState, useCallback } from "react";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import type { Me } from "@face-lab/shared";
 import { api, ApiError } from "./api";
+import { AuthContext, loginUrl, useAuth } from "@/lib/auth";
+import { Toaster } from "sonner";
+import { AppLayout } from "./components/AppLayout";
 import { Landing } from "./pages/Landing";
 import { Enroll } from "./pages/Enroll";
 import { MyGallery } from "./pages/MyGallery";
@@ -10,26 +13,13 @@ import { Producer } from "./pages/Producer";
 import { ProducerAlbum } from "./pages/ProducerAlbum";
 import { Admin } from "./pages/Admin";
 
-import { AppLayout } from "./components/AppLayout";
-
-interface AuthState {
-  me: Me | null;
-  loading: boolean;
-  refresh: () => Promise<void>;
-}
-
-const AuthContext = createContext<AuthState>({ me: null, loading: true, refresh: async () => {} });
-export const useAuth = () => useContext(AuthContext);
-
-export function loginUrl(returnTo?: string): string {
-  const rt = returnTo ?? window.location.pathname;
-  return `/api/auth/login?returnTo=${encodeURIComponent(rt)}`;
-}
+// compat: páginas antigas importam de "../App"
+export { useAuth, loginUrl } from "@/lib/auth";
 
 function RequireAuth({ children, producer, admin }: { children: JSX.Element; producer?: boolean; admin?: boolean }) {
   const { me, loading } = useAuth();
   const location = useLocation();
-  if (loading) return <div className="container notice">Carregando…</div>;
+  if (loading) return <div className="p-8 text-sm text-muted-foreground">Carregando…</div>;
   if (!me) {
     window.location.href = loginUrl(location.pathname);
     return null;
@@ -61,10 +51,10 @@ export function App() {
 
   return (
     <AuthContext.Provider value={{ me, loading, refresh }}>
+      <Toaster richColors position="bottom-right" />
       <Routes>
         <Route path="/" element={<Landing />} />
-        
-        {/* Routes inside the new layout */}
+
         <Route element={<AppLayout />}>
           <Route path="/enroll" element={<RequireAuth><Enroll /></RequireAuth>} />
           <Route path="/me" element={<RequireAuth><MyGallery /></RequireAuth>} />
@@ -73,10 +63,9 @@ export function App() {
           <Route path="/producer/albums/:id" element={<RequireAuth producer><ProducerAlbum /></RequireAuth>} />
           <Route path="/admin" element={<RequireAuth admin><Admin /></RequireAuth>} />
         </Route>
-        
+
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AuthContext.Provider>
   );
 }
-

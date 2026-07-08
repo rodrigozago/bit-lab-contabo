@@ -10,7 +10,9 @@ export async function galleryRoutes(app: FastifyInstance): Promise<void> {
     const user = await requireUser(req, reply);
     if (!user) return;
     const { rows } = await pool.query(
-      `SELECT a.id, a.name, COUNT(DISTINCT p.id)::int AS match_count
+      `SELECT a.id, a.name, COUNT(DISTINCT p.id)::int AS match_count,
+              (ARRAY_AGG(p.id ORDER BY p.taken_at DESC NULLS LAST)
+                 FILTER (WHERE p.thumb_path IS NOT NULL))[1] AS cover_photo_id
        FROM matches m
        JOIN faces f ON f.id = m.face_id
        JOIN photos p ON p.id = f.photo_id
@@ -20,7 +22,12 @@ export async function galleryRoutes(app: FastifyInstance): Promise<void> {
        ORDER BY MAX(p.created_at) DESC`,
       [user.id]
     );
-    const albums: MyAlbum[] = rows.map((r) => ({ id: r.id, name: r.name, matchCount: r.match_count }));
+    const albums: MyAlbum[] = rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      matchCount: r.match_count,
+      coverUrl: r.cover_photo_id ? `/api/media/thumbs/${r.cover_photo_id}.webp` : null,
+    }));
     return { ok: true, data: albums };
   });
 

@@ -1,91 +1,124 @@
-import { Menu } from "lucide-react";
-import { NavLink, Outlet } from "react-router-dom";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { useState } from "react";
+import { LogOut, Menu } from "lucide-react";
+import { Link, NavLink, Outlet } from "react-router-dom";
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
+import { api } from "@/api";
+import { useAuth, loginUrl } from "@/lib/auth";
 
-const navItems = [
-  { label: "Minhas Fotos", to: "/me" },
-  { label: "Meu Rosto", to: "/enroll" },
-  { label: "Álbuns", to: "/producer" },
-  { label: "Admin", to: "/admin" },
-];
+function Brand() {
+  return (
+    <Link to="/" className="text-xl font-extrabold tracking-tighter">
+      FACE LAB
+    </Link>
+  );
+}
 
-// Componente para a navegação, reutilizado no sidebar e no drawer
-const MainNav = () => (
-  <nav className="flex flex-col gap-2">
-    {navItems.map(({ label, to }) => (
-      <NavLink
-        key={to}
-        to={to}
-        className={({ isActive }) =>
-          `
-          px-3 py-2 text-sm font-medium uppercase tracking-wider
-          transition-colors hover:text-foreground
-          ${isActive
-            ? "text-foreground underline underline-offset-4"
-            : "text-neutral-500"
+// nav em caixa alta com underline no ativo (ref: image-refs/) — itens por papel
+function MainNav({ onNavigate }: { onNavigate?: () => void }) {
+  const { me } = useAuth();
+  if (!me) return null;
+  const isProducer = me.role === "producer" || me.role === "admin";
+
+  const items = [
+    { label: "Minhas Fotos", to: "/me" },
+    { label: "Meu Rosto", to: "/enroll" },
+    ...(isProducer ? [{ label: "Álbuns", to: "/producer" }] : []),
+    ...(me.role === "admin" ? [{ label: "Admin", to: "/admin" }] : []),
+  ];
+
+  return (
+    <nav className="flex flex-col gap-5">
+      {items.map(({ label, to }) => (
+        <NavLink
+          key={to}
+          to={to}
+          onClick={onNavigate}
+          className={({ isActive }) =>
+            `w-fit text-[13px] font-medium uppercase tracking-widest transition-colors hover:text-foreground ${
+              isActive ? "border-b border-foreground pb-1 text-foreground" : "text-neutral-500"
+            }`
           }
-        `}
-      >
-        {label}
-      </NavLink>
-    ))}
-  </nav>
-);
+        >
+          {label}
+        </NavLink>
+      ))}
+    </nav>
+  );
+}
 
-import { Toaster } from "sonner";
+function UserFooter() {
+  const { me } = useAuth();
+
+  async function logout() {
+    const r = await api<{ ssoLogoutUrl: string }>("/api/auth/logout", { method: "POST", body: JSON.stringify({}) });
+    window.location.href = r.ssoLogoutUrl; // derruba o SSO no auth e volta
+  }
+
+  if (!me) {
+    return (
+      <Button asChild size="sm">
+        <a href={loginUrl("/")}>Entrar</a>
+      </Button>
+    );
+  }
+  return (
+    <div className="text-sm">
+      <div className="truncate text-neutral-500" title={me.email}>
+        {me.email}
+      </div>
+      <button
+        type="button"
+        onClick={logout}
+        className="mt-2 inline-flex items-center gap-1.5 text-neutral-500 transition-colors hover:text-foreground"
+      >
+        <LogOut className="h-3.5 w-3.5" /> Sair
+      </button>
+    </div>
+  );
+}
 
 export function AppLayout() {
-  const userEmail = "user@facelab.com"; // Placeholder
+  const [open, setOpen] = useState(false);
 
   return (
     <div className="min-h-screen w-full bg-background">
-      <Toaster richColors />
-      {/* Sidebar para Desktop */}
-      <aside className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-60 lg:flex-col lg:border-r">
-        <div className="flex flex-col gap-y-5 p-6">
-          <div className="font-extrabold tracking-tighter text-xl">
-            FACE LAB
-          </div>
+      {/* Sidebar — desktop */}
+      <aside className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-60 lg:flex-col lg:justify-between lg:border-r">
+        <div className="flex flex-col gap-y-12 p-6">
+          <Brand />
           <MainNav />
         </div>
-        <div className="mt-auto p-6 text-sm">
-          <div className="text-neutral-500">{userEmail}</div>
-          <a href="/logout" className="mt-2 block text-neutral-500 hover:text-foreground">Sair</a>
+        <div className="p-6">
+          <UserFooter />
         </div>
       </aside>
 
-      {/* Header para Mobile */}
-      <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b bg-background px-4 lg:hidden">
-        <div className="font-extrabold tracking-tighter text-xl">
-          FACE LAB
-        </div>
-        <Sheet>
+      {/* Header + drawer — mobile */}
+      <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b bg-background/95 px-4 backdrop-blur lg:hidden">
+        <Brand />
+        <Sheet open={open} onOpenChange={setOpen}>
           <SheetTrigger asChild>
             <Button variant="ghost" size="icon">
               <Menu className="h-6 w-6" />
               <span className="sr-only">Abrir menu</span>
             </Button>
           </SheetTrigger>
-          <SheetContent side="left">
-            <div className="flex flex-col gap-y-5 p-6">
-              <div className="font-extrabold tracking-tighter text-xl">
-                FACE LAB
-              </div>
-              <MainNav />
+          <SheetContent side="left" className="flex w-64 flex-col justify-between">
+            <div className="flex flex-col gap-y-10">
+              <SheetTitle className="sr-only">Menu</SheetTitle>
+              <Brand />
+              <MainNav onNavigate={() => setOpen(false)} />
             </div>
-            <div className="absolute bottom-0 left-0 w-full p-6 text-sm">
-              <div className="text-neutral-500">{userEmail}</div>
-               <a href="/logout" className="mt-2 block text-neutral-500 hover:text-foreground">Sair</a>
-            </div>
+            <UserFooter />
           </SheetContent>
         </Sheet>
       </header>
 
-      {/* Conteúdo Principal */}
+      {/* Conteúdo */}
       <main className="lg:pl-60">
-        <div className="p-4 sm:p-6 lg:p-8">
-            <Outlet />
+        <div className="p-4 sm:p-6 lg:p-10">
+          <Outlet />
         </div>
       </main>
     </div>
