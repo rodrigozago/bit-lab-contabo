@@ -145,7 +145,7 @@ export function Enroll() {
       case "idle":
         return (
           <>
-            <h2 className="text-2xl font-semibold tracking-tight">Cadastre seu rosto</h2>
+            <h2 className="heading-editorial text-2xl sm:text-3xl">Cadastre seu rosto</h2>
             <p className="mt-2 text-muted-foreground">
               Vamos capturar 4 fotos rápidas pela sua webcam. As imagens são usadas apenas para gerar sua referência facial e descartadas em seguida.
             </p>
@@ -218,9 +218,7 @@ export function Enroll() {
 
   return (
     <div className="flex justify-center">
-      <div className="w-full max-w-md rounded-lg border p-6 shadow-sm bg-card">
-        {renderContent()}
-      </div>
+      <div className="w-full max-w-md py-4">{renderContent()}</div>
     </div>
   );
 }

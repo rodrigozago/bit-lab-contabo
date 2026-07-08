@@ -86,7 +86,7 @@ export function ProducerAlbum() {
         <ChevronLeft className="h-4 w-4" />
         Voltar para Álbuns
       </Link>
-      <h1 className="mt-4 text-3xl font-bold tracking-tight">{album?.name ?? "Álbum"}</h1>
+      <h1 className="heading-editorial mt-4">{album?.name ?? "Álbum"}</h1>
 
       {status && (
         <div className="mt-6 rounded-lg border p-4">
@@ -139,22 +139,22 @@ export function ProducerAlbum() {
         </div>
       )}
 
-      <div className="mt-8 columns-1 gap-4 space-y-4 sm:columns-2 lg:columns-3 xl:columns-4">
+      <div className="mt-10 columns-1 gap-8 space-y-8 sm:columns-2 lg:columns-3 xl:columns-4">
         {photos?.map((p) => (
           <figure key={p.id} className="break-inside-avoid">
             <button
               type="button"
-              className="block w-full cursor-zoom-in overflow-hidden rounded-lg bg-secondary"
+              className="block w-full cursor-zoom-in overflow-hidden bg-secondary"
               onClick={() => setDialogPhoto(p)}
               disabled={!p.thumbUrl}
             >
               {p.thumbUrl ? (
-                <img src={p.thumbUrl} alt={p.name} loading="lazy" className="h-auto w-full" />
+                <img src={p.thumbUrl} alt={p.name} loading="lazy" className="block h-auto w-full" />
               ) : (
                 <div className="aspect-[4/3] w-full" />
               )}
             </button>
-            <figcaption className="mt-1.5 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+            <figcaption className="mt-2 flex items-center justify-between gap-2 text-xs text-muted-foreground">
               <span className="truncate">{p.name}</span>
               <PhotoBadge photo={p} />
             </figcaption>
@@ -163,14 +163,14 @@ export function ProducerAlbum() {
         {!photos &&
           Array.from({ length: 8 }).map((_, i) => (
             <div key={i} className="break-inside-avoid">
-              <div className="aspect-[4/3] w-full animate-pulse rounded-lg bg-secondary/80" />
+              <div className="aspect-[4/3] w-full animate-pulse bg-secondary/80" />
             </div>
           ))}
       </div>
 
       {photos && photos.length === 0 && (
-        <div className="mt-8 rounded-lg border border-dashed py-20 text-center">
-          <h3 className="font-semibold tracking-tight">Nenhuma foto {personId ? "desta pessoa" : "ainda"}</h3>
+        <div className="mt-8 py-20 text-center">
+          <h3 className="font-medium">Nenhuma foto {personId ? "desta pessoa" : "ainda"}</h3>
           <p className="mt-1 text-sm text-muted-foreground">
             {personId ? "Limpe o filtro para ver todas as fotos." : "Clique em re-escanear para buscar as fotos da pasta do Drive."}
           </p>

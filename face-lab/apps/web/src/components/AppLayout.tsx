@@ -8,7 +8,7 @@ import { useAuth, loginUrl } from "@/lib/auth";
 
 function Brand() {
   return (
-    <Link to="/" className="text-xl font-extrabold tracking-tighter">
+    <Link to="/" className="text-2xl font-extrabold tracking-tighter">
       FACE LAB
     </Link>
   );
@@ -28,14 +28,14 @@ function MainNav({ onNavigate }: { onNavigate?: () => void }) {
   ];
 
   return (
-    <nav className="flex flex-col gap-5">
+    <nav className="flex flex-col gap-9">
       {items.map(({ label, to }) => (
         <NavLink
           key={to}
           to={to}
           onClick={onNavigate}
           className={({ isActive }) =>
-            `w-fit text-[13px] font-medium uppercase tracking-widest transition-colors hover:text-foreground ${
+            `w-fit text-[13px] uppercase tracking-widest transition-colors hover:text-foreground ${
               isActive ? "border-b border-foreground pb-1 text-foreground" : "text-neutral-500"
             }`
           }
@@ -85,11 +85,11 @@ export function AppLayout() {
     <div className="min-h-screen w-full bg-background">
       {/* Sidebar — desktop */}
       <aside className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-60 lg:flex-col lg:justify-between lg:border-r">
-        <div className="flex flex-col gap-y-12 p-6">
+        <div className="flex flex-col gap-y-20 p-8 pt-12">
           <Brand />
           <MainNav />
         </div>
-        <div className="p-6">
+        <div className="p-8">
           <UserFooter />
         </div>
       </aside>

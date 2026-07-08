@@ -31,8 +31,8 @@ const ROLES: UserRole[] = ["guest", "producer"];
 
 function StatTile({ value, label }: { value: number | string; label: string }) {
   return (
-    <div className="rounded-lg border p-4">
-      <p className="text-2xl font-bold tracking-tight">{value}</p>
+    <div>
+      <p className="text-3xl font-light tracking-tight">{value}</p>
       <p className="mt-1 text-[11px] font-medium uppercase tracking-widest text-muted-foreground">{label}</p>
     </div>
   );
@@ -87,12 +87,12 @@ export function Admin() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Admin</h1>
+        <h1 className="heading-editorial">Admin</h1>
         <p className="mt-1 text-muted-foreground">Gerencie papéis e monitore o uso.</p>
       </div>
 
       {stats && (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-6 border-y py-6 sm:grid-cols-3 lg:grid-cols-6">
           <StatTile value={stats.users} label="usuários" />
           <StatTile value={stats.albums} label="álbuns" />
           <StatTile value={stats.photos} label="fotos" />

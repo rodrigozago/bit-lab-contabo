@@ -74,7 +74,7 @@ export function Producer() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Producer</h1>
+        <h1 className="heading-editorial">Producer</h1>
         <p className="mt-1 text-muted-foreground">Crie e gerencie seus álbuns a partir do Google Drive.</p>
       </div>
 
@@ -145,35 +145,33 @@ export function Producer() {
       )}
 
       <div>
-        <h2 className="text-2xl font-semibold tracking-tight">Seus Álbuns</h2>
-        <div className="mt-4 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        <h2 className="heading-editorial text-2xl sm:text-2xl">Seus Álbuns</h2>
+        <div className="mt-6 grid grid-cols-1 gap-x-8 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
           {albums.map((a) => (
-            <Card key={a.id}>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-lg">{a.name}</CardTitle>
-                  <StatusBadge status={a.status} />
-                </div>
-                <CardDescription>
-                  {a.doneCount}/{a.photoCount} fotos · {a.peopleCount} pessoas · {a.faceCount} rostos
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {a.error && <p className="text-sm text-destructive">{a.error}</p>}
-              </CardContent>
-              <CardFooter className="gap-2">
-                <Button asChild variant="outline" className="flex-1"><Link to={`/producer/albums/${a.id}`}>Abrir</Link></Button>
-                <Button onClick={() => scan(a.id)} disabled={a.status === "scanning"} className="flex-1">
+            <div key={a.id}>
+              <div className="flex items-start justify-between gap-2">
+                <p className="font-medium">{a.name}</p>
+                <StatusBadge status={a.status} />
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {a.doneCount}/{a.photoCount} fotos · {a.peopleCount} pessoas · {a.faceCount} rostos
+              </p>
+              {a.error && <p className="mt-1 text-sm text-destructive">{a.error}</p>}
+              <div className="mt-3 flex gap-2">
+                <Button asChild variant="outline" size="sm" className="flex-1">
+                  <Link to={`/producer/albums/${a.id}`}>Abrir</Link>
+                </Button>
+                <Button size="sm" onClick={() => scan(a.id)} disabled={a.status === "scanning"} className="flex-1">
                   {a.status === "scanning" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Bot className="mr-2 h-4 w-4" />}
                   {a.scannedAt ? "Re-escanear" : "Escanear"}
                 </Button>
-              </CardFooter>
-            </Card>
+              </div>
+            </div>
           ))}
         </div>
         {albums.length === 0 && (
-          <div className="mt-4 rounded-lg border border-dashed py-12 text-center">
-            <h3 className="font-semibold tracking-tight">Nenhum álbum criado</h3>
+          <div className="mt-6 py-12 text-center">
+            <h3 className="font-medium">Nenhum álbum criado</h3>
             <p className="mt-1 text-sm text-muted-foreground">
               Use o formulário acima para criar seu primeiro álbum.
             </p>

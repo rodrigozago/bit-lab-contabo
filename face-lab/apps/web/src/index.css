@@ -67,3 +67,18 @@
   }
 }
 
+@layer components {
+  /* título de página — grande e leve, contraste de propósito com o logo (bold/tight) */
+  .heading-editorial {
+    font-weight: 400;
+    letter-spacing: -0.01em;
+    font-size: 2rem;
+    line-height: 1.15;
+  }
+  @media (min-width: 640px) {
+    .heading-editorial {
+      font-size: 2.75rem;
+    }
+  }
+}
+

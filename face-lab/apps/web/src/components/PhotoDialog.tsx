@@ -36,7 +36,8 @@ export function PhotoDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl p-0">
+      {/* sem moldura — a foto fica "pura" (ref image-details.jpg), só a sombra separa do overlay */}
+      <DialogContent className="max-w-4xl gap-0 rounded-none border-0 p-0 shadow-2xl">
         <DialogTitle className="sr-only">{name}</DialogTitle>
         <div
           className="relative overflow-hidden bg-muted"

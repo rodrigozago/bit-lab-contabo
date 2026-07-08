@@ -1,5 +1,5 @@
 import type { MyPhoto } from "@face-lab/shared";
-import { Check, Download, ExternalLink, ThumbsDown, ThumbsUp, X } from "lucide-react";
+import { Check, Download, ExternalLink, ThumbsDown, ThumbsUp } from "lucide-react";
 import { Button } from "./ui/button";
 
 export function FaceBox({ photo }: { photo: MyPhoto }) {
@@ -28,60 +28,74 @@ interface PhotoCardProps {
   onClick: () => void;
 }
 
+// tile plano — imagem sem moldura (ref gallery.jpg) + barra de legenda/ações
+// abaixo, sempre visível (não depende de hover, funciona em touch)
 export function PhotoCard({ photo, isBusy, onConfirm, onReject, onClick }: PhotoCardProps) {
   const isConfirmed = photo.matchStatus === "confirmed";
 
   return (
-    <div 
-      className="group relative break-inside-avoid overflow-hidden rounded-lg cursor-pointer"
-      onClick={onClick}
-    >
-      <img
-        src={photo.thumbUrl ?? undefined}
-        alt={photo.name}
-        width={photo.photoWidth ?? undefined}
-        height={photo.photoHeight ?? undefined}
-        className="w-full h-auto"
-        loading="lazy"
-      />
-      <FaceBox photo={photo} />
+    <figure className="break-inside-avoid">
+      <button type="button" className="block w-full cursor-zoom-in overflow-hidden bg-secondary" onClick={onClick}>
+        <img
+          src={photo.thumbUrl ?? undefined}
+          alt={photo.name}
+          width={photo.photoWidth ?? undefined}
+          height={photo.photoHeight ?? undefined}
+          className="block h-auto w-full"
+          loading="lazy"
+        />
+        <FaceBox photo={photo} />
+      </button>
 
-      {/* Overlay + Actions, visible on hover/group-hover */}
-      <div className="absolute inset-0 bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
-        <div className="absolute bottom-0 left-0 w-full p-2">
-          <div className="flex items-center justify-center gap-1 rounded-md bg-background/80 p-1 backdrop-blur-sm">
-            {isConfirmed ? (
-               <div className="flex items-center gap-2 text-sm text-green-600 font-bold px-2">
-                <Check size={16} /> Você
-              </div>
-            ) : (
-              <Button size="sm" variant="ghost" disabled={isBusy} onClick={(e) => { e.stopPropagation(); onConfirm(photo.faceId); }}>
-                <ThumbsUp size={16} className="mr-1" /> Sou eu
-              </Button>
-            )}
-             <Button size="sm" variant="ghost" disabled={isBusy} onClick={(e) => { e.stopPropagation(); onReject(photo.faceId); }}>
-                <ThumbsDown size={16} className="mr-1" /> Não sou eu
-            </Button>
-            
-            <div className="flex-grow" />
+      <figcaption className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
+        {isConfirmed ? (
+          <span className="flex items-center gap-1 font-medium text-ok">
+            <Check size={13} /> Você
+          </span>
+        ) : (
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            disabled={isBusy}
+            title="Sou eu"
+            onClick={(e) => {
+              e.stopPropagation();
+              onConfirm(photo.faceId);
+            }}
+          >
+            <ThumbsUp size={14} />
+          </Button>
+        )}
+        <Button
+          size="icon-sm"
+          variant="ghost"
+          disabled={isBusy}
+          title="Não sou eu"
+          onClick={(e) => {
+            e.stopPropagation();
+            onReject(photo.faceId);
+          }}
+        >
+          <ThumbsDown size={14} />
+        </Button>
 
-            {photo.webContentLink && (
-              <Button size="icon" variant="ghost" asChild>
-                <a href={photo.webContentLink} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
-                  <Download size={16} />
-                </a>
-              </Button>
-            )}
-            {photo.webViewLink && (
-              <Button size="icon" variant="ghost" asChild>
-                <a href={photo.webViewLink} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
-                  <ExternalLink size={16} />
-                </a>
-              </Button>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
+        <span className="flex-1" />
+
+        {photo.webContentLink && (
+          <Button size="icon-sm" variant="ghost" asChild title="Baixar">
+            <a href={photo.webContentLink} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
+              <Download size={14} />
+            </a>
+          </Button>
+        )}
+        {photo.webViewLink && (
+          <Button size="icon-sm" variant="ghost" asChild title="Ver no Drive">
+            <a href={photo.webViewLink} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
+              <ExternalLink size={14} />
+            </a>
+          </Button>
+        )}
+      </figcaption>
+    </figure>
   );
 }
