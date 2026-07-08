@@ -28,6 +28,18 @@ async function main(): Promise<void> {
     limits: { fileSize: 5 * 1024 * 1024, files: 10 }, // frames de webcam ~640px
   });
 
+  // POST sem body com content-type json (ex: logout) não deve dar 400 —
+  // o parser padrão do Fastify rejeita body vazio
+  app.addContentTypeParser("application/json", { parseAs: "string" }, (_req, body, done) => {
+    const raw = typeof body === "string" ? body.trim() : "";
+    if (raw === "") return done(null, {});
+    try {
+      done(null, JSON.parse(raw));
+    } catch (err) {
+      done(err as Error, undefined);
+    }
+  });
+
   app.setErrorHandler((err, _req, reply) => {
     app.log.error(err);
     const status = err.statusCode && err.statusCode >= 400 ? err.statusCode : 500;

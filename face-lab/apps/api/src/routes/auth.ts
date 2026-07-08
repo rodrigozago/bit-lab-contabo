@@ -29,6 +29,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const { sub, email, isAdmin, returnTo } = await finishAuth(params);
+    req.log.info({ sub, email, isAdmin }, "login OIDC concluído");
 
     // upsert por sub; espelha is_admin do auth nos dois sentidos a cada login:
     // ganhou is_admin lá → admin aqui; perdeu → cai pra guest (producer local não é afetado)
