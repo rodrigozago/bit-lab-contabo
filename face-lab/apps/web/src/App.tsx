@@ -41,8 +41,8 @@ function Nav() {
           <button
             className="ghost small"
             onClick={async () => {
-              await api("/api/auth/logout", { method: "POST", body: JSON.stringify({}) });
-              window.location.href = "/";
+              const r = await api<{ ssoLogoutUrl: string }>("/api/auth/logout", { method: "POST", body: JSON.stringify({}) });
+              window.location.href = r.ssoLogoutUrl; // derruba o SSO no auth e volta
             }}
           >
             Sair

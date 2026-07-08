@@ -53,7 +53,10 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
   app.post("/api/auth/logout", async (req, reply) => {
     await destroySession(req, reply);
-    return { ok: true, data: null };
+    // logout SSO: o front navega pra cá — o auth derruba bl_session + sessão
+    // do provider e volta pra landing (senão o próximo login entra sozinho)
+    const ssoLogoutUrl = `${config.oidc.issuer}/logout?redirect=${encodeURIComponent(`${config.publicUrl}/`)}`;
+    return { ok: true, data: { ssoLogoutUrl } };
   });
 
   app.get("/api/me", async (req, reply) => {

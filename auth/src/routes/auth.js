@@ -60,6 +60,17 @@ router.post('/logout', async (req, res) => {
   res.redirect('/login')
 })
 
+// Logout SSO (chamado pelos apps, ex: face-lab): derruba a bl_session E a
+// sessão própria do oidc-provider (senão o próximo /auth pula o login de novo),
+// depois volta pro app. GET porque é um redirect cross-app (padrão OIDC logout).
+router.get('/logout', async (req, res) => {
+  await session.destroy(req, res)
+  res.clearCookie('_session', { path: '/' })
+  res.clearCookie('_session.legacy', { path: '/' })
+  const target = safeRedirectPath(req.query.redirect) || '/login'
+  res.redirect(target)
+})
+
 // Signup self-service (atrás de ALLOW_SELF_SIGNUP) — criado pro face-lab: guest
 // cria a própria conta e já sai com acesso concedido aos apps de SELF_SIGNUP_GRANT_APPS.
 router.get('/signup', (req, res) => {
