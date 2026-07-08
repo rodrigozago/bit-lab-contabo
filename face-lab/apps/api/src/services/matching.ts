@@ -63,18 +63,13 @@ export async function matchEnrollment(enrollmentId: string, userId: string, embe
 }
 
 /**
- * "Sou eu": confirma o match e expande —
+ * Expande a partir de uma face já confirmada (chamado por confirmAndExpand e
+ * claimFace, depois que a linha em matches já existe com status='confirmed'):
  *  1. todas as faces da mesma pessoa (cluster) viram matches do usuário;
  *  2. o embedding confirmado roda como probe global (outros álbuns também).
  * Retorna quantos matches novos a expansão criou.
  */
-export async function confirmAndExpand(faceId: string, userId: string): Promise<number> {
-  const { rowCount: confirmed } = await pool.query(
-    `UPDATE matches SET status = 'confirmed' WHERE face_id = $1 AND user_id = $2 AND status <> 'rejected'`,
-    [faceId, userId]
-  );
-  if (!confirmed) return -1; // match não existe (ou estava rejeitado)
-
+async function expandFromConfirmedFace(faceId: string, userId: string): Promise<number> {
   let added = 0;
 
   // 1. propagação por pessoa — mesma pessoa no álbum = minhas fotos, sem depender do threshold
@@ -105,6 +100,42 @@ export async function confirmAndExpand(faceId: string, userId: string): Promise<
   added += global ?? 0;
 
   return added;
+}
+
+/**
+ * "Sou eu" num match já existente (auto): confirma e expande.
+ * Retorna quantos matches novos a expansão criou, ou -1 se o match não existe.
+ */
+export async function confirmAndExpand(faceId: string, userId: string): Promise<number> {
+  const { rowCount: confirmed } = await pool.query(
+    `UPDATE matches SET status = 'confirmed' WHERE face_id = $1 AND user_id = $2 AND status <> 'rejected'`,
+    [faceId, userId]
+  );
+  if (!confirmed) return -1; // match não existe (ou estava rejeitado)
+  return expandFromConfirmedFace(faceId, userId);
+}
+
+/**
+ * Autoidentificação ("Todas as fotos"): cria (ou confirma) um match pra uma
+ * face que o sistema não casou sozinho — o usuário escolheu o rosto na tela.
+ * Distância é calculada contra o enrollment ativo só como registro informativo
+ * (pode ficar NULL se a pessoa não tem enrollment). Expande igual ao "Sou eu".
+ */
+export async function claimFace(faceId: string, userId: string): Promise<number> {
+  const { rows } = await pool.query(
+    `INSERT INTO matches (face_id, user_id, distance, status)
+     SELECT $1, $2,
+            (SELECT (f.embedding <=> e.embedding)::real
+             FROM faces f, enrollments e
+             WHERE f.id = $1 AND e.user_id = $2 AND e.active AND e.status = 'done' AND e.embedding IS NOT NULL),
+            'confirmed'
+     ON CONFLICT (face_id, user_id) DO UPDATE SET status = 'confirmed'
+     WHERE matches.status <> 'rejected'
+     RETURNING face_id`,
+    [faceId, userId]
+  );
+  if (!rows[0]) return -1; // já estava rejeitado — respeita o "não sou eu" anterior
+  return expandFromConfirmedFace(faceId, userId);
 }
 
 /**

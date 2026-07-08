@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import type { EnrollmentInfo } from "@face-lab/shared";
 import { api } from "../api";
 import { useAuth } from "../App";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Camera, CheckCircle, Upload } from "lucide-react";
+import { Camera, CheckCircle, ScanFace, Upload } from "lucide-react";
 
 const STEPS = [
   { key: "front", label: "Olhe para a câmera" },
@@ -16,7 +17,7 @@ const STEPS = [
 type Phase = "idle" | "capturing" | "review" | "uploading" | "processing" | "done" | "error";
 
 export function Enroll() {
-  const { refresh } = useAuth();
+  const { me, refresh } = useAuth();
   const navigate = useNavigate();
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -29,6 +30,11 @@ export function Enroll() {
   const [error, setError] = useState<string | null>(null);
   const [cameraDenied, setCameraDenied] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [info, setInfo] = useState<EnrollmentInfo | null>(null);
+
+  useEffect(() => {
+    if (me?.hasEnrollment) api<EnrollmentInfo | null>("/api/enrollment").then(setInfo).catch(() => {});
+  }, [me?.hasEnrollment]);
 
   const stopCamera = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -116,9 +122,10 @@ export function Enroll() {
   function pollStatus() {
     const timer = setInterval(async () => {
       try {
-        const e = await api<{ status: string; error: string | null } | null>("/api/enrollment");
+        const e = await api<EnrollmentInfo | null>("/api/enrollment");
         if (e?.status === "done") {
           clearInterval(timer);
+          setInfo(e);
           await refresh();
           setPhase("done");
           setTimeout(() => navigate("/me"), 2000);
@@ -143,6 +150,44 @@ export function Enroll() {
   const renderContent = () => {
     switch (phase) {
       case "idle":
+        if (me?.hasEnrollment && info) {
+          return (
+            <>
+              <div className="flex items-center gap-3">
+                <ScanFace className="h-8 w-8 text-ok" strokeWidth={1.5} />
+                <div>
+                  <h2 className="heading-editorial text-2xl">Seu rosto está cadastrado</h2>
+                </div>
+              </div>
+
+              <div className="mt-8">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Força do perfil</span>
+                  <span className="font-medium">{info.strength}%</span>
+                </div>
+                <Progress value={info.strength} className="mt-2" />
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Confirme mais fotos com "Sou eu" nos seus álbuns pra aumentar a precisão.
+                </p>
+              </div>
+
+              <div className="mt-6 grid grid-cols-2 gap-4 border-y py-4">
+                <div>
+                  <p className="text-2xl font-light">{info.frameCount}</p>
+                  <p className="text-xs uppercase tracking-wider text-muted-foreground">ângulos capturados</p>
+                </div>
+                <div>
+                  <p className="text-2xl font-light">{info.confirmedCount}</p>
+                  <p className="text-xs uppercase tracking-wider text-muted-foreground">fotos confirmadas</p>
+                </div>
+              </div>
+
+              <Button className="mt-8 w-full" variant="outline" onClick={startCamera}>
+                <Camera className="mr-2 h-4 w-4" /> Recadastrar rosto
+              </Button>
+            </>
+          );
+        }
         return (
           <>
             <h2 className="heading-editorial text-2xl sm:text-3xl">Cadastre seu rosto</h2>

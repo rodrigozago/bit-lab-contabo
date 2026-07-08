@@ -5,6 +5,7 @@ import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/s
 import { Button } from "@/components/ui/button";
 import { api } from "@/api";
 import { useAuth, loginUrl } from "@/lib/auth";
+import { NotificationBell } from "@/components/NotificationBell";
 
 function Brand() {
   return (
@@ -86,7 +87,10 @@ export function AppLayout() {
       {/* Sidebar — desktop */}
       <aside className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-60 lg:flex-col lg:justify-between lg:border-r">
         <div className="flex flex-col gap-y-20 p-8 pt-12">
-          <Brand />
+          <div className="flex items-center justify-between">
+            <Brand />
+            <NotificationBell />
+          </div>
           <MainNav />
         </div>
         <div className="p-8">
@@ -97,22 +101,25 @@ export function AppLayout() {
       {/* Header + drawer — mobile */}
       <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b bg-background/95 px-4 backdrop-blur lg:hidden">
         <Brand />
-        <Sheet open={open} onOpenChange={setOpen}>
-          <SheetTrigger asChild>
-            <Button variant="ghost" size="icon">
-              <Menu className="h-6 w-6" />
-              <span className="sr-only">Abrir menu</span>
-            </Button>
-          </SheetTrigger>
-          <SheetContent side="left" className="flex w-64 flex-col justify-between">
-            <div className="flex flex-col gap-y-10">
-              <SheetTitle className="sr-only">Menu</SheetTitle>
-              <Brand />
-              <MainNav onNavigate={() => setOpen(false)} />
-            </div>
-            <UserFooter />
-          </SheetContent>
-        </Sheet>
+        <div className="flex items-center">
+          <NotificationBell />
+          <Sheet open={open} onOpenChange={setOpen}>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon">
+                <Menu className="h-6 w-6" />
+                <span className="sr-only">Abrir menu</span>
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="left" className="flex w-64 flex-col justify-between">
+              <div className="flex flex-col gap-y-10">
+                <SheetTitle className="sr-only">Menu</SheetTitle>
+                <Brand />
+                <MainNav onNavigate={() => setOpen(false)} />
+              </div>
+              <UserFooter />
+            </SheetContent>
+          </Sheet>
+        </div>
       </header>
 
       {/* Conteúdo */}

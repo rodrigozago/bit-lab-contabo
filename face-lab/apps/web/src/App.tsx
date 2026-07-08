@@ -9,6 +9,7 @@ import { Landing } from "./pages/Landing";
 import { Enroll } from "./pages/Enroll";
 import { MyGallery } from "./pages/MyGallery";
 import { MyAlbum } from "./pages/MyAlbum";
+import { MyAlbumAll } from "./pages/MyAlbumAll";
 import { Producer } from "./pages/Producer";
 import { ProducerAlbum } from "./pages/ProducerAlbum";
 import { Admin } from "./pages/Admin";
@@ -59,6 +60,7 @@ export function App() {
           <Route path="/enroll" element={<RequireAuth><Enroll /></RequireAuth>} />
           <Route path="/me" element={<RequireAuth><MyGallery /></RequireAuth>} />
           <Route path="/me/albums/:id" element={<RequireAuth><MyAlbum /></RequireAuth>} />
+          <Route path="/me/albums/:id/all" element={<RequireAuth><MyAlbumAll /></RequireAuth>} />
           <Route path="/producer" element={<RequireAuth producer><Producer /></RequireAuth>} />
           <Route path="/producer/albums/:id" element={<RequireAuth producer><ProducerAlbum /></RequireAuth>} />
           <Route path="/admin" element={<RequireAuth admin><Admin /></RequireAuth>} />

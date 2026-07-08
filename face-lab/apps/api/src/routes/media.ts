@@ -7,7 +7,9 @@ import { config } from "../config.js";
 import { requireUser } from "../guards.js";
 
 // Thumbs/crops são derivados de dados biométricos — nunca públicos.
-// thumbs/<photoId>.webp: dono do álbum, admin ou usuário com match na foto.
+// thumbs/<photoId>.webp: dono do álbum, admin, ou usuário PARTICIPANTE do álbum
+//   (≥1 match não-rejeitado em qualquer foto dali — necessário pro "Todas as
+//   fotos" navegar o álbum inteiro, não só as fotos já casadas com ele).
 // crops/<faceId>.webp:  dono do álbum, admin ou o próprio usuário casado na face.
 
 const FILE_RE = /^([0-9a-f-]{36})\.webp$/;
@@ -26,8 +28,8 @@ export async function mediaRoutes(app: FastifyInstance): Promise<void> {
        JOIN albums a ON a.id = p.album_id
        WHERE p.id = $1 AND (
          $3 OR a.owner_id = $2 OR EXISTS (
-           SELECT 1 FROM matches mt JOIN faces f ON f.id = mt.face_id
-           WHERE f.photo_id = p.id AND mt.user_id = $2 AND mt.status <> 'rejected'))`,
+           SELECT 1 FROM matches mt JOIN faces f ON f.id = mt.face_id JOIN photos p2 ON p2.id = f.photo_id
+           WHERE p2.album_id = p.album_id AND mt.user_id = $2 AND mt.status <> 'rejected'))`,
       [photoId, user.id, user.role === "admin"]
     );
     const thumbPath = rows[0]?.thumb_path as string | undefined;

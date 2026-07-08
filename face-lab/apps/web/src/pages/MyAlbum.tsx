@@ -77,6 +77,14 @@ export function MyAlbum() {
         </div>
       )}
 
+      {photos && photos.length > 0 && (
+        <div className="mt-12 flex justify-center border-t pt-10">
+          <Button asChild variant="outline">
+            <Link to={`/me/albums/${id}/all`}>Todas as fotos</Link>
+          </Button>
+        </div>
+      )}
+
       <PhotoDialog
         open={!!dialogPhoto}
         onOpenChange={(open) => !open && setDialogPhoto(null)}

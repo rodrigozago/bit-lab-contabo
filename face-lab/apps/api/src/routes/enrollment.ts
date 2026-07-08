@@ -1,6 +1,7 @@
 import { mkdir, writeFile, rm } from "fs/promises";
 import { join } from "path";
 import type { FastifyInstance } from "fastify";
+import type { EnrollmentInfo } from "@face-lab/shared";
 import { v4 as uuid } from "uuid";
 import { pool } from "../db.js";
 import { config } from "../config.js";
@@ -10,6 +11,16 @@ import { tryEnrollSlot } from "../services/rateLimit.js";
 
 const MIN_FRAMES = 3;
 const MAX_FRAMES = 8;
+// mesmo teto de referências confirmadas que matching.ts usa no REFS_CTE — a força
+// do perfil reflete literalmente a capacidade de referência usada pelo matching
+const MAX_CONFIRMED_FOR_STRENGTH = 10;
+
+/** 0% sem enrollment · 50% base · +20% variedade de ângulos · +30% fotos confirmadas. */
+function computeStrength(frameCount: number, confirmedCount: number): number {
+  const angles = Math.min(frameCount / MAX_FRAMES, 1) * 20;
+  const confirmations = Math.min(confirmedCount / MAX_CONFIRMED_FOR_STRENGTH, 1) * 30;
+  return Math.round(Math.min(100, 50 + angles + confirmations));
+}
 
 export async function enrollmentRoutes(app: FastifyInstance): Promise<void> {
   // multipart com 3–8 frames JPEG capturados pela webcam (ou upload de fotos)
@@ -72,12 +83,25 @@ export async function enrollmentRoutes(app: FastifyInstance): Promise<void> {
       [user.id]
     );
     const e = rows[0];
-    return {
-      ok: true,
-      data: e
-        ? { id: e.id, status: e.status, error: e.error, source: e.source, frameCount: e.frame_count, createdAt: e.created_at }
-        : null,
+    if (!e) return { ok: true, data: null };
+
+    const { rows: confirmedRows } = await pool.query(
+      `SELECT COUNT(*)::int AS n FROM matches WHERE user_id = $1 AND status = 'confirmed'`,
+      [user.id]
+    );
+    const confirmedCount = confirmedRows[0].n as number;
+
+    const data: EnrollmentInfo = {
+      id: e.id,
+      status: e.status,
+      error: e.error,
+      source: e.source,
+      frameCount: e.frame_count,
+      confirmedCount,
+      strength: e.status === "done" ? computeStrength(e.frame_count, confirmedCount) : 0,
+      createdAt: e.created_at,
     };
+    return { ok: true, data };
   });
 
   // privacidade: remove embedding + matches automáticos do usuário

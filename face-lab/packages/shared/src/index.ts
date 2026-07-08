@@ -83,13 +83,54 @@ export interface MyPhoto {
   webViewLink: string | null;
   webContentLink: string | null;
   faceId: string;
-  distance: number;
+  distance: number | null;
   matchStatus: "auto" | "confirmed";
   // pra desenhar o quadrado sobre o rosto (coords em px da foto original)
   faceBbox: Bbox | null;
   photoWidth: number | null;
   photoHeight: number | null;
   takenAt: string | null;
+}
+
+// enrollment do usuário logado + métricas de "força do perfil" (GET /api/enrollment)
+export interface EnrollmentInfo {
+  id: string;
+  status: EnrollmentStatus;
+  error: string | null;
+  source: string;
+  frameCount: number;
+  confirmedCount: number;
+  strength: number; // 0-100
+  createdAt: string;
+}
+
+export interface NotificationItem {
+  photoId: string;
+  albumId: string;
+  albumName: string;
+  thumbUrl: string | null;
+  matchedAt: string;
+}
+
+export interface NotificationsResponse {
+  unreadCount: number;
+  items: NotificationItem[];
+}
+
+// foto do álbum completo (guest, "Todas as fotos") com faces pra autoidentificação
+export interface AllAlbumFace {
+  faceId: string;
+  bbox: Bbox;
+  claimedByMe: boolean;
+}
+
+export interface AllAlbumPhoto {
+  id: string;
+  name: string;
+  thumbUrl: string | null;
+  photoWidth: number | null;
+  photoHeight: number | null;
+  faces: AllAlbumFace[];
 }
 
 export interface AdminUser {

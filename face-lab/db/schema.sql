@@ -32,6 +32,12 @@ CREATE TABLE IF NOT EXISTS users (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
+-- marca até quando o sino de notificações já foi visto (matches criados depois = não lidos)
+ALTER TABLE users ADD COLUMN IF NOT EXISTS notifications_seen_at timestamptz;
+-- backfill idempotente: só afeta quem nunca teve a coluna setada — não repete a cada boot
+-- pra quem já tem valor, evita "N fotos novas" retroativas pra contas anteriores ao recurso
+UPDATE users SET notifications_seen_at = now() WHERE notifications_seen_at IS NULL;
+
 -- uma conta Google por producer; refresh token AES-256-GCM (iv||tag||cipher)
 CREATE TABLE IF NOT EXISTS google_credentials (
   user_id uuid PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
@@ -124,11 +130,14 @@ CREATE TABLE IF NOT EXISTS matches (
   face_id uuid NOT NULL REFERENCES faces(id) ON DELETE CASCADE,
   user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   enrollment_id uuid REFERENCES enrollments(id) ON DELETE SET NULL,
-  distance real NOT NULL,
+  -- nullable: autoidentificação manual ("Todas as fotos") sem enrollment ativo
+  -- não tem distância de embedding pra registrar
+  distance real,
   status match_status NOT NULL DEFAULT 'auto',
   created_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (face_id, user_id)
 );
+ALTER TABLE matches ALTER COLUMN distance DROP NOT NULL;
 CREATE INDEX IF NOT EXISTS matches_user_idx ON matches(user_id);
 
 -- 1 linha por reconhecimento concluído — base do rate limiting/planos futuros

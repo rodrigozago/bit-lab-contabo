@@ -13,6 +13,7 @@ import { enrollmentRoutes } from "./routes/enrollment.js";
 import { galleryRoutes } from "./routes/gallery.js";
 import { mediaRoutes } from "./routes/media.js";
 import { adminRoutes } from "./routes/admin.js";
+import { notificationRoutes } from "./routes/notifications.js";
 
 async function main(): Promise<void> {
   await migrate();
@@ -55,6 +56,7 @@ async function main(): Promise<void> {
   await app.register(galleryRoutes);
   await app.register(mediaRoutes);
   await app.register(adminRoutes);
+  await app.register(notificationRoutes);
 
   await app.listen({ port: config.port, host: "0.0.0.0" });
   console.log(`face-lab-api rodando em http://0.0.0.0:${config.port}`);
