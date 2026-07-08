@@ -35,7 +35,8 @@ export function PhotoCard({ photo, isBusy, onConfirm, onReject, onClick }: Photo
 
   return (
     <figure className="break-inside-avoid">
-      <button type="button" className="block w-full cursor-zoom-in overflow-hidden bg-secondary" onClick={onClick}>
+      {/* relative: âncora do bbox absoluto — sem isso ele posiciona contra o ancestral errado */}
+      <button type="button" className="relative block w-full cursor-zoom-in overflow-hidden bg-secondary" onClick={onClick}>
         <img
           src={photo.thumbUrl ?? undefined}
           alt={photo.name}

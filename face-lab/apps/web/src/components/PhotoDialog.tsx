@@ -39,11 +39,13 @@ export function PhotoDialog({
       {/* sem moldura — a foto fica "pura" (ref image-details.jpg), só a sombra separa do overlay */}
       <DialogContent className="max-w-4xl gap-0 rounded-none border-0 p-0 shadow-2xl">
         <DialogTitle className="sr-only">{name}</DialogTitle>
-        <div
-          className="relative overflow-hidden bg-muted"
-          style={photoWidth && photoHeight ? { aspectRatio: `${photoWidth} / ${photoHeight}` } : undefined}
-        >
-          {thumbUrl && <img src={thumbUrl} alt={name} className="block max-h-[78vh] w-full object-contain" />}
+        {/*
+          container encolhe pro tamanho REAL da imagem renderizada (flex + w-fit) em vez de um
+          aspect-ratio fixo — em foto retrato limitada por max-h isso deixava espaço vazio no
+          container e o bbox (absolute, % relativo ao container) descolava da imagem
+        */}
+        <div className="relative mx-auto flex w-fit max-w-full items-center justify-center bg-muted" style={{ maxHeight: "78vh" }}>
+          {thumbUrl && <img src={thumbUrl} alt={name} className="block max-h-[78vh] w-auto max-w-full object-contain" />}
           <FaceBox photo={photo as MyPhoto} />
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3 px-5 pb-5">

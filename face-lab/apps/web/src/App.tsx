@@ -12,6 +12,7 @@ import { MyAlbum } from "./pages/MyAlbum";
 import { Producer } from "./pages/Producer";
 import { ProducerAlbum } from "./pages/ProducerAlbum";
 import { Admin } from "./pages/Admin";
+import { DebugGallery } from "./pages/__DebugGallery"; // TEMP — remover
 
 // compat: páginas antigas importam de "../App"
 export { useAuth, loginUrl } from "@/lib/auth";
@@ -54,6 +55,7 @@ export function App() {
       <Toaster richColors position="bottom-right" />
       <Routes>
         <Route path="/" element={<Landing />} />
+        <Route path="/__debug-gallery" element={<div className="p-10"><DebugGallery /></div>} /> {/* TEMP — remover */}
 
         <Route element={<AppLayout />}>
           <Route path="/enroll" element={<RequireAuth><Enroll /></RequireAuth>} />
