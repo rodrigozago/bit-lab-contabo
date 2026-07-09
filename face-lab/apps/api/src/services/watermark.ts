@@ -9,13 +9,14 @@ import { config } from "../config.js";
 
 function buildTileSvg(width: number, height: number): string {
   const text = escapeXml(config.watermark.text);
-  // tile diagonal repetido, baixa opacidade — protege sem atrapalhar a visualização
+  // tile diagonal repetido — contorno escuro + preenchimento claro, os dois
+  // semi-transparentes, pra continuar legível tanto em fotos claras quanto escuras
   return `
     <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <pattern id="wm" width="220" height="140" patternTransform="rotate(-30)" patternUnits="userSpaceOnUse">
           <text x="0" y="70" font-family="sans-serif" font-size="22" font-weight="700"
-                fill="white" fill-opacity="0.22">${text}</text>
+                fill="white" fill-opacity="0.35" stroke="black" stroke-opacity="0.35" stroke-width="1">${text}</text>
         </pattern>
       </defs>
       <rect width="100%" height="100%" fill="url(#wm)" />

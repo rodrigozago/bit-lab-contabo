@@ -69,7 +69,9 @@ async function sendWebp(reply: FastifyReply, absPath: string, watermark: boolean
     return reply.status(404).send({ ok: false, error: "arquivo não existe" });
   }
 
-  reply.type("image/webp").header("Cache-Control", "private, max-age=86400");
+  // cache curto: a mesma URL muda de conteúdo quando o producer liga/desliga a
+  // marca d'água do álbum — 24h deixaria o navegador "preso" na versão antiga
+  reply.type("image/webp").header("Cache-Control", "private, max-age=300");
 
   if (!watermark) return reply.send(createReadStream(absPath));
 

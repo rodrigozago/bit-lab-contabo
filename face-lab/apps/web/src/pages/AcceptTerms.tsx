@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../App";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 // me.needsTermsAcceptance for true, antes de qualquer outra página
 export function AcceptTerms() {
   const { refresh } = useAuth();
+  const navigate = useNavigate();
   const [checked, setChecked] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -16,6 +17,9 @@ export function AcceptTerms() {
     try {
       await api("/api/me/accept-terms", { method: "POST", body: JSON.stringify({}) });
       await refresh();
+      // needsTermsAcceptance vira false, mas /consent não se auto-redireciona —
+      // sem isso o usuário ficava preso na mesma página após aceitar
+      navigate("/", { replace: true });
     } finally {
       setLoading(false);
     }
