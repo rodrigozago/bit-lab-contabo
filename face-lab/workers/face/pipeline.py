@@ -56,7 +56,13 @@ def _watermark_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     try:
         return ImageFont.truetype(_WATERMARK_FONT_PATH, size)
     except OSError:
-        return ImageFont.load_default()  # fallback se a fonte não estiver instalada
+        # fallback se a DejaVu não estiver instalada: Pillow >= 10.1 aceita
+        # tamanho no load_default (fonte embutida); versões antigas retornam
+        # uma bitmap fixa de ~11px que ignora o size — melhor que nada
+        try:
+            return ImageFont.load_default(size)
+        except TypeError:
+            return ImageFont.load_default()
 
 
 def apply_watermark(img: Image.Image) -> Image.Image:
@@ -67,15 +73,25 @@ def apply_watermark(img: Image.Image) -> Image.Image:
     dinâmica). Tile diagonal repetido, contorno escuro + preenchimento claro
     pra ficar legível tanto em fotos claras quanto escuras.
     """
-    font = _watermark_font(22)
+    # tamanho RELATIVO à imagem (não fixo em px): ~5% do menor lado — legível
+    # tanto na thumb de 1024px quanto se o THUMB_SIZE mudar no futuro
+    font_size = max(18, int(min(img.size) * 0.05))
+    stroke = max(1, font_size // 16)
+    font = _watermark_font(font_size)
+
+    # mede o texto pra dimensionar o tile com folga proporcional
+    probe = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+    bbox = probe.textbbox((0, 0), WATERMARK_TEXT, font=font, stroke_width=stroke)
+    text_w, text_h = bbox[2] - bbox[0], bbox[3] - bbox[1]
 
     # desenha o texto uma vez num tile transparente, depois rotaciona o TILE
     # inteiro (ImageDraw não desenha texto rotacionado diretamente)
-    tile = Image.new("RGBA", (240, 140), (0, 0, 0, 0))
+    pad_x, pad_y = int(text_w * 0.6), int(text_h * 2.5)
+    tile = Image.new("RGBA", (text_w + pad_x, text_h + pad_y), (0, 0, 0, 0))
     draw = ImageDraw.Draw(tile)
     draw.text(
-        (10, 55), WATERMARK_TEXT, font=font,
-        fill=(255, 255, 255, 90), stroke_width=1, stroke_fill=(0, 0, 0, 90),
+        (pad_x // 2 - bbox[0], pad_y // 2 - bbox[1]), WATERMARK_TEXT, font=font,
+        fill=(255, 255, 255, 100), stroke_width=stroke, stroke_fill=(0, 0, 0, 100),
     )
     tile = tile.rotate(-30, expand=True, resample=Image.BICUBIC)
 
