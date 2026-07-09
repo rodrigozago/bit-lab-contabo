@@ -63,7 +63,6 @@ services:
       RATE_LIMIT_GLOBAL_PER_MIN: "${RATE_LIMIT_GLOBAL_PER_MIN:-60}"
       RATE_LIMIT_ENROLL_PER_MIN: "${RATE_LIMIT_ENROLL_PER_MIN:-10}"
       RETENTION_DAYS: "${RETENTION_DAYS:-90}"
-      WATERMARK_TEXT: "${WATERMARK_TEXT:-FACE LAB}"
     volumes:
       - media:/media
     depends_on:
@@ -84,6 +83,8 @@ services:
       MEDIA_DIR: "/media"
       # score mínimo de detecção — subir (ex: 0.6) reduz figurantes/falsos positivos
       DET_SCORE_MIN: "${DET_SCORE_MIN:-0.5}"
+      # texto do tile da marca d'água (bakeada na miniatura, ver pipeline.py)
+      WATERMARK_TEXT: "${WATERMARK_TEXT:-FACE LAB}"
       # VPS sem GPU e compartilhada com outros stacks — não sufocar CPU
       OMP_NUM_THREADS: "2"
     volumes:

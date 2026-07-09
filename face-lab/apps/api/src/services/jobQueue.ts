@@ -7,6 +7,7 @@ import {
   type WorkerResult,
   type PhotoFacesResult,
   type EnrollmentResult,
+  type ThumbRegeneratedResult,
 } from "@face-lab/shared";
 import { getRedis, newSubscriber } from "../redis.js";
 import { pool, toVector } from "../db.js";
@@ -36,7 +37,21 @@ async function handleResult(message: string): Promise<void> {
   const result = JSON.parse(message) as WorkerResult;
   if (result.type === "photo_faces") return handlePhotoResult(result);
   if (result.type === "enrollment") return handleEnrollmentResult(result);
+  if (result.type === "thumb_regenerated") return handleThumbRegenResult(result);
   console.warn("[jobQueue] resultado de tipo desconhecido:", result);
+}
+
+// job leve (marca d'água ligada/desligada) — só troca o arquivo da miniatura,
+// nunca mexe em faces/matches/"Sou eu" já confirmados
+async function handleThumbRegenResult(result: ThumbRegeneratedResult): Promise<void> {
+  const { photoId } = result;
+  await unlink(join(config.mediaDir, "incoming", `${photoId}.img`)).catch(() => {});
+
+  if (result.status === "error") {
+    console.error(`[jobQueue] regen_thumb falhou pra foto ${photoId}: ${result.error}`);
+    return;
+  }
+  await pool.query(`UPDATE photos SET thumb_path = $2 WHERE id = $1`, [photoId, result.thumbPath ?? null]);
 }
 
 async function handlePhotoResult(result: PhotoFacesResult): Promise<void> {

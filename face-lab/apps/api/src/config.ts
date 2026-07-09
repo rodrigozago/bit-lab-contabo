@@ -46,8 +46,4 @@ export const config = {
     termsVersion: "1.0",
     biometricConsentVersion: "1.0",
   },
-
-  watermark: {
-    text: process.env["WATERMARK_TEXT"] ?? "FACE LAB",
-  },
 };

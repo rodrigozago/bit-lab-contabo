@@ -7,7 +7,7 @@ import { config } from "../config.js";
 import { requireProducer } from "../guards.js";
 import { getAccessToken } from "../services/googleOAuth.js";
 import { parseFolderId, getFolderInfo } from "../services/drive.js";
-import { startScan, isScanning } from "../services/scanOrchestrator.js";
+import { startScan, isScanning, startThumbRegen } from "../services/scanOrchestrator.js";
 
 async function ownedAlbum(albumId: string, ownerId: string, isAdmin: boolean) {
   const { rows } = await pool.query(
@@ -131,6 +131,13 @@ export async function albumRoutes(app: FastifyInstance): Promise<void> {
       `UPDATE albums SET name = COALESCE($2, name), watermark_enabled = COALESCE($3, watermark_enabled) WHERE id = $1`,
       [id, name?.trim() ?? null, watermarkEnabled ?? null]
     );
+
+    // marca d'água é bakeada no arquivo — só reflete quando as miniaturas já
+    // processadas forem rebatidas (não mexe em faces/matches, ao contrário de
+    // um re-scan completo)
+    if (watermarkEnabled !== undefined && watermarkEnabled !== album.watermark_enabled) {
+      startThumbRegen(id, album.owner_id, watermarkEnabled);
+    }
     return { ok: true, data: null };
   });
 

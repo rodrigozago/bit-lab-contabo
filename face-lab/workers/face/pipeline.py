@@ -14,7 +14,7 @@ import uuid
 from pathlib import Path
 
 import numpy as np
-from PIL import Image, ImageOps
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 MEDIA_DIR = Path(os.environ.get("MEDIA_DIR", "/media"))
 DET_SCORE_MIN = float(os.environ.get("DET_SCORE_MIN", "0.5"))  # descarta detecções fracas
@@ -23,6 +23,9 @@ THUMB_SIZE = 1024  # grande o bastante pro dialog de detalhe da galeria
 CROP_SIZE = 160
 CROP_MARGIN = 0.25
 ENROLL_MIN_FRAMES = 3
+
+WATERMARK_TEXT = os.environ.get("WATERMARK_TEXT", "FACE LAB")
+_WATERMARK_FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 
 _app = None
 
@@ -49,7 +52,44 @@ def _to_bgr(img: Image.Image) -> np.ndarray:
     return np.asarray(img)[:, :, ::-1].copy()  # InsightFace espera BGR
 
 
-def process_photo(photo_id: str, image_path: str) -> dict:
+def _watermark_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    try:
+        return ImageFont.truetype(_WATERMARK_FONT_PATH, size)
+    except OSError:
+        return ImageFont.load_default()  # fallback se a fonte não estiver instalada
+
+
+def apply_watermark(img: Image.Image) -> Image.Image:
+    """
+    Marca d'água BAKEADA no arquivo (não composta em tempo de resposta — ver
+    apps/api/src/routes/media.ts pro motivo: um cache/CDN compartilhado na
+    frente do endpoint quebraria o controle de acesso de uma composição
+    dinâmica). Tile diagonal repetido, contorno escuro + preenchimento claro
+    pra ficar legível tanto em fotos claras quanto escuras.
+    """
+    font = _watermark_font(22)
+
+    # desenha o texto uma vez num tile transparente, depois rotaciona o TILE
+    # inteiro (ImageDraw não desenha texto rotacionado diretamente)
+    tile = Image.new("RGBA", (240, 140), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(tile)
+    draw.text(
+        (10, 55), WATERMARK_TEXT, font=font,
+        fill=(255, 255, 255, 90), stroke_width=1, stroke_fill=(0, 0, 0, 90),
+    )
+    tile = tile.rotate(-30, expand=True, resample=Image.BICUBIC)
+
+    overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    tw, th = tile.size
+    for y in range(-th, img.height + th, th):
+        for x in range(-tw, img.width + tw, tw):
+            overlay.paste(tile, (x, y), tile)
+
+    base = img.convert("RGBA")
+    return Image.alpha_composite(base, overlay).convert("RGB")
+
+
+def process_photo(photo_id: str, image_path: str, watermark: bool = False) -> dict:
     """Foto → thumb + faces (bbox, crop, embedding). Não apaga o original (o worker apaga)."""
     img = _load_image(image_path)
     width, height = img.size
@@ -100,12 +140,7 @@ def process_photo(photo_id: str, image_path: str) -> dict:
             }
         )
 
-    thumbs_dir = MEDIA_DIR / "thumbs"
-    thumbs_dir.mkdir(parents=True, exist_ok=True)
-    thumb = img.copy()
-    thumb.thumbnail((THUMB_SIZE, THUMB_SIZE), Image.LANCZOS)
-    thumb_rel = f"thumbs/{photo_id}.webp"
-    thumb.save(MEDIA_DIR / thumb_rel, "WEBP", quality=80)
+    thumb_rel = _save_thumb(photo_id, img, watermark)
 
     return {
         "width": width,
@@ -113,6 +148,28 @@ def process_photo(photo_id: str, image_path: str) -> dict:
         "thumbPath": thumb_rel,
         "faces": faces_out,
     }
+
+
+def _save_thumb(photo_id: str, img: Image.Image, watermark: bool) -> str:
+    thumbs_dir = MEDIA_DIR / "thumbs"
+    thumbs_dir.mkdir(parents=True, exist_ok=True)
+    thumb = img.copy()
+    thumb.thumbnail((THUMB_SIZE, THUMB_SIZE), Image.LANCZOS)
+    if watermark:
+        thumb = apply_watermark(thumb)
+    thumb_rel = f"thumbs/{photo_id}.webp"
+    thumb.save(MEDIA_DIR / thumb_rel, "WEBP", quality=80)
+    return thumb_rel
+
+
+def regenerate_thumb(photo_id: str, image_path: str, watermark: bool) -> dict:
+    """
+    Rebate só a miniatura (producer ligou/desligou a marca d'água) — SEM rodar
+    detecção facial, então não mexe em faces/matches/"Sou eu" já confirmados.
+    """
+    img = _load_image(image_path)
+    thumb_rel = _save_thumb(photo_id, img, watermark)
+    return {"thumbPath": thumb_rel}
 
 
 def enroll(frame_dir: str) -> dict:

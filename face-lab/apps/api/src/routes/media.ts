@@ -1,17 +1,22 @@
 import { createReadStream } from "fs";
-import { readFile, stat } from "fs/promises";
+import { stat } from "fs/promises";
 import { join } from "path";
-import type { FastifyInstance, FastifyReply } from "fastify";
+import type { FastifyInstance } from "fastify";
 import { pool } from "../db.js";
 import { config } from "../config.js";
 import { requireUser } from "../guards.js";
-import { applyWatermark } from "../services/watermark.js";
 
 // Thumbs/crops são derivados de dados biométricos — nunca públicos.
 // thumbs/<photoId>.webp: dono do álbum, admin, ou usuário PARTICIPANTE do álbum
 //   (≥1 match não-rejeitado em qualquer foto dali — necessário pro "Todas as
 //   fotos" navegar o álbum inteiro, não só as fotos já casadas com ele).
 // crops/<faceId>.webp:  dono do álbum, admin ou o próprio usuário casado na face.
+//
+// Marca d'água é BAKEADA no arquivo pelo worker (ver workers/face/pipeline.py)
+// — não é composta aqui em tempo de resposta. Isso é proposital: uma composição
+// por request só funciona se a resposta nunca for cacheada por um proxy/CDN na
+// frente, e esse endpoint é controlado por permissão por usuário — um cache
+// compartilhado serviria a mesma miniatura pra qualquer um sem checar acesso.
 
 const FILE_RE = /^([0-9a-f-]{36})\.webp$/;
 
@@ -25,7 +30,7 @@ export async function mediaRoutes(app: FastifyInstance): Promise<void> {
     const photoId = m[1];
 
     const { rows } = await pool.query(
-      `SELECT p.thumb_path, a.watermark_enabled FROM photos p
+      `SELECT p.thumb_path FROM photos p
        JOIN albums a ON a.id = p.album_id
        WHERE p.id = $1 AND (
          $3 OR a.owner_id = $2 OR EXISTS (
@@ -33,9 +38,9 @@ export async function mediaRoutes(app: FastifyInstance): Promise<void> {
            WHERE p2.album_id = p.album_id AND mt.user_id = $2 AND mt.status <> 'rejected'))`,
       [photoId, user.id, user.role === "admin"]
     );
-    const row = rows[0] as { thumb_path: string | null; watermark_enabled: boolean } | undefined;
-    if (!row?.thumb_path) return reply.status(404).send({ ok: false, error: "não encontrado" });
-    return sendWebp(reply, join(config.mediaDir, row.thumb_path), row.watermark_enabled);
+    const thumbPath = rows[0]?.thumb_path as string | undefined;
+    if (!thumbPath) return reply.status(404).send({ ok: false, error: "não encontrado" });
+    return sendWebp(reply, join(config.mediaDir, thumbPath));
   });
 
   app.get("/api/media/crops/:file", async (req, reply) => {
@@ -57,24 +62,23 @@ export async function mediaRoutes(app: FastifyInstance): Promise<void> {
     );
     const cropPath = rows[0]?.crop_path as string | undefined;
     if (!cropPath) return reply.status(404).send({ ok: false, error: "não encontrado" });
-    // crops nunca levam marca d'água — são recortes de 160px só pra UI interna (faixa de pessoas)
-    return sendWebp(reply, join(config.mediaDir, cropPath), false);
+    return sendWebp(reply, join(config.mediaDir, cropPath));
   });
 }
 
-async function sendWebp(reply: FastifyReply, absPath: string, watermark: boolean) {
+async function sendWebp(reply: import("fastify").FastifyReply, absPath: string) {
   try {
     await stat(absPath);
   } catch {
     return reply.status(404).send({ ok: false, error: "arquivo não existe" });
   }
-
-  // cache curto: a mesma URL muda de conteúdo quando o producer liga/desliga a
-  // marca d'água do álbum — 24h deixaria o navegador "preso" na versão antiga
-  reply.type("image/webp").header("Cache-Control", "private, max-age=300");
-
-  if (!watermark) return reply.send(createReadStream(absPath));
-
-  const composed = await applyWatermark(await readFile(absPath));
-  return reply.send(composed);
+  // "private" restringe a cache do NAVEGADOR do próprio usuário — um proxy/CDN
+  // compartilhado na frente não deveria guardar isso (endpoint é por permissão).
+  // Se a plataforma estiver atrás de Cloudflare (ou similar), configure uma
+  // regra de cache que ignore/bypass /api/* nesse host — "private" sozinho não
+  // é garantia contra uma CDN configurada pra "cache everything" por extensão.
+  return reply
+    .type("image/webp")
+    .header("Cache-Control", "private, max-age=3600")
+    .send(createReadStream(absPath));
 }

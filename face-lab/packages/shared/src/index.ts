@@ -153,6 +153,9 @@ export interface ProcessPhotoJob {
   type: "process_photo";
   photoId: string;
   imagePath: string;
+  // marca d'água é bakeada no arquivo pelo worker (não composta em tempo de
+  // resposta) — reflete albums.watermark_enabled no momento do processamento
+  watermark: boolean;
 }
 
 export interface EnrollJob {
@@ -161,7 +164,17 @@ export interface EnrollJob {
   frameDir: string;
 }
 
-export type WorkerJob = ProcessPhotoJob | EnrollJob;
+// job leve pra rebater só a miniatura (ex: producer ligou/desligou a marca
+// d'água) — baixa a foto de novo mas NÃO roda detecção facial, então não
+// mexe em faces/matches/"Sou eu" já confirmados
+export interface RegenThumbJob {
+  type: "regen_thumb";
+  photoId: string;
+  imagePath: string;
+  watermark: boolean;
+}
+
+export type WorkerJob = ProcessPhotoJob | EnrollJob | RegenThumbJob;
 
 export interface FaceResult {
   bbox: Bbox;
@@ -190,4 +203,12 @@ export interface EnrollmentResult {
   frameCount?: number;
 }
 
-export type WorkerResult = PhotoFacesResult | EnrollmentResult;
+export interface ThumbRegeneratedResult {
+  type: "thumb_regenerated";
+  photoId: string;
+  status: "done" | "error";
+  error?: string;
+  thumbPath?: string;
+}
+
+export type WorkerResult = PhotoFacesResult | EnrollmentResult | ThumbRegeneratedResult;

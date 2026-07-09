@@ -35,8 +35,9 @@ export function startScan(albumId: string, ownerId: string): void {
 async function runScan(albumId: string, ownerId: string): Promise<void> {
   await pool.query(`UPDATE albums SET status = 'scanning', error = NULL WHERE id = $1`, [albumId]);
 
-  const { rows } = await pool.query(`SELECT drive_folder_id FROM albums WHERE id = $1`, [albumId]);
+  const { rows } = await pool.query(`SELECT drive_folder_id, watermark_enabled FROM albums WHERE id = $1`, [albumId]);
   const folderId = rows[0]?.drive_folder_id as string | undefined;
+  const watermark = Boolean(rows[0]?.watermark_enabled);
   if (!folderId) throw new Error("álbum não encontrado");
 
   const accessToken = await getAccessToken(ownerId);
@@ -90,7 +91,7 @@ async function runScan(albumId: string, ownerId: string): Promise<void> {
     try {
       await downloadFile(token, photo.drive_file_id, destPath);
       await pool.query(`UPDATE photos SET status = 'processing', error = NULL WHERE id = $1`, [photo.id]);
-      await enqueue({ type: "process_photo", photoId: photo.id, imagePath: destPath });
+      await enqueue({ type: "process_photo", photoId: photo.id, imagePath: destPath, watermark });
     } catch (err) {
       console.error(`[scan] download falhou (photo ${photo.id}):`, err);
       await pool.query(`UPDATE photos SET status = 'error', error = $2 WHERE id = $1`, [
@@ -100,4 +101,50 @@ async function runScan(albumId: string, ownerId: string): Promise<void> {
     }
   }
   // álbum vira 'ready' quando o último resultado chegar (ver jobQueue.refreshAlbumStatus)
+}
+
+/**
+ * Rebate só a MINIATURA das fotos já processadas de um álbum (ex: producer
+ * ligou/desligou a marca d'água). Baixa cada foto de novo do Drive, mas o job
+ * enfileirado (`regen_thumb`) não roda detecção facial — faces/matches/"Sou
+ * eu" já confirmados pelos guests continuam intactos. Reusa o mesmo guard de
+ * `running` do scan normal pra não rodar os dois ao mesmo tempo no álbum.
+ */
+export function startThumbRegen(albumId: string, ownerId: string, watermark: boolean): void {
+  if (running.has(albumId)) return;
+  running.add(albumId);
+  void runThumbRegen(albumId, ownerId, watermark)
+    .catch((err) => console.error(`[thumb-regen] álbum ${albumId} falhou:`, err))
+    .finally(() => running.delete(albumId));
+}
+
+async function runThumbRegen(albumId: string, ownerId: string, watermark: boolean): Promise<void> {
+  const { rows } = await pool.query(
+    `SELECT id, drive_file_id FROM photos WHERE album_id = $1 AND thumb_path IS NOT NULL ORDER BY created_at`,
+    [albumId]
+  );
+  if (rows.length === 0) return;
+  console.log(`[thumb-regen] álbum ${albumId}: ${rows.length} miniatura(s) a rebater (watermark=${watermark})`);
+
+  const incomingDir = join(config.mediaDir, "incoming");
+  await mkdir(incomingDir, { recursive: true });
+
+  let token = await getAccessToken(ownerId);
+  let tokenIssuedAt = Date.now();
+
+  for (const photo of rows) {
+    await waitForPhotoSlot(ownerId);
+    if (Date.now() - tokenIssuedAt > 45 * 60_000) {
+      token = await getAccessToken(ownerId);
+      tokenIssuedAt = Date.now();
+    }
+
+    const destPath = join(incomingDir, `${photo.id}.img`);
+    try {
+      await downloadFile(token, photo.drive_file_id, destPath);
+      await enqueue({ type: "regen_thumb", photoId: photo.id, imagePath: destPath, watermark });
+    } catch (err) {
+      console.error(`[thumb-regen] download falhou (photo ${photo.id}):`, err);
+    }
+  }
 }

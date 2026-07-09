@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PhotoDialog } from "@/components/PhotoDialog";
 
 function PhotoBadge({ photo }: { photo: PhotoItem }) {
@@ -26,6 +27,8 @@ export function ProducerAlbum() {
   const [people, setPeople] = useState<PersonSummary[]>([]);
   const [personId, setPersonId] = useState<string | null>(null);
   const [dialogPhoto, setDialogPhoto] = useState<PhotoItem | null>(null);
+  const [confirmWatermark, setConfirmWatermark] = useState(false);
+  const [watermarkBusy, setWatermarkBusy] = useState(false);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
   const personRef = useRef<string | null>(null);
   personRef.current = personId;
@@ -78,16 +81,33 @@ export function ProducerAlbum() {
     if (!timer.current) window.location.reload();
   }
 
-  async function toggleWatermark() {
+  // checkbox só abre a confirmação — nada muda até o producer confirmar. Se
+  // não há foto processada ainda, não há o que reprocessar: aplica direto.
+  function requestToggleWatermark() {
     if (!album) return;
-    const next = !album.watermarkEnabled;
+    if (album.doneCount === 0) return void applyWatermarkToggle(!album.watermarkEnabled);
+    setConfirmWatermark(true);
+  }
+
+  async function applyWatermarkToggle(next: boolean) {
+    if (!album) return;
+    setWatermarkBusy(true);
+    const prev = album;
     setAlbum({ ...album, watermarkEnabled: next });
     try {
       await api(`/api/albums/${id}`, { method: "PATCH", body: JSON.stringify({ watermarkEnabled: next }) });
-      toast.success(next ? "Marca d'água ligada." : "Marca d'água desligada.");
+      // a marca d'água é bakeada no arquivo — as miniaturas já processadas são
+      // rebatidas em segundo plano (baixa de novo do Drive), não é instantâneo
+      toast.success(
+        next ? "Marca d'água ligada." : "Marca d'água desligada.",
+        { description: "As miniaturas já processadas vão atualizar em instantes." }
+      );
     } catch (err) {
-      setAlbum(album); // reverte
+      setAlbum(prev); // reverte
       toast.error("Não deu pra atualizar", { description: (err as Error).message });
+    } finally {
+      setWatermarkBusy(false);
+      setConfirmWatermark(false);
     }
   }
 
@@ -106,7 +126,13 @@ export function ProducerAlbum() {
 
       {album && (
         <label className="mt-3 flex w-fit items-center gap-2 text-sm text-muted-foreground">
-          <input type="checkbox" checked={album.watermarkEnabled} onChange={toggleWatermark} className="h-4 w-4" />
+          <input
+            type="checkbox"
+            checked={album.watermarkEnabled}
+            onChange={requestToggleWatermark}
+            disabled={watermarkBusy}
+            className="h-4 w-4"
+          />
           Marca d'água nas miniaturas
         </label>
       )}
@@ -206,6 +232,27 @@ export function ProducerAlbum() {
         thumbUrl={dialogPhoto?.thumbUrl ?? null}
         name={dialogPhoto?.name ?? ""}
       />
+
+      <Dialog open={confirmWatermark} onOpenChange={(open) => !watermarkBusy && setConfirmWatermark(open)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{album?.watermarkEnabled ? "Desligar" : "Ligar"} marca d'água?</DialogTitle>
+            <DialogDescription>
+              As {album?.doneCount} foto{album?.doneCount === 1 ? "" : "s"} já processada{album?.doneCount === 1 ? "" : "s"} deste
+              álbum vão ser analisadas de novo pra atualizar a miniatura. No futuro isso vai consumir créditos da sua conta.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" disabled={watermarkBusy} onClick={() => setConfirmWatermark(false)}>
+              Cancelar
+            </Button>
+            <Button disabled={watermarkBusy} onClick={() => applyWatermarkToggle(!album?.watermarkEnabled)}>
+              {watermarkBusy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Confirmar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

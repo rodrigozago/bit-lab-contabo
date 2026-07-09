@@ -5,11 +5,14 @@ Lê jobs da fila Redis (LIST "facelab:jobs") e publica resultados no canal
 "facelab:results" — mesmo desenho do worker do ponto-studio.
 
 Jobs:
-    { "type": "process_photo", "photoId", "imagePath" }
+    { "type": "process_photo", "photoId", "imagePath", "watermark" }
         → { "type": "photo_faces", "photoId", "status", width, height,
             thumbPath, faces: [{bbox, detScore, cropPath, embedding[512]}] }
     { "type": "enroll", "enrollmentId", "frameDir" }
         → { "type": "enrollment", "enrollmentId", "status", embedding, frameCount }
+    { "type": "regen_thumb", "photoId", "imagePath", "watermark" }
+        → { "type": "thumb_regenerated", "photoId", "status", thumbPath }
+          (não roda detecção — só rebate a miniatura, ex: toggle de marca d'água)
 
 Originais de /media/incoming são APAGADOS no finally — nunca persistem.
 """
@@ -41,13 +44,14 @@ def process_photo_job(r: redis.Redis, job: dict[str, Any]) -> None:
 
     photo_id: str = job["photoId"]
     image_path: str = job["imagePath"]
+    watermark: bool = bool(job.get("watermark", False))
     log.info("Processando foto %s (%s)", photo_id, image_path)
 
     try:
         if not Path(image_path).exists():
             raise FileNotFoundError(f"imagem não encontrada: {image_path}")
         started = time.monotonic()
-        result = process_photo(photo_id, image_path)
+        result = process_photo(photo_id, image_path, watermark=watermark)
         log.info(
             "Foto %s: %d rosto(s) em %.1fs",
             photo_id, len(result["faces"]), time.monotonic() - started,
@@ -93,12 +97,43 @@ def enroll_job(r: redis.Redis, job: dict[str, Any]) -> None:
     # os frames são apagados pela API ao receber o resultado (dado biométrico temporário)
 
 
+def regen_thumb_job(r: redis.Redis, job: dict[str, Any]) -> None:
+    from pipeline import regenerate_thumb
+
+    photo_id: str = job["photoId"]
+    image_path: str = job["imagePath"]
+    watermark: bool = bool(job.get("watermark", False))
+    log.info("Rebatendo miniatura %s (watermark=%s)", photo_id, watermark)
+
+    try:
+        if not Path(image_path).exists():
+            raise FileNotFoundError(f"imagem não encontrada: {image_path}")
+        result = regenerate_thumb(photo_id, image_path, watermark)
+        r.publish(
+            RESULTS_CHANNEL,
+            json.dumps({"type": "thumb_regenerated", "photoId": photo_id, "status": "done", **result}),
+        )
+    except Exception as exc:
+        log.exception("Regen de miniatura %s falhou", photo_id)
+        r.publish(
+            RESULTS_CHANNEL,
+            json.dumps({"type": "thumb_regenerated", "photoId": photo_id, "status": "error", "error": str(exc)}),
+        )
+    finally:
+        try:
+            Path(image_path).unlink(missing_ok=True)
+        except OSError:
+            log.warning("não consegui apagar %s", image_path)
+
+
 def process_job(r: redis.Redis, job: dict[str, Any]) -> None:
     job_type = job.get("type")
     if job_type == "process_photo":
         process_photo_job(r, job)
     elif job_type == "enroll":
         enroll_job(r, job)
+    elif job_type == "regen_thumb":
+        regen_thumb_job(r, job)
     else:
         log.error("Tipo de job desconhecido: %s", job_type)
 

@@ -2,8 +2,9 @@ FROM python:3.12-slim
 
 # build-essential/g++: insightface compila extensão Cython no install
 # libgl1/libglib2.0-0: runtime do opencv
+# fonts-dejavu-core: fonte usada pra bakear a marca d'água nas miniaturas (pipeline.py)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      build-essential g++ libgl1 libglib2.0-0 \
+      build-essential g++ libgl1 libglib2.0-0 fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /worker
