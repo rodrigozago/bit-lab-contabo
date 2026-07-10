@@ -1,8 +1,17 @@
 # Face Lab — Mapa de Features
 
-Documento vivo do que **existe hoje** na aplicação, para consolidar antes da fase alpha. Atualize esta lista conforme features são adicionadas/mudam — é a fonte de verdade de escopo, não o README (que é setup/deploy).
+Documento vivo do que **existe hoje** na aplicação.
 
-Última consolidação: com base no código em `face-lab/` nesta sessão.
+**Status**: 🔴 **CONGELADO PARA ALPHA** `Gato-Veloz-v0.1` (Julho 2026)
+
+Atualize esta lista conforme features são adicionadas/mudam na próxima fase — é a fonte de verdade de escopo, não o README (que é setup/deploy).
+
+📖 **Ver também**:
+- [ALPHA_RELEASE.md](ALPHA_RELEASE.md) — escopo congelado, gaps conhecidos, critérios de aceitação
+- [ALPHA_TESTERS.md](ALPHA_TESTERS.md) — guia de uso para testers
+- [ALPHA_FLOW.md](ALPHA_FLOW.md) — diagramas visuais de fluxos
+
+Última consolidação: com base no código em `face-lab/` nesta sessão (Julho 2026).
 
 ---
 

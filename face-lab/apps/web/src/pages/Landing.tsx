@@ -90,6 +90,7 @@ export function Landing() {
         <div className="flex flex-col items-center gap-2 text-xs text-muted-foreground">
           <p>Face Lab</p>
           <div className="flex gap-4">
+            <Link to="/resources" className="hover:text-foreground">Documentação</Link>
             <Link to="/terms" className="hover:text-foreground">Termos de Uso</Link>
             <Link to="/privacy" className="hover:text-foreground">Política de Privacidade</Link>
           </div>

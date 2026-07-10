@@ -1,8 +1,12 @@
-# Face Lab
+# Face Lab 🐱⚡
+
+**Versão Alpha**: `Gato-Veloz-v0.1` ([release notes](ALPHA_RELEASE.md))
 
 Indexação e compartilhamento de fotos por **reconhecimento facial**. Producers criam álbuns a partir de pastas do **próprio Google Drive** (as fotos originais nunca são armazenadas aqui — só miniaturas, recortes de rosto, embeddings e os links do Drive); convidados cadastram o rosto pela webcam e recebem automaticamente todas as fotos em que aparecem.
 
 Faz parte do monorepo `bit-lab-agents`, servido em **face.bit-lab.tech**.
+
+> **Para Alpha Testers**: Consulte [ALPHA_TESTERS.md](ALPHA_TESTERS.md) para o guia completo de uso.
 
 ## Atores
 

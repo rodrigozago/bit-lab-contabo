@@ -76,6 +76,7 @@ function UserFooter() {
         <LogOut className="h-3.5 w-3.5" /> Sair
       </button>
       <div className="mt-4 flex gap-3 text-[11px] text-neutral-400">
+        <Link to="/resources" className="hover:text-neutral-600">Documentação</Link>
         <Link to="/terms" className="hover:text-neutral-600">Termos</Link>
         <Link to="/privacy" className="hover:text-neutral-600">Privacidade</Link>
       </div>

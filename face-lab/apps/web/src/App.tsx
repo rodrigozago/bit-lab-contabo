@@ -17,6 +17,7 @@ import { Admin } from "./pages/Admin";
 import { Terms } from "./pages/Terms";
 import { Privacy } from "./pages/Privacy";
 import { AcceptTerms } from "./pages/AcceptTerms";
+import Resources from "./pages/Resources";
 
 // compat: páginas antigas importam de "../App"
 export { useAuth, loginUrl } from "@/lib/auth";
@@ -77,6 +78,7 @@ export function App() {
         <Route path="/" element={<Landing />} />
         <Route path="/terms" element={<Terms />} />
         <Route path="/privacy" element={<Privacy />} />
+        <Route path="/resources" element={<Resources />} />
         <Route path="/consent" element={<RequireAuth><AcceptTerms /></RequireAuth>} />
 
         <Route element={<AppLayout />}>
