@@ -91,7 +91,8 @@ def apply_watermark(img: Image.Image) -> Image.Image:
     draw = ImageDraw.Draw(tile)
     draw.text(
         (pad_x // 2 - bbox[0], pad_y // 2 - bbox[1]), WATERMARK_TEXT, font=font,
-        fill=(255, 255, 255, 100), stroke_width=stroke, stroke_fill=(0, 0, 0, 100),
+        # ~45% de opacidade (115/255)
+        fill=(255, 255, 255, 115), stroke_width=stroke, stroke_fill=(0, 0, 0, 115),
     )
     tile = tile.rotate(-30, expand=True, resample=Image.BICUBIC)
 

@@ -18,6 +18,12 @@ RUN pnpm exec tsc -p tsconfig.json
 
 WORKDIR /app/apps/web
 RUN pnpm exec tsc -p tsconfig.json --noEmit
+# Vite embute VITE_* no bundle em BUILD time — o token de client do Rollbar
+# (post_client_item, público por design) precisa chegar aqui como build arg
+ARG VITE_ROLLBAR_ACCESS_TOKEN
+ARG VITE_ROLLBAR_MIN_LEVEL=debug
+ENV VITE_ROLLBAR_ACCESS_TOKEN=$VITE_ROLLBAR_ACCESS_TOKEN
+ENV VITE_ROLLBAR_MIN_LEVEL=$VITE_ROLLBAR_MIN_LEVEL
 RUN pnpm exec vite build
 
 # ── Serve estático com nginx (proxy /api → api:3001) ──────────────────────────

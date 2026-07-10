@@ -63,6 +63,9 @@ services:
       RATE_LIMIT_GLOBAL_PER_MIN: "${RATE_LIMIT_GLOBAL_PER_MIN:-60}"
       RATE_LIMIT_ENROLL_PER_MIN: "${RATE_LIMIT_ENROLL_PER_MIN:-10}"
       RETENTION_DAYS: "${RETENTION_DAYS:-90}"
+      # Rollbar servidor (token post_server_item; sem ele fica desligado)
+      ROLLBAR_SERVER_TOKEN: "${ROLLBAR_SERVER_TOKEN:-}"
+      ROLLBAR_MIN_LEVEL: "${ROLLBAR_MIN_LEVEL:-debug}"
     volumes:
       - media:/media
     depends_on:
@@ -100,6 +103,10 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+      args:
+        # Vite embute env em BUILD time — trocar exige rebuild do web
+        VITE_ROLLBAR_ACCESS_TOKEN: "${VITE_ROLLBAR_ACCESS_TOKEN:-}"
+        VITE_ROLLBAR_MIN_LEVEL: "${VITE_ROLLBAR_MIN_LEVEL:-debug}"
     ports:
       # nginx da VPS (face.bit-lab.tech) faz proxy_pass pra cá
       - "127.0.0.1:3004:80"

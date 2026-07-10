@@ -15,8 +15,12 @@ import { mediaRoutes } from "./routes/media.js";
 import { adminRoutes } from "./routes/admin.js";
 import { notificationRoutes } from "./routes/notifications.js";
 import { runRetentionSweep } from "./services/retention.js";
+import { rollbar, installConsoleForwarding } from "./services/rollbar.js";
 
 async function main(): Promise<void> {
+  // antes de tudo: logs de boot/migração também vão pro Rollbar
+  installConsoleForwarding();
+
   await migrate();
   for (const dir of ["incoming", "thumbs", "crops", "enroll"]) {
     await mkdir(join(config.mediaDir, dir), { recursive: true });
@@ -48,8 +52,9 @@ async function main(): Promise<void> {
     }
   });
 
-  app.setErrorHandler((err, _req, reply) => {
+  app.setErrorHandler((err, req, reply) => {
     app.log.error(err);
+    rollbar?.error(err, { method: req.method, url: req.url });
     const status = err.statusCode && err.statusCode >= 400 ? err.statusCode : 500;
     void reply.status(status).send({ ok: false, error: err.message ?? "erro interno" });
   });

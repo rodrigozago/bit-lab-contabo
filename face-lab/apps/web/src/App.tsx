@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { useRollbar } from "@rollbar/react";
 import type { Me } from "@face-lab/shared";
 import { api, ApiError } from "./api";
 import { AuthContext, loginUrl, useAuth } from "@/lib/auth";
@@ -16,6 +17,7 @@ import { Admin } from "./pages/Admin";
 import { Terms } from "./pages/Terms";
 import { Privacy } from "./pages/Privacy";
 import { AcceptTerms } from "./pages/AcceptTerms";
+import { TestErrors } from "./pages/TestErrors";
 
 // compat: páginas antigas importam de "../App"
 export { useAuth, loginUrl } from "@/lib/auth";
@@ -36,6 +38,17 @@ function RequireAuth({ children, producer, admin }: { children: JSX.Element; pro
   if (admin && me.role !== "admin") return <Navigate to="/" replace />;
   if (producer && !isProducer) return <Navigate to="/" replace />;
   return children;
+}
+
+// liga erros/logs do Rollbar ao usuário logado (person tracking)
+function RollbarPerson({ me }: { me: Me | null }) {
+  const rollbar = useRollbar();
+  useEffect(() => {
+    if (me) {
+      rollbar.configure({ payload: { person: { id: me.id, email: me.email } } });
+    }
+  }, [me, rollbar]);
+  return null;
 }
 
 export function App() {
@@ -59,12 +72,14 @@ export function App() {
 
   return (
     <AuthContext.Provider value={{ me, loading, refresh }}>
+      <RollbarPerson me={me} />
       <Toaster richColors position="bottom-right" />
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/terms" element={<Terms />} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/consent" element={<RequireAuth><AcceptTerms /></RequireAuth>} />
+        <Route path="/erro" element={<RequireAuth><TestErrors /></RequireAuth>} /> {/* teste do Rollbar — remover após validar */}
 
         <Route element={<AppLayout />}>
           <Route path="/enroll" element={<RequireAuth><Enroll /></RequireAuth>} />
