@@ -1,0 +1,23 @@
+{
+  "name": "on-air",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@9.15.4",
+  "description": "On Air — quem está tocando agora (on-air.bit-lab.tech): vinil girando + timetable de DJs",
+  "scripts": {
+    "dev": "pnpm --parallel --filter \"./apps/*\" run dev",
+    "dev:api": "pnpm --filter @on-air/api dev",
+    "dev:web": "pnpm --filter @on-air/web dev",
+    "build": "pnpm --filter \"./apps/*\" run build",
+    "typecheck": "pnpm --recursive run typecheck",
+    "docker:up": "docker compose up --build",
+    "docker:down": "docker compose down"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  },
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=9"
+  }
+}

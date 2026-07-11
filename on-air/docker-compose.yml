@@ -1,0 +1,35 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    ports:
+      - "127.0.0.1:4004:3001" # loopback só pra debug/curl (4001-4003 ocupadas)
+    environment:
+      PORT: "3001"
+      NODE_ENV: production
+      DB_DIR: /data
+      MEDIA_DIR: /media
+    volumes:
+      - data:/data
+      - media:/media
+    networks: [onair]
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    ports:
+      - "127.0.0.1:3005:80" # nginx da VPS (on-air.bit-lab.tech) proxya pra cá
+    depends_on: [api]
+    networks: [onair]
+    restart: unless-stopped
+
+volumes:
+  data: {}
+  media: {}
+
+networks:
+  onair:
+    driver: bridge

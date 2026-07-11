@@ -1,0 +1,35 @@
+@import "tailwindcss";
+@import "@fontsource-variable/inter";
+
+@theme {
+  /* dark navy que casa com o International Klein Blue */
+  --color-background: #060b1d;
+  --color-surface: #0b1330;
+  --color-edge: #1a2547;
+  /* International Klein Blue */
+  --color-accent: #002fa7;
+  /* IKB puro é escuro demais pra texto pequeno sobre navy — versão clareada */
+  --color-accent-bright: #2a5bff;
+  --color-foreground: #e9edfb;
+  --color-muted: #8b95bb;
+
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+}
+
+body {
+  @apply bg-background text-foreground font-sans antialiased;
+}
+
+@keyframes vinyl-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.vinyl-spin {
+  animation: vinyl-spin 4s linear infinite;
+}
+
+.vinyl-spin-paused {
+  animation-play-state: paused;
+}
