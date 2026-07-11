@@ -6,7 +6,11 @@ RUN corepack enable
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* .npmrc ./
 COPY apps/web/package.json ./apps/web/
 
-RUN pnpm install --frozen-lockfile
+# --ignore-scripts: com node-linker=hoisted o pnpm materializa o grafo inteiro
+# do lockfile (inclusive o better-sqlite3 da API, que não compila em musl).
+# O toolchain do front não precisa de scripts — esbuild/tailwind-oxide/lightningcss
+# vêm com binário pronto via optionalDependencies.
+RUN pnpm install --frozen-lockfile --ignore-scripts
 
 COPY apps/web ./apps/web
 COPY tsconfig.base.json ./
