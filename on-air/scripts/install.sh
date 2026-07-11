@@ -6,9 +6,8 @@
 #   2. docker compose build + up -d (web:127.0.0.1:3005, api:127.0.0.1:4004)
 #   3. Copia nginx/bit-lab.tech.conf (com o bloco on-air.bit-lab.tech) para o nginx, testa e recarrega
 #
-# ⚠️  O auth (auth.bit-lab.tech) precisa conhecer o app `on-air`: atualize e
-#     redeploy o bit-lab-agents/auth (o seed cria a row) e conceda acesso aos
-#     admins em https://auth.bit-lab.tech/admin. Sem isso, /admin devolve 403.
+# ⚠️  SSO desligado por enquanto: /admin é protegido por senha simples
+#     (ADMIN_PASSWORD no docker-compose.yml, header x-admin-key).
 #
 # Idempotente — pode rodar de novo a qualquer momento para atualizar.
 set -euo pipefail
@@ -88,9 +87,8 @@ echo ""
 echo "Confirme:"
 echo "  1. DNS: on-air.bit-lab.tech apontando pro mesmo IP (via Cloudflare)"
 echo "  2. Cert /etc/ssl/cloudflare/bit-lab.tech.pem cobre *.bit-lab.tech"
-echo "  3. Auth atualizado (seed do app on-air) + acesso concedido em https://auth.bit-lab.tech/admin"
-echo "  4. https://on-air.bit-lab.tech carrega a página pública sem login"
-echo "  5. https://on-air.bit-lab.tech/admin redireciona pro login do auth"
+echo "  3. https://on-air.bit-lab.tech carrega a página pública sem login"
+echo "  4. https://on-air.bit-lab.tech/admin pede a senha (ADMIN_PASSWORD do docker-compose.yml)"
 echo ""
 echo "Logs:      docker compose -f $PROJECT_DIR/docker-compose.yml logs -f"
 echo "Atualizar: git pull && $SCRIPT_DIR/install.sh"

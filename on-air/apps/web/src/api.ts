@@ -6,6 +6,15 @@ export async function getTimetable(): Promise<TimetableResponse> {
   return res.json() as Promise<TimetableResponse>
 }
 
+// Senha do admin (gate temporário enquanto o SSO está desligado) — fica no
+// localStorage e vai em todo request como header x-admin-key
+const KEY_STORAGE = 'onair-admin-key'
+export const adminKey = {
+  get: () => localStorage.getItem(KEY_STORAGE),
+  set: (value: string) => localStorage.setItem(KEY_STORAGE, value),
+  clear: () => localStorage.removeItem(KEY_STORAGE),
+}
+
 export class AdminApiError extends Error {
   constructor(
     message: string,
@@ -20,7 +29,11 @@ async function adminFetch<T>(path: string, init?: RequestInit): Promise<T> {
   // auth.bit-lab.tech — um fetch não consegue seguir isso cross-origin. Nesse
   // caso recarrega /admin pra re-autenticar via navegação completa (o gate
   // auth_request roda de novo e devolve o usuário logado pra cá).
-  const res = await fetch(path, { ...init, redirect: 'manual' })
+  const res = await fetch(path, {
+    ...init,
+    redirect: 'manual',
+    headers: { ...(init?.headers ?? {}), 'x-admin-key': adminKey.get() ?? '' },
+  })
   if (res.type === 'opaqueredirect' || res.status === 0) {
     window.location.assign('/admin')
     return new Promise<never>(() => {})

@@ -11,8 +11,12 @@ no `/admin` (protegido pelo bit-lab-auth).
   International Klein Blue `#002FA7` sobre navy escuro.
 - **api** — Fastify 4 + better-sqlite3 (`apps/api`). SQLite em volume Docker,
   fotos dos artistas em volume próprio (`/media`).
-- **auth** — nenhum código aqui: `/admin` e `/api/admin/` são gated na borda
-  (nginx `auth_request` → `auth.bit-lab.tech`), mesmo modelo do ponto-studio.
+- **auth** — ⚠️ temporário: o gate SSO do bit-lab-auth está **desligado** no
+  nginx; `/admin` pede uma senha simples (env `ADMIN_PASSWORD` no
+  docker-compose, enviada como header `x-admin-key`). Pra voltar pro SSO:
+  re-adicionar o `auth_request` no bloco do on-air em `nginx/bit-lab.tech.conf`
+  (modelo: bloco do ponto) e remover o hook de senha em
+  `apps/api/src/routes/admin.ts` + o gate em `apps/web/src/pages/Admin.tsx`.
   O resto é público.
 
 ## Dev local
@@ -34,14 +38,14 @@ SQLite guarda tudo em **UTC ISO-8601**; o admin edita e o público vê
 
 ## Deploy na VPS
 
-1. **Auth**: redeploy do `bit-lab-agents/auth` (o seed em `src/bootstrapAdmin.js`
-   cria o app `on-air`) e conceda acesso aos admins em
-   https://auth.bit-lab.tech/admin — sem grant, `/admin` devolve 403.
-2. **DNS**: registro `on-air` no Cloudflare apontando pro mesmo origin
+1. **DNS**: registro `on-air` no Cloudflare apontando pro mesmo origin
    (o cert wildcard já cobre).
-3. **App**: `git pull && sudo scripts/install.sh` — builda/sobe os containers
+2. **App**: `git pull && sudo scripts/install.sh` — builda/sobe os containers
    (web `127.0.0.1:3005`, api debug `127.0.0.1:4004`) e atualiza/recarrega o
    nginx da VPS com `nginx/bit-lab.tech.conf`.
+
+(Quando o SSO voltar: redeploy do `bit-lab-agents/auth` — o seed já cria o app
+`on-air` — e conceder acesso em https://auth.bit-lab.tech/admin.)
 
 ## Portas
 

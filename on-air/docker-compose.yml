@@ -10,6 +10,8 @@ services:
       NODE_ENV: production
       DB_DIR: /data
       MEDIA_DIR: /media
+      # gate temporário do /admin enquanto o SSO está desligado
+      ADMIN_PASSWORD: "casadamanicure"
     volumes:
       - data:/data
       - media:/media

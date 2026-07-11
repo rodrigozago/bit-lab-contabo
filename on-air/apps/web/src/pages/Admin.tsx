@@ -1,11 +1,46 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
-import { adminApi, AdminApiError } from '../api'
+import { adminApi, adminKey, AdminApiError } from '../api'
 import type { Slot } from '../types'
 import SlotForm from '../components/SlotForm'
 import { fmtDay, fmtRange } from '../lib/time'
 
+function PasswordGate({ onSubmit }: { onSubmit: (password: string) => void }) {
+  const [password, setPassword] = useState('')
+
+  function handleSubmit(e: FormEvent) {
+    e.preventDefault()
+    if (password) onSubmit(password)
+  }
+
+  return (
+    <main className="flex min-h-dvh items-center justify-center px-4">
+      <form
+        onSubmit={handleSubmit}
+        className="w-full max-w-xs space-y-4 rounded-xl border border-edge bg-surface p-6"
+      >
+        <h1 className="text-lg font-black">Admin — On Air</h1>
+        <input
+          type="password"
+          autoFocus
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="Senha"
+          className="w-full rounded-lg border border-edge bg-background px-3 py-2 text-sm focus:border-accent-bright focus:outline-none"
+        />
+        <button
+          type="submit"
+          className="w-full rounded-lg bg-accent py-2 text-sm font-bold hover:bg-accent-bright"
+        >
+          Entrar
+        </button>
+      </form>
+    </main>
+  )
+}
+
 export default function Admin() {
+  const [authed, setAuthed] = useState(() => adminKey.get() !== null)
   const [slots, setSlots] = useState<Slot[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   // null = sem form; 'new' = criando; Slot = editando
@@ -16,13 +51,31 @@ export default function Admin() {
       setSlots(await adminApi.list())
       setError(null)
     } catch (err) {
+      // senha errada/expirada: volta pro gate
+      if (err instanceof AdminApiError && err.status === 401) {
+        adminKey.clear()
+        setSlots(null)
+        setAuthed(false)
+        return
+      }
       setError(err instanceof AdminApiError ? err.message : 'Erro ao carregar slots')
     }
   }, [])
 
   useEffect(() => {
-    void load()
-  }, [load])
+    if (authed) void load()
+  }, [authed, load])
+
+  if (!authed) {
+    return (
+      <PasswordGate
+        onSubmit={(password) => {
+          adminKey.set(password)
+          setAuthed(true)
+        }}
+      />
+    )
+  }
 
   async function handleDelete(slot: Slot) {
     if (!window.confirm(`Remover o slot de ${slot.artist}?`)) return
@@ -30,6 +83,11 @@ export default function Admin() {
       await adminApi.remove(slot.id)
       void load()
     } catch (err) {
+      if (err instanceof AdminApiError && err.status === 401) {
+        adminKey.clear()
+        setAuthed(false)
+        return
+      }
       setError(err instanceof AdminApiError ? err.message : 'Erro ao remover')
     }
   }

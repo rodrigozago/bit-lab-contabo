@@ -5,9 +5,11 @@ import { v4 as uuid } from 'uuid'
 import db, { MEDIA_DIR, stmts, serializeSlot } from '../db.js'
 import { spWallToUtcIso } from '../time.js'
 
-// Sem código de auth aqui de propósito: /api/admin/* só é alcançável em produção
-// atravessando o auth_request do nginx da VPS (mesmo modelo do ponto-studio).
-// O X-User-Email injetado pela borda vira trilha de auditoria nos logs.
+// Gate temporário: o SSO do bit-lab-auth foi desligado no nginx por enquanto —
+// /api/admin/* exige o header x-admin-key com a senha (ADMIN_PASSWORD).
+// Quando o SSO voltar, remova o hook abaixo e re-ative o auth_request na borda
+// (modelo do ponto-studio); o X-User-Email volta a ser a trilha de auditoria.
+const ADMIN_PASSWORD = process.env['ADMIN_PASSWORD'] ?? 'casadamanicure'
 
 const EXT_BY_MIME: Record<string, string> = {
   'image/jpeg': 'jpg',
@@ -79,6 +81,13 @@ function unlinkPhoto(file: string | null) {
 }
 
 export default async function adminRoutes(app: FastifyInstance) {
+  // escopo do plugin: só vale pras rotas /api/admin/* registradas aqui
+  app.addHook('onRequest', async (req, reply) => {
+    if (req.headers['x-admin-key'] !== ADMIN_PASSWORD) {
+      return reply.code(401).send({ message: 'Senha inválida' })
+    }
+  })
+
   app.get('/api/admin/slots', async () => ({
     slots: stmts.all.all().map(serializeSlot),
   }))
