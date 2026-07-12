@@ -155,7 +155,10 @@ export default function Admin() {
               )}
               <div className="min-w-0 flex-1">
                 <p className="truncate font-bold">{slot.artist}</p>
-                <p className="truncate text-sm text-muted">{slot.genre}</p>
+                <p className="truncate text-sm text-muted">
+                  {slot.genre}
+                  {slot.instagram && ` · ${slot.instagram}`}
+                </p>
               </div>
               <div className="shrink-0 text-right text-sm tabular-nums text-muted">
                 <p className="capitalize">{fmtDay(slot.starts_at)}</p>

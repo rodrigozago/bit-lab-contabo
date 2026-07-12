@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS slots (
   artist      TEXT NOT NULL,
   genre       TEXT NOT NULL,
   image_file  TEXT,               -- nome do arquivo dentro de MEDIA_DIR (slot-<uuid>.<ext>)
+  instagram   TEXT,               -- @usuario ou URL completa (vira QR code na página pública)
   starts_at   TEXT NOT NULL,      -- ISO-8601 UTC
   ends_at     TEXT NOT NULL,      -- ISO-8601 UTC, sempre > starts_at
   created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),

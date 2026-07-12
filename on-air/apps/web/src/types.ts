@@ -3,6 +3,10 @@ export interface Slot {
   artist: string
   genre: string
   image_url: string | null
+  /** como foi cadastrado (@usuario ou URL) — pré-preenche o form do admin */
+  instagram: string | null
+  /** URL completa pro QR code */
+  instagram_url: string | null
   /** ISO UTC — usado pra timers/comparações */
   starts_at: string
   ends_at: string

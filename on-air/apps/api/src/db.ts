@@ -24,11 +24,18 @@ const schemaPath = [
 if (!schemaPath) throw new Error('db/schema.sql não encontrado')
 db.exec(fs.readFileSync(schemaPath, 'utf8'))
 
+// migração pra bancos criados antes da coluna (CREATE IF NOT EXISTS não altera tabela existente)
+const slotCols = db.prepare("PRAGMA table_info(slots)").all() as { name: string }[]
+if (!slotCols.some((c) => c.name === 'instagram')) {
+  db.exec('ALTER TABLE slots ADD COLUMN instagram TEXT')
+}
+
 export interface SlotRow {
   id: number
   artist: string
   genre: string
   image_file: string | null
+  instagram: string | null
   starts_at: string
   ends_at: string
 }
@@ -38,10 +45,20 @@ export interface SlotJson {
   artist: string
   genre: string
   image_url: string | null
+  /** como foi cadastrado (@usuario ou URL) — pré-preenche o form do admin */
+  instagram: string | null
+  /** URL completa pro QR code */
+  instagram_url: string | null
   starts_at: string
   ends_at: string
   starts_at_local: string
   ends_at_local: string
+}
+
+function toInstagramUrl(raw: string | null): string | null {
+  if (!raw) return null
+  if (/^https?:\/\//i.test(raw)) return raw
+  return `https://instagram.com/${raw.replace(/^@/, '')}`
 }
 
 /** Formato que a web consome: URL da foto + horários já na parede de São Paulo. */
@@ -51,6 +68,8 @@ export function serializeSlot(row: SlotRow): SlotJson {
     artist: row.artist,
     genre: row.genre,
     image_url: row.image_file ? `/api/media/${row.image_file}` : null,
+    instagram: row.instagram,
+    instagram_url: toInstagramUrl(row.instagram),
     starts_at: row.starts_at,
     ends_at: row.ends_at,
     starts_at_local: utcIsoToSpWall(row.starts_at),
@@ -73,11 +92,11 @@ export const stmts = {
   overlapping: db.prepare<[string, string, number], { n: number }>(
     'SELECT COUNT(*) AS n FROM slots WHERE starts_at < ? AND ends_at > ? AND id != ?'
   ),
-  insert: db.prepare<[string, string, string | null, string, string]>(
-    'INSERT INTO slots (artist, genre, image_file, starts_at, ends_at) VALUES (?, ?, ?, ?, ?)'
+  insert: db.prepare<[string, string, string | null, string | null, string, string]>(
+    'INSERT INTO slots (artist, genre, image_file, instagram, starts_at, ends_at) VALUES (?, ?, ?, ?, ?, ?)'
   ),
-  update: db.prepare<[string, string, string | null, string, string, number]>(
-    `UPDATE slots SET artist = ?, genre = ?, image_file = ?, starts_at = ?, ends_at = ?,
+  update: db.prepare<[string, string, string | null, string | null, string, string, number]>(
+    `UPDATE slots SET artist = ?, genre = ?, image_file = ?, instagram = ?, starts_at = ?, ends_at = ?,
        updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
      WHERE id = ?`
   ),

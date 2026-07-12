@@ -32,21 +32,24 @@ function Row({ slot, highlight, dim }: { slot: Slot; highlight?: boolean; dim?: 
 }
 
 export default function Timetable({ upcoming, past }: { upcoming: Slot[]; past: Slot[] }) {
-  if (upcoming.length === 0 && past.length === 0) return null
   return (
     <section className="mx-auto w-full max-w-2xl space-y-8 lg:mx-0 lg:max-w-none">
-      {upcoming.length > 0 && (
-        <div>
-          <h2 className="mb-3 text-xs font-semibold uppercase tracking-[0.3em] text-muted">
-            A seguir
-          </h2>
+      <div>
+        <h2 className="mb-3 text-xs font-semibold uppercase tracking-[0.3em] text-muted">
+          A seguir
+        </h2>
+        {upcoming.length > 0 ? (
           <ul className="space-y-2">
             {upcoming.map((slot, i) => (
               <Row key={slot.id} slot={slot} highlight={i === 0} />
             ))}
           </ul>
-        </div>
-      )}
+        ) : (
+          <p className="rounded-xl border border-dashed border-edge px-4 py-3 text-sm text-muted">
+            Nada agendado ainda.
+          </p>
+        )}
+      </div>
       {past.length > 0 && (
         <div>
           <h2 className="mb-3 text-xs font-semibold uppercase tracking-[0.3em] text-muted">

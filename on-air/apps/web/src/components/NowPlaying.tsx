@@ -1,6 +1,21 @@
+import { QRCodeSVG } from 'qrcode.react'
 import type { Slot } from '../types'
 import Vinyl from './Vinyl'
 import { fmtRange } from '../lib/time'
+
+/** "@djfulano" a partir do que foi cadastrado (handle ou URL) */
+function instagramHandle(raw: string): string {
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      const seg = new URL(raw).pathname.split('/').filter(Boolean).pop()
+      if (seg) return `@${seg}`
+    } catch {
+      /* URL inválida: mostra como veio */
+    }
+    return raw
+  }
+  return raw.startsWith('@') ? raw : `@${raw}`
+}
 
 export default function NowPlaying({ slot }: { slot: Slot | null }) {
   return (
@@ -23,6 +38,22 @@ export default function NowPlaying({ slot }: { slot: Slot | null }) {
             <p className="mt-5 text-xl tabular-nums text-muted">
               {fmtRange(slot.starts_at, slot.ends_at)}
             </p>
+            {slot.instagram_url && (
+              <div className="mt-7 flex items-center justify-center gap-4 lg:justify-start">
+                {/* fundo branco pro QR escanear bem no tema escuro */}
+                <div className="shrink-0 rounded-xl bg-white p-2.5">
+                  <QRCodeSVG value={slot.instagram_url} size={112} fgColor="#060b1d" bgColor="#ffffff" />
+                </div>
+                <div className="text-left">
+                  <p className="text-xs font-semibold uppercase tracking-[0.25em] text-muted">
+                    Segue o DJ
+                  </p>
+                  <p className="mt-1 font-bold text-accent-bright">
+                    {instagramHandle(slot.instagram ?? slot.instagram_url)}
+                  </p>
+                </div>
+              </div>
+            )}
           </>
         ) : (
           <>

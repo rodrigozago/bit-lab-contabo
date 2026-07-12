@@ -57,7 +57,8 @@ function parseSlotFields(fields: Record<string, string>) {
   if (ends_at <= starts_at) {
     throw Object.assign(new Error('Horário final precisa ser depois do inicial'), { statusCode: 400 })
   }
-  return { artist, genre, starts_at, ends_at }
+  const instagram = fields['instagram']?.trim() || null
+  return { artist, genre, instagram, starts_at, ends_at }
 }
 
 function assertNoOverlap(starts_at: string, ends_at: string, ignoreId: number) {
@@ -97,7 +98,7 @@ export default async function adminRoutes(app: FastifyInstance) {
     const slot = parseSlotFields(fields)
     assertNoOverlap(slot.starts_at, slot.ends_at, -1)
     const image = photo ? savePhoto(photo) : null
-    const info = stmts.insert.run(slot.artist, slot.genre, image, slot.starts_at, slot.ends_at)
+    const info = stmts.insert.run(slot.artist, slot.genre, image, slot.instagram, slot.starts_at, slot.ends_at)
     req.log.info({ user: req.headers['x-user-email'], slot: info.lastInsertRowid }, 'slot criado')
     const row = stmts.byId.get(Number(info.lastInsertRowid))
     return reply.code(201).send(serializeSlot(row!))
@@ -115,7 +116,7 @@ export default async function adminRoutes(app: FastifyInstance) {
       image = savePhoto(photo)
       unlinkPhoto(existing.image_file)
     }
-    stmts.update.run(slot.artist, slot.genre, image, slot.starts_at, slot.ends_at, id)
+    stmts.update.run(slot.artist, slot.genre, image, slot.instagram, slot.starts_at, slot.ends_at, id)
     req.log.info({ user: req.headers['x-user-email'], slot: id }, 'slot atualizado')
     return serializeSlot(stmts.byId.get(id)!)
   })

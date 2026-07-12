@@ -72,6 +72,16 @@ export default function SlotForm({ slot, onSaved, onCancel }: Props) {
           />
         </div>
         <div className="sm:col-span-2">
+          <label className={labelCls} htmlFor="instagram">Instagram (@usuario ou link — vira QR code na página)</label>
+          <input
+            id="instagram"
+            name="instagram"
+            placeholder="@djfulano"
+            defaultValue={slot?.instagram ?? ''}
+            className={inputCls}
+          />
+        </div>
+        <div className="sm:col-span-2">
           <label className={labelCls} htmlFor="photo">
             Foto {slot?.image_url ? '(deixe vazio pra manter a atual)' : '(opcional)'}
           </label>
