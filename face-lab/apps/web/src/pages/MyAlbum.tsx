@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import type { MyPhoto } from "@face-lab/shared";
 import { api } from "../api";
@@ -14,6 +14,8 @@ export function MyAlbum() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [dialogPhoto, setDialogPhoto] = useState<MyPhoto | null>(null);
+  const [downloading, setDownloading] = useState<{ done: number; total: number } | null>(null);
+  const cancelDownloads = useRef(false);
 
   function load() {
     api<MyPhoto[]>(`/api/my/albums/${id}/photos`).then(setPhotos).catch((e) => setError(String(e.message)));
@@ -31,6 +33,35 @@ export function MyAlbum() {
       setBusy(null);
     }
   }
+
+  // baixa todas as fotos em sequência via webContentLink do Drive (o Drive já
+  // manda Content-Disposition: attachment). Delay entre cliques evita o
+  // bloqueio de múltiplos downloads; o Chrome pede permissão uma vez.
+  // No futuro vira função premium (fotógrafo paga) — por ora liberada.
+  async function downloadAll() {
+    const targets = (photos ?? []).filter((p) => p.webContentLink);
+    if (targets.length === 0) return;
+    cancelDownloads.current = false;
+    setDownloading({ done: 0, total: targets.length });
+
+    for (let i = 0; i < targets.length; i++) {
+      if (cancelDownloads.current) break;
+      const link = targets[i]?.webContentLink;
+      if (!link) continue;
+      const a = document.createElement("a");
+      a.href = link;
+      a.rel = "noreferrer";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setDownloading({ done: i + 1, total: targets.length });
+      if (i < targets.length - 1) await new Promise((r) => setTimeout(r, 1200));
+    }
+    setDownloading(null);
+    if (!cancelDownloads.current) toast.success("Downloads iniciados — confira a pasta de downloads do navegador.");
+  }
+
+  useEffect(() => () => void (cancelDownloads.current = true), []);
 
   async function reject(faceId: string) {
     setBusy(faceId);
@@ -50,8 +81,18 @@ export function MyAlbum() {
         <ChevronLeft className="h-4 w-4" />
         Voltar para Meus Álbuns
       </Link>
-      <h1 className="heading-editorial mt-4">Fotos com você</h1>
-      <p className="mt-1 text-muted-foreground">O quadrado marca qual rosto achamos que é você — confirme ou corrija.</p>
+      <div className="mt-4 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="heading-editorial">Fotos com você</h1>
+          <p className="mt-1 text-muted-foreground">O quadrado marca qual rosto achamos que é você — confirme ou corrija.</p>
+        </div>
+        {photos && photos.some((p) => p.webContentLink) && (
+          <Button variant="outline" onClick={downloadAll} disabled={!!downloading}>
+            <Download size={16} className="mr-2" />
+            {downloading ? `Baixando ${downloading.done}/${downloading.total}…` : "Baixar todas"}
+          </Button>
+        )}
+      </div>
 
       {error && <p className="mt-4 text-sm text-destructive">{error}</p>}
 

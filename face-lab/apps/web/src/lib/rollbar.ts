@@ -11,7 +11,9 @@ const MIN_LEVEL = ((import.meta.env.VITE_ROLLBAR_MIN_LEVEL as string | undefined
 const LEVEL_ORDER: Record<string, number> = { debug: 0, info: 1, warning: 2, error: 3 };
 
 export const rollbarConfig: Rollbar.Configuration = {
-  accessToken: token ?? "",
+  // sem token (dev), o Provider do @rollbar/react exige accessToken não-vazio
+  // (invariant isRollbarInstance) — placeholder + enabled:false evita o crash
+  accessToken: token ?? "dev-disabled",
   enabled: Boolean(token),
   environment: import.meta.env.MODE,
   captureUncaught: true,

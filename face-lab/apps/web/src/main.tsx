@@ -6,6 +6,7 @@ import { Provider as RollbarProvider, ErrorBoundary } from "@rollbar/react";
 import { App } from "./App";
 import { rollbarConfig, installConsoleForwarding } from "./lib/rollbar";
 import "@fontsource-variable/inter";
+import "@fontsource-variable/playfair-display";
 import "./index.css";
 
 // instância criada fora do React pra ligar o console forwarding uma única vez,

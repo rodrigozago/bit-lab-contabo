@@ -158,6 +158,25 @@ CREATE TABLE IF NOT EXISTS matches (
 ALTER TABLE matches ALTER COLUMN distance DROP NOT NULL;
 CREATE INDEX IF NOT EXISTS matches_user_idx ON matches(user_id);
 
+-- portfólio público do fotógrafo (/p/:slug) — 1 página por producer
+CREATE TABLE IF NOT EXISTS producer_pages (
+  owner_id uuid PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  slug text NOT NULL CHECK (slug ~ '^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$'),
+  display_name text NOT NULL,
+  hero_photo_id uuid REFERENCES photos(id) ON DELETE SET NULL,
+  editorial_md text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS producer_pages_slug_idx ON producer_pages (lower(slug));
+
+-- featured_at NULL = privado (default); setado = exibido no portfólio público
+ALTER TABLE albums ADD COLUMN IF NOT EXISTS featured_at timestamptz;
+ALTER TABLE photos ADD COLUMN IF NOT EXISTS featured_at timestamptz;
+-- thumb SEM marca d'água, gerada sob demanda só pras fotos featured (thumbs-clean/)
+ALTER TABLE photos ADD COLUMN IF NOT EXISTS clean_thumb_path text;
+CREATE INDEX IF NOT EXISTS photos_featured_idx ON photos(album_id) WHERE featured_at IS NOT NULL;
+
 -- 1 linha por reconhecimento concluído — base do rate limiting/planos futuros
 CREATE TABLE IF NOT EXISTS usage_events (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

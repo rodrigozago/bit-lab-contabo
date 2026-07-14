@@ -38,12 +38,12 @@ export function Landing() {
 
   return (
     <div className="bg-background">
-      {/* Hero */}
-      <div className="flex min-h-screen flex-col items-center justify-center px-6 text-center">
+      {/* Hero — dark museum (BRAND.md): fundo preto, tipo branco, um momento ouro */}
+      <div className="dark-museum flex min-h-screen flex-col items-center justify-center bg-background px-6 text-center text-foreground">
         <div className="w-full max-w-2xl">
           <h1 className="text-7xl font-extrabold tracking-tighter text-foreground sm:text-8xl">FACE LAB</h1>
           <p className="mt-4 text-lg text-muted-foreground sm:text-xl">
-            Encontre suas fotos em todos os eventos. Automaticamente.
+            Encontre suas fotos em todos os eventos. <span className="text-accent">Automaticamente.</span>
           </p>
           <div className="mt-10">
             <Button asChild size="lg">

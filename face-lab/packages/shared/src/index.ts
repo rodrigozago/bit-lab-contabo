@@ -41,6 +41,9 @@ export interface AlbumSummary {
   faceCount: number;
   peopleCount: number;
   watermarkEnabled: boolean;
+  // exibido no portfólio público (/p/:slug) quando true
+  featured: boolean;
+  featuredPhotoCount: number;
   scannedAt: string | null;
   createdAt: string;
 }
@@ -62,6 +65,9 @@ export interface PhotoItem {
   webContentLink: string | null;
   faceCount: number;
   takenAt: string | null;
+  // destaque no portfólio público + se a thumb sem marca d'água já foi gerada
+  featured: boolean;
+  hasCleanThumb: boolean;
 }
 
 export interface ScanStatus {
@@ -136,6 +142,47 @@ export interface AllAlbumPhoto {
   faces: AllAlbumFace[];
 }
 
+// ── Portfólio público do fotógrafo (/p/:slug) ──────────────────────────────────
+
+// configurações da página, lado producer (GET/PUT /api/producer/page)
+export interface ProducerPageSettings {
+  slug: string;
+  displayName: string;
+  heroPhotoId: string | null;
+  heroUrl: string | null;
+  editorialMd: string | null;
+}
+
+export interface PublicAlbumCard {
+  id: string;
+  name: string;
+  featuredImageUrl: string | null;
+  featuredPhotoCount: number;
+}
+
+export interface PublicPage {
+  slug: string;
+  displayName: string;
+  heroUrl: string | null;
+  editorialMd: string | null;
+  albums: PublicAlbumCard[];
+}
+
+export interface PublicPhoto {
+  id: string;
+  url: string;
+  width: number | null;
+  height: number | null;
+}
+
+export interface PublicAlbum {
+  id: string;
+  name: string;
+  displayName: string;
+  slug: string;
+  photos: PublicPhoto[];
+}
+
 export interface AdminUser {
   id: string;
   email: string;
@@ -172,6 +219,9 @@ export interface RegenThumbJob {
   photoId: string;
   imagePath: string;
   watermark: boolean;
+  // "clean" = thumb sem marca d'água em thumbs-clean/ (fotos featured do portfólio);
+  // ausente = regen normal em thumbs/
+  variant?: "clean";
 }
 
 export type WorkerJob = ProcessPhotoJob | EnrollJob | RegenThumbJob;
@@ -209,6 +259,8 @@ export interface ThumbRegeneratedResult {
   status: "done" | "error";
   error?: string;
   thumbPath?: string;
+  // ecoa o variant do job — decide se atualiza thumb_path ou clean_thumb_path
+  variant?: "clean";
 }
 
 export type WorkerResult = PhotoFacesResult | EnrollmentResult | ThumbRegeneratedResult;

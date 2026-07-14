@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { toast } from "sonner";
 import { Bot, Check, Loader2 } from "lucide-react";
@@ -78,9 +79,14 @@ export function Producer() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="heading-editorial">Producer</h1>
-        <p className="mt-1 text-muted-foreground">Crie e gerencie seus álbuns a partir do Google Drive.</p>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="heading-editorial">Producer</h1>
+          <p className="mt-1 text-muted-foreground">Crie e gerencie seus álbuns a partir do Google Drive.</p>
+        </div>
+        <Button asChild variant="outline">
+          <Link to="/producer/page">Página pública</Link>
+        </Button>
       </div>
 
       <Card>
@@ -140,21 +146,19 @@ export function Producer() {
               </div>
 
               <label className="flex items-start gap-3 text-sm">
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={watermark}
-                  onChange={(e) => setWatermark(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 shrink-0"
+                  onCheckedChange={(v) => setWatermark(v === true)}
+                  className="mt-0.5"
                 />
                 Marca d'água nas miniaturas (dá pra ligar/desligar depois)
               </label>
 
               <label className="flex items-start gap-3 text-sm">
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={guestConsent}
-                  onChange={(e) => setGuestConsent(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 shrink-0"
+                  onCheckedChange={(v) => setGuestConsent(v === true)}
+                  className="mt-0.5"
                   required
                 />
                 Confirmo que informei os convidados deste evento sobre o uso de reconhecimento facial nas fotos

@@ -45,13 +45,16 @@ async function handleResult(message: string): Promise<void> {
 // nunca mexe em faces/matches/"Sou eu" já confirmados
 async function handleThumbRegenResult(result: ThumbRegeneratedResult): Promise<void> {
   const { photoId } = result;
-  await unlink(join(config.mediaDir, "incoming", `${photoId}.img`)).catch(() => {});
+  const suffix = result.variant === "clean" ? ".clean.img" : ".img";
+  await unlink(join(config.mediaDir, "incoming", `${photoId}${suffix}`)).catch(() => {});
 
   if (result.status === "error") {
     console.error(`[jobQueue] regen_thumb falhou pra foto ${photoId}: ${result.error}`);
     return;
   }
-  await pool.query(`UPDATE photos SET thumb_path = $2 WHERE id = $1`, [photoId, result.thumbPath ?? null]);
+  // variant "clean" alimenta clean_thumb_path (portfólio público, sem marca d'água)
+  const column = result.variant === "clean" ? "clean_thumb_path" : "thumb_path";
+  await pool.query(`UPDATE photos SET ${column} = $2 WHERE id = $1`, [photoId, result.thumbPath ?? null]);
 }
 
 async function handlePhotoResult(result: PhotoFacesResult): Promise<void> {

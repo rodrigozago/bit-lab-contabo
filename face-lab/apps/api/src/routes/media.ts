@@ -66,7 +66,13 @@ export async function mediaRoutes(app: FastifyInstance): Promise<void> {
   });
 }
 
-async function sendWebp(reply: import("fastify").FastifyReply, absPath: string) {
+// exportado: routes/public.ts reusa pro portfólio (com Cache-Control público,
+// já que lá o acesso é whitelisted por design, não por sessão)
+export async function sendWebp(
+  reply: import("fastify").FastifyReply,
+  absPath: string,
+  cacheControl = "private, max-age=3600"
+) {
   try {
     await stat(absPath);
   } catch {
@@ -79,6 +85,6 @@ async function sendWebp(reply: import("fastify").FastifyReply, absPath: string) 
   // é garantia contra uma CDN configurada pra "cache everything" por extensão.
   return reply
     .type("image/webp")
-    .header("Cache-Control", "private, max-age=3600")
+    .header("Cache-Control", cacheControl)
     .send(createReadStream(absPath));
 }

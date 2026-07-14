@@ -1,29 +1,57 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-/* ── Design tokens — tema LIGHT único, minimalista (ref: image-refs/) ────────── */
+/* ── Design tokens — BRAND.md (Zentiq gallery posture, tema LIGHT) ──────────── */
 :root {
-  --background: #ffffff;
-  --foreground: #111111;
-  --card: #ffffff;
-  --card-foreground: #111111;
-  --popover: #ffffff;
-  --popover-foreground: #111111;
-  --primary: #111111;            /* botões pretos, texto branco */
+  --background: #fafaf9;
+  --foreground: #1a1a1a;
+  --card: #fafaf9;
+  --card-foreground: #1a1a1a;
+  --popover: #fafaf9;
+  --popover-foreground: #1a1a1a;
+  --primary: #1a1a1a;            /* botões pretos, texto branco (posture Zentiq) */
   --primary-foreground: #ffffff;
   --secondary: #f5f5f5;
-  --secondary-foreground: #111111;
+  --secondary-foreground: #1a1a1a;
   --muted: #f5f5f5;
-  --muted-foreground: #737373;
-  --accent: #f5f5f5;
-  --accent-foreground: #111111;
-  --destructive: #dc2626;
+  --muted-foreground: #8a8a8a;
+  --accent: #d4a574;             /* ouro sofisticado — alto sinal, use com restrição */
+  --accent-foreground: #1a1a1a;
+  --accent-hover: #8b7355;
+  --accent-light: #e8d4c0;
+  --accent-secondary: #4a6fa5;   /* azul sofisticado — links, ações secundárias */
+  --accent-secondary-foreground: #ffffff;
+  --destructive: #a94442;
   --destructive-foreground: #ffffff;
-  --border: #e5e5e5;
-  --input: #e5e5e5;
-  --ring: #111111;
-  --radius: 0.375rem;
-  --ok: #16a34a;
+  --success: #2d5016;
+  --success-light: #7cb342;
+  --free-badge: #d1fae5;
+  --free-badge-foreground: #065f46;
+  --border: #d0d0d0;
+  --input: #d0d0d0;
+  --ring: #1a1a1a;
+  --radius: 0rem;                /* cantos retos em tudo (posture Zentiq sharp) */
+  --overlay: rgba(0, 0, 0, 0.7);
+}
+
+/* dark museum — heroes de marketing; sobrescreve as vars dentro do escopo */
+.dark-museum {
+  /* cor herdada acompanha o escopo — sem isso, texto/outline ficam invisíveis */
+  color: var(--foreground);
+  --background: #1a1a1a;
+  --foreground: #ffffff;
+  --card: #2a2a2a;
+  --card-foreground: #ffffff;
+  --secondary: #2a2a2a;
+  --secondary-foreground: #ffffff;
+  --muted: #2a2a2a;
+  --muted-foreground: #a0a0a0;
+  --border: #404040;
+  --input: #404040;
+  --primary: #ffffff;
+  --primary-foreground: #1a1a1a;
+  --ring: #d4a574;
+  --destructive: #d98c8a;
 }
 
 @theme inline {
@@ -41,17 +69,29 @@
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-light: var(--accent-light);
+  --color-accent-secondary: var(--accent-secondary);
+  --color-accent-secondary-foreground: var(--accent-secondary-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-light: var(--success-light);
+  --color-free-badge: var(--free-badge);
+  --color-free-badge-foreground: var(--free-badge-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --color-ok: var(--ok);
-  --radius-sm: calc(var(--radius) - 2px);
-  --radius-md: var(--radius);
-  --radius-lg: calc(var(--radius) + 2px);
-  --radius-xl: calc(var(--radius) + 6px);
+  --color-overlay: var(--overlay);
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
   --font-sans: "Inter Variable", system-ui, -apple-system, sans-serif;
+  /* serif editorial — títulos sobre foto nos gallery cards (ref Zentiq) */
+  --font-serif: "Playfair Display Variable", Georgia, "Times New Roman", serif;
+  /* reservado p/ preços/códigos (v0.2 commerce) — fonte não carregada ainda */
+  --font-mono: "Fira Code", ui-monospace, SFMono-Regular, monospace;
 }
 
 @layer base {
@@ -67,7 +107,23 @@
   }
 }
 
+/* letreiro do portfólio público: a track tem 4 cópias do texto; animar de
+   -50% até 0 move duas cópias inteiras → loop seamless da ESQUERDA pra DIREITA */
+@keyframes marquee-ltr {
+  from { transform: translateX(-50%); }
+  to { transform: translateX(0); }
+}
+
 @layer components {
+  .marquee-track {
+    animation: marquee-ltr 18s linear infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .marquee-track {
+      animation: none;
+    }
+  }
+
   /* título de página — grande e leve, contraste de propósito com o logo (bold/tight) */
   .heading-editorial {
     font-weight: 400;
@@ -81,4 +137,3 @@
     }
   }
 }
-

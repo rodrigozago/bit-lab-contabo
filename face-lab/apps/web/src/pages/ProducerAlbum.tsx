@@ -3,9 +3,10 @@ import { Link, useParams } from "react-router-dom";
 import type { AlbumSummary, PersonSummary, PhotoItem, ScanStatus } from "@face-lab/shared";
 import { api } from "../api";
 import { toast } from "sonner";
-import { ChevronLeft, Loader2, RefreshCw, X } from "lucide-react";
+import { ChevronLeft, Loader2, RefreshCw, Sparkles, Star, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -29,6 +30,8 @@ export function ProducerAlbum() {
   const [dialogPhoto, setDialogPhoto] = useState<PhotoItem | null>(null);
   const [confirmWatermark, setConfirmWatermark] = useState(false);
   const [watermarkBusy, setWatermarkBusy] = useState(false);
+  const [featuredBusy, setFeaturedBusy] = useState(false);
+  const [processingClean, setProcessingClean] = useState(false);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
   const personRef = useRef<string | null>(null);
   personRef.current = personId;
@@ -111,6 +114,57 @@ export function ProducerAlbum() {
     }
   }
 
+  // exibir/ocultar o álbum no portfólio público (/p/:slug)
+  async function toggleFeaturedAlbum(next: boolean) {
+    if (!album) return;
+    setFeaturedBusy(true);
+    const prev = album;
+    setAlbum({ ...album, featured: next });
+    try {
+      await api(`/api/albums/${id}`, { method: "PATCH", body: JSON.stringify({ featured: next }) });
+      toast.success(next ? "Álbum publicado no portfólio." : "Álbum removido do portfólio.");
+    } catch (err) {
+      setAlbum(prev);
+      toast.error("Não deu pra atualizar", { description: (err as Error).message });
+    } finally {
+      setFeaturedBusy(false);
+    }
+  }
+
+  // marca/desmarca a foto como destaque do portfólio (otimista)
+  async function toggleFeaturedPhoto(photo: PhotoItem) {
+    const next = !photo.featured;
+    setPhotos((ps) => ps?.map((p) => (p.id === photo.id ? { ...p, featured: next, hasCleanThumb: next && p.hasCleanThumb } : p)) ?? null);
+    setAlbum((a) => (a ? { ...a, featuredPhotoCount: a.featuredPhotoCount + (next ? 1 : -1) } : a));
+    try {
+      await api(`/api/albums/${id}/photos/${photo.id}/feature`, {
+        method: "POST",
+        body: JSON.stringify({ featured: next }),
+      });
+    } catch (err) {
+      setPhotos((ps) => ps?.map((p) => (p.id === photo.id ? { ...p, featured: photo.featured, hasCleanThumb: photo.hasCleanThumb } : p)) ?? null);
+      setAlbum((a) => (a ? { ...a, featuredPhotoCount: a.featuredPhotoCount + (next ? -1 : 1) } : a));
+      toast.error("Não deu pra atualizar destaque", { description: (err as Error).message });
+    }
+  }
+
+  async function processFeatured() {
+    setProcessingClean(true);
+    try {
+      await api(`/api/albums/${id}/process-featured`, { method: "POST", body: JSON.stringify({}) });
+      toast.success("Processando destaques sem marca d'água.", {
+        description: "As fotos aparecem limpas no portfólio em instantes.",
+      });
+      setTimeout(() => loadPhotos(), 5000);
+    } catch (err) {
+      toast.error("Não deu pra processar", { description: (err as Error).message });
+    } finally {
+      setProcessingClean(false);
+    }
+  }
+
+  const featuredCount = album?.featuredPhotoCount ?? 0;
+  const pendingClean = photos?.filter((p) => p.featured && !p.hasCleanThumb).length ?? 0;
   const pct = status && status.total > 0 ? Math.round((status.done / status.total) * 100) : 0;
 
   return (
@@ -125,16 +179,39 @@ export function ProducerAlbum() {
       </div>
 
       {album && (
-        <label className="mt-3 flex w-fit items-center gap-2 text-sm text-muted-foreground">
-          <input
-            type="checkbox"
-            checked={album.watermarkEnabled}
-            onChange={requestToggleWatermark}
-            disabled={watermarkBusy}
-            className="h-4 w-4"
-          />
-          Marca d'água nas miniaturas
-        </label>
+        <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-2">
+          <label className="flex w-fit items-center gap-2 text-sm text-muted-foreground">
+            <Checkbox
+              checked={album.watermarkEnabled}
+              onCheckedChange={requestToggleWatermark}
+              disabled={watermarkBusy}
+            />
+            Marca d'água nas miniaturas
+          </label>
+          <label className="flex w-fit items-center gap-2 text-sm text-muted-foreground">
+            <Checkbox
+              checked={album.featured}
+              onCheckedChange={(v) => toggleFeaturedAlbum(v === true)}
+              disabled={featuredBusy}
+            />
+            Exibir no portfólio público
+          </label>
+        </div>
+      )}
+
+      {/* barra de destaques: contador + processamento sem marca d'água */}
+      {album?.featured && (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border bg-secondary/50 p-4">
+          <p className="text-sm text-muted-foreground">
+            <Star className="mr-1 inline h-4 w-4 text-accent" />
+            {featuredCount} foto{featuredCount === 1 ? "" : "s"} em destaque no portfólio
+            {pendingClean > 0 && ` · ${pendingClean} aguardando versão sem marca d'água`}
+          </p>
+          <Button size="sm" variant="outline" onClick={processFeatured} disabled={processingClean || pendingClean === 0}>
+            {processingClean ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+            Processar sem marca d'água
+          </Button>
+        </div>
       )}
 
       {status && (
@@ -168,7 +245,7 @@ export function ProducerAlbum() {
                 type="button"
                 onClick={() => selectPerson(pe.id)}
                 title={`${pe.faceCount} rosto(s)`}
-                className={`flex items-center gap-2 rounded-full border py-1 pl-1 pr-3 text-sm transition-colors hover:bg-secondary ${
+                className={`flex items-center gap-2 rounded-none border py-1 pl-1 pr-3 text-sm transition-colors hover:bg-secondary ${
                   personId === pe.id ? "border-foreground bg-secondary" : ""
                 }`}
               >
@@ -203,8 +280,19 @@ export function ProducerAlbum() {
                 <div className="aspect-[4/3] w-full" />
               )}
             </button>
-            <figcaption className="mt-2 flex items-center justify-between gap-2 text-xs text-muted-foreground">
-              <span className="truncate">{p.name}</span>
+            <figcaption className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
+              {p.status === "done" && (
+                <Button
+                  size="icon-sm"
+                  variant="ghost"
+                  title={p.featured ? "Remover destaque do portfólio" : "Destacar no portfólio"}
+                  onClick={() => toggleFeaturedPhoto(p)}
+                >
+                  <Star size={14} className={p.featured ? "fill-accent text-accent" : ""} />
+                </Button>
+              )}
+              <span className="min-w-0 flex-1 truncate">{p.name}</span>
+              {p.featured && p.hasCleanThumb && <Badge variant="premium">sem marca</Badge>}
               <PhotoBadge photo={p} />
             </figcaption>
           </figure>

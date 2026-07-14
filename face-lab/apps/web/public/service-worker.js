@@ -1,4 +1,4 @@
-const CACHE_NAME = 'face-lab-v1';
+const CACHE_NAME = 'face-lab-v2';
 const STATIC_ASSETS = [
   '/',
   '/index.html',

@@ -14,6 +14,8 @@ import { galleryRoutes } from "./routes/gallery.js";
 import { mediaRoutes } from "./routes/media.js";
 import { adminRoutes } from "./routes/admin.js";
 import { notificationRoutes } from "./routes/notifications.js";
+import { producerPageRoutes } from "./routes/producerPage.js";
+import { publicRoutes } from "./routes/public.js";
 import { runRetentionSweep } from "./services/retention.js";
 import { rollbar, installConsoleForwarding } from "./services/rollbar.js";
 
@@ -22,7 +24,7 @@ async function main(): Promise<void> {
   installConsoleForwarding();
 
   await migrate();
-  for (const dir of ["incoming", "thumbs", "crops", "enroll"]) {
+  for (const dir of ["incoming", "thumbs", "thumbs-clean", "crops", "enroll"]) {
     await mkdir(join(config.mediaDir, dir), { recursive: true });
   }
   await startResultListener();
@@ -69,6 +71,8 @@ async function main(): Promise<void> {
   await app.register(mediaRoutes);
   await app.register(adminRoutes);
   await app.register(notificationRoutes);
+  await app.register(producerPageRoutes);
+  await app.register(publicRoutes);
 
   await app.listen({ port: config.port, host: "0.0.0.0" });
   console.log(`face-lab-api rodando em http://0.0.0.0:${config.port}`);

@@ -167,26 +167,34 @@ def process_photo(photo_id: str, image_path: str, watermark: bool = False) -> di
     }
 
 
-def _save_thumb(photo_id: str, img: Image.Image, watermark: bool) -> str:
-    thumbs_dir = MEDIA_DIR / "thumbs"
+def _save_thumb(photo_id: str, img: Image.Image, watermark: bool, subdir: str = "thumbs") -> str:
+    thumbs_dir = MEDIA_DIR / subdir
     thumbs_dir.mkdir(parents=True, exist_ok=True)
     thumb = img.copy()
     thumb.thumbnail((THUMB_SIZE, THUMB_SIZE), Image.LANCZOS)
     if watermark:
         thumb = apply_watermark(thumb)
-    thumb_rel = f"thumbs/{photo_id}.webp"
+    thumb_rel = f"{subdir}/{photo_id}.webp"
     thumb.save(MEDIA_DIR / thumb_rel, "WEBP", quality=80)
     return thumb_rel
 
 
-def regenerate_thumb(photo_id: str, image_path: str, watermark: bool) -> dict:
+def regenerate_thumb(photo_id: str, image_path: str, watermark: bool, variant: str | None = None) -> dict:
     """
     Rebate só a miniatura (producer ligou/desligou a marca d'água) — SEM rodar
     detecção facial, então não mexe em faces/matches/"Sou eu" já confirmados.
+
+    variant="clean": thumb SEM marca d'água em thumbs-clean/ (fotos featured do
+    portfólio público). O variant é ecoado no resultado pra API saber qual
+    coluna atualizar (thumb_path vs clean_thumb_path).
     """
     img = _load_image(image_path)
-    thumb_rel = _save_thumb(photo_id, img, watermark)
-    return {"thumbPath": thumb_rel}
+    subdir = "thumbs-clean" if variant == "clean" else "thumbs"
+    thumb_rel = _save_thumb(photo_id, img, watermark, subdir=subdir)
+    result = {"thumbPath": thumb_rel}
+    if variant:
+        result["variant"] = variant
+    return result
 
 
 def enroll(frame_dir: str) -> dict:

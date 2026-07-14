@@ -148,3 +148,51 @@ async function runThumbRegen(albumId: string, ownerId: string, watermark: boolea
     }
   }
 }
+
+/**
+ * Gera thumbs SEM marca d'água (thumbs-clean/) só pras fotos FEATURED do álbum
+ * que ainda não têm clean_thumb_path — alimenta o portfólio público (/p/:slug).
+ * Mesmo desenho do runThumbRegen; variant "clean" faz o resultado atualizar
+ * clean_thumb_path em vez de thumb_path.
+ */
+export function startCleanThumbRegen(albumId: string, ownerId: string): void {
+  if (running.has(albumId)) return;
+  running.add(albumId);
+  void runCleanThumbRegen(albumId, ownerId)
+    .catch((err) => console.error(`[clean-thumb] álbum ${albumId} falhou:`, err))
+    .finally(() => running.delete(albumId));
+}
+
+async function runCleanThumbRegen(albumId: string, ownerId: string): Promise<void> {
+  const { rows } = await pool.query(
+    `SELECT id, drive_file_id FROM photos
+     WHERE album_id = $1 AND status = 'done' AND featured_at IS NOT NULL AND clean_thumb_path IS NULL
+     ORDER BY created_at`,
+    [albumId]
+  );
+  if (rows.length === 0) return;
+  console.log(`[clean-thumb] álbum ${albumId}: ${rows.length} destaque(s) a processar sem marca d'água`);
+
+  const incomingDir = join(config.mediaDir, "incoming");
+  await mkdir(incomingDir, { recursive: true });
+
+  let token = await getAccessToken(ownerId);
+  let tokenIssuedAt = Date.now();
+
+  for (const photo of rows) {
+    await waitForPhotoSlot(ownerId);
+    if (Date.now() - tokenIssuedAt > 45 * 60_000) {
+      token = await getAccessToken(ownerId);
+      tokenIssuedAt = Date.now();
+    }
+
+    // sufixo .clean.img: não colide com um regen normal concorrente da mesma foto
+    const destPath = join(incomingDir, `${photo.id}.clean.img`);
+    try {
+      await downloadFile(token, photo.drive_file_id, destPath);
+      await enqueue({ type: "regen_thumb", photoId: photo.id, imagePath: destPath, watermark: false, variant: "clean" });
+    } catch (err) {
+      console.error(`[clean-thumb] download falhou (photo ${photo.id}):`, err);
+    }
+  }
+}

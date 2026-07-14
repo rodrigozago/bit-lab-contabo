@@ -7,7 +7,7 @@ import { config } from "../config.js";
 import { requireProducer } from "../guards.js";
 import { getAccessToken } from "../services/googleOAuth.js";
 import { parseFolderId, getFolderInfo } from "../services/drive.js";
-import { startScan, isScanning, startThumbRegen } from "../services/scanOrchestrator.js";
+import { startScan, isScanning, startThumbRegen, startCleanThumbRegen } from "../services/scanOrchestrator.js";
 
 async function ownedAlbum(albumId: string, ownerId: string, isAdmin: boolean) {
   const { rows } = await pool.query(
@@ -18,9 +18,10 @@ async function ownedAlbum(albumId: string, ownerId: string, isAdmin: boolean) {
 }
 
 const ALBUM_SUMMARY_SQL = `
-  SELECT a.id, a.name, a.status, a.error, a.drive_folder_id, a.watermark_enabled, a.scanned_at, a.created_at,
+  SELECT a.id, a.name, a.status, a.error, a.drive_folder_id, a.watermark_enabled, a.featured_at, a.scanned_at, a.created_at,
          COUNT(p.id)::int AS photo_count,
          COUNT(p.id) FILTER (WHERE p.status = 'done')::int AS done_count,
+         COUNT(p.id) FILTER (WHERE p.featured_at IS NOT NULL)::int AS featured_photo_count,
          COALESCE(SUM(fc.n), 0)::int AS face_count,
          (SELECT COUNT(*)::int FROM people pe WHERE pe.album_id = a.id) AS people_count
   FROM albums a
@@ -40,6 +41,8 @@ function toAlbumSummary(row: Record<string, unknown>): AlbumSummary {
     faceCount: Number(row["face_count"]),
     peopleCount: Number(row["people_count"]),
     watermarkEnabled: Boolean(row["watermark_enabled"]),
+    featured: row["featured_at"] != null,
+    featuredPhotoCount: Number(row["featured_photo_count"] ?? 0),
     scannedAt: row["scanned_at"] ? new Date(row["scanned_at"] as string).toISOString() : null,
     createdAt: new Date(row["created_at"] as string).toISOString(),
   };
@@ -119,17 +122,26 @@ export async function albumRoutes(app: FastifyInstance): Promise<void> {
     const user = await requireProducer(req, reply);
     if (!user) return;
     const { id } = req.params as { id: string };
-    const { name, watermarkEnabled } = (req.body ?? {}) as { name?: string; watermarkEnabled?: boolean };
+    const { name, watermarkEnabled, featured } = (req.body ?? {}) as {
+      name?: string;
+      watermarkEnabled?: boolean;
+      featured?: boolean;
+    };
     if (name !== undefined && !name.trim()) return reply.status(400).send({ ok: false, error: "name não pode ser vazio" });
-    if (name === undefined && watermarkEnabled === undefined) {
+    if (name === undefined && watermarkEnabled === undefined && featured === undefined) {
       return reply.status(400).send({ ok: false, error: "nada pra atualizar" });
     }
     const album = await ownedAlbum(id, user.id, user.role === "admin");
     if (!album) return reply.status(404).send({ ok: false, error: "álbum não encontrado" });
 
+    // featured é tri-state (true seta, false limpa, undefined mantém) — CASE, não COALESCE
     await pool.query(
-      `UPDATE albums SET name = COALESCE($2, name), watermark_enabled = COALESCE($3, watermark_enabled) WHERE id = $1`,
-      [id, name?.trim() ?? null, watermarkEnabled ?? null]
+      `UPDATE albums SET name = COALESCE($2, name), watermark_enabled = COALESCE($3, watermark_enabled),
+              featured_at = CASE WHEN $4::boolean IS NULL THEN featured_at
+                                 WHEN $4::boolean THEN COALESCE(featured_at, now())
+                                 ELSE NULL END
+       WHERE id = $1`,
+      [id, name?.trim() ?? null, watermarkEnabled ?? null, featured ?? null]
     );
 
     // marca d'água é bakeada no arquivo — só reflete quando as miniaturas já
@@ -239,6 +251,7 @@ export async function albumRoutes(app: FastifyInstance): Promise<void> {
     }
     const { rows } = await pool.query(
       `SELECT p.id, p.name, p.status, p.thumb_path, p.web_view_link, p.web_content_link, p.taken_at,
+              p.featured_at, p.clean_thumb_path,
               (SELECT COUNT(*)::int FROM faces f WHERE f.photo_id = p.id) AS face_count
        FROM photos p WHERE p.album_id = $1 ${personFilter} ORDER BY p.taken_at NULLS LAST, p.name`,
       params
@@ -252,7 +265,55 @@ export async function albumRoutes(app: FastifyInstance): Promise<void> {
       webContentLink: r.web_content_link,
       faceCount: r.face_count,
       takenAt: r.taken_at ? new Date(r.taken_at).toISOString() : null,
+      featured: r.featured_at != null,
+      hasCleanThumb: r.clean_thumb_path != null,
     }));
     return { ok: true, data: photos };
+  });
+
+  // marca/desmarca uma foto como destaque do portfólio público. Desfeaturar
+  // apaga a thumb sem marca d'água do disco e limpa clean_thumb_path.
+  app.post("/api/albums/:id/photos/:photoId/feature", async (req, reply) => {
+    const user = await requireProducer(req, reply);
+    if (!user) return;
+    const { id, photoId } = req.params as { id: string; photoId: string };
+    const { featured } = (req.body ?? {}) as { featured?: boolean };
+    if (typeof featured !== "boolean") {
+      return reply.status(400).send({ ok: false, error: "featured (boolean) é obrigatório" });
+    }
+    const album = await ownedAlbum(id, user.id, user.role === "admin");
+    if (!album) return reply.status(404).send({ ok: false, error: "álbum não encontrado" });
+
+    const { rows } = await pool.query(
+      `SELECT id, status, clean_thumb_path FROM photos WHERE id = $1 AND album_id = $2`,
+      [photoId, id]
+    );
+    const photo = rows[0];
+    if (!photo) return reply.status(404).send({ ok: false, error: "foto não encontrada" });
+    if (featured && photo.status !== "done") {
+      return reply.status(400).send({ ok: false, error: "só fotos processadas podem ser destaque" });
+    }
+
+    if (featured) {
+      await pool.query(`UPDATE photos SET featured_at = COALESCE(featured_at, now()) WHERE id = $1`, [photoId]);
+    } else {
+      if (photo.clean_thumb_path) {
+        await unlink(join(config.mediaDir, photo.clean_thumb_path)).catch(() => {});
+      }
+      await pool.query(`UPDATE photos SET featured_at = NULL, clean_thumb_path = NULL WHERE id = $1`, [photoId]);
+    }
+    return { ok: true, data: null };
+  });
+
+  // gera as thumbs sem marca d'água das fotos featured (portfólio público)
+  app.post("/api/albums/:id/process-featured", async (req, reply) => {
+    const user = await requireProducer(req, reply);
+    if (!user) return;
+    const { id } = req.params as { id: string };
+    const album = await ownedAlbum(id, user.id, user.role === "admin");
+    if (!album) return reply.status(404).send({ ok: false, error: "álbum não encontrado" });
+    if (isScanning(id)) return { ok: true, data: { started: false, reason: "processamento já em andamento" } };
+    startCleanThumbRegen(id, album.owner_id);
+    return { ok: true, data: { started: true } };
   });
 }

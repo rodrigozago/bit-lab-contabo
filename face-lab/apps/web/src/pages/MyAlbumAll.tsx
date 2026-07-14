@@ -69,7 +69,7 @@ export function MyAlbumAll() {
               </button>
               <figcaption className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
                 {allClaimed ? (
-                  <span className="flex items-center gap-1 font-medium text-ok">
+                  <span className="flex items-center gap-1 font-medium text-success">
                     <Check size={13} /> Você
                   </span>
                 ) : onlyUnclaimed ? (

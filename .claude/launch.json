@@ -6,6 +6,18 @@
       "runtimeExecutable": "npx",
       "runtimeArgs": ["-y", "pnpm@9.15.4", "-C", "on-air", "--filter", "@on-air/web", "dev"],
       "port": 5173
+    },
+    {
+      "name": "face-lab-web",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["-y", "pnpm@9.15.4", "-C", "face-lab", "--filter", "@face-lab/web", "dev"],
+      "port": 5173
+    },
+    {
+      "name": "face-lab-storybook",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["-y", "pnpm@9.15.4", "-C", "face-lab", "--filter", "@face-lab/web", "storybook"],
+      "port": 6006
     }
   ]
 }

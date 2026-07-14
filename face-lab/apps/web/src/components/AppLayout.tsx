@@ -37,7 +37,7 @@ function MainNav({ onNavigate }: { onNavigate?: () => void }) {
           onClick={onNavigate}
           className={({ isActive }) =>
             `w-fit text-[13px] uppercase tracking-widest transition-colors hover:text-foreground ${
-              isActive ? "border-b border-foreground pb-1 text-foreground" : "text-neutral-500"
+              isActive ? "border-b border-foreground pb-1 text-foreground" : "text-muted-foreground"
             }`
           }
         >
@@ -65,20 +65,20 @@ function UserFooter() {
   }
   return (
     <div className="text-sm">
-      <div className="truncate text-neutral-500" title={me.email}>
+      <div className="truncate text-muted-foreground" title={me.email}>
         {me.email}
       </div>
       <button
         type="button"
         onClick={logout}
-        className="mt-2 inline-flex items-center gap-1.5 text-neutral-500 transition-colors hover:text-foreground"
+        className="mt-2 inline-flex items-center gap-1.5 text-muted-foreground transition-colors hover:text-foreground"
       >
         <LogOut className="h-3.5 w-3.5" /> Sair
       </button>
-      <div className="mt-4 flex gap-3 text-[11px] text-neutral-400">
-        <Link to="/resources" className="hover:text-neutral-600">Documentação</Link>
-        <Link to="/terms" className="hover:text-neutral-600">Termos</Link>
-        <Link to="/privacy" className="hover:text-neutral-600">Privacidade</Link>
+      <div className="mt-4 flex gap-3 text-[11px] text-muted-foreground">
+        <Link to="/resources" className="hover:text-foreground">Documentação</Link>
+        <Link to="/terms" className="hover:text-foreground">Termos</Link>
+        <Link to="/privacy" className="hover:text-foreground">Privacidade</Link>
       </div>
     </div>
   );

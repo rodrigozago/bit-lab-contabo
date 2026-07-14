@@ -32,7 +32,7 @@ function ClickableFaceBox({
       onClick={() => onSelect?.(face.faceId)}
       className={cn(
         "group absolute border-2 transition-colors",
-        face.claimed ? "cursor-default border-ok bg-ok/10" : "cursor-pointer border-primary/70 hover:bg-primary/10"
+        face.claimed ? "cursor-default border-accent bg-accent/10" : "cursor-pointer border-accent-secondary/70 hover:bg-accent-secondary/10"
       )}
       style={{
         left: `${(face.bbox.x / width) * 100}%`,

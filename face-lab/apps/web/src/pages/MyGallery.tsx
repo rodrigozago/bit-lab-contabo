@@ -4,6 +4,7 @@ import type { MyAlbum as MyAlbumType } from "@face-lab/shared";
 import { api } from "../api";
 import { useAuth } from "../App";
 import { Button } from "@/components/ui/button";
+import { GalleryCard } from "@/components/GalleryCard";
 import { AlertTriangle } from "lucide-react";
 
 export function MyGallery() {
@@ -45,36 +46,21 @@ export function MyGallery() {
           </div>
         )}
 
-        {/* capa sem moldura + texto puro abaixo (ref gallery.jpg) — sem card/borda/sombra */}
-        <div className="grid grid-cols-1 gap-x-8 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
+        {/* gallery cards estilo Zentiq — imagem full-bleed, badge no topo, título serif sobre a foto */}
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {albums?.map((a) => (
-            <Link key={a.id} to={`/me/albums/${a.id}`} className="group">
-              <div className="aspect-[4/3] w-full overflow-hidden bg-secondary">
-                {a.coverUrl && (
-                  <img
-                    src={a.coverUrl}
-                    alt={a.name}
-                    loading="lazy"
-                    className="h-full w-full object-cover transition-opacity group-hover:opacity-80"
-                  />
-                )}
-              </div>
-              <div className="mt-3">
-                <p className="font-medium">{a.name}</p>
-                <p className="text-sm text-muted-foreground">
-                  {a.matchCount} foto{a.matchCount === 1 ? "" : "s"} com você
-                </p>
-              </div>
+            <Link key={a.id} to={`/me/albums/${a.id}`}>
+              <GalleryCard
+                image={a.coverUrl}
+                badge={`${a.matchCount} foto${a.matchCount === 1 ? "" : "s"} com você`}
+                title={a.name}
+              />
             </Link>
           ))}
           {!albums &&
             !error &&
             Array.from({ length: 3 }).map((_, i) => (
-              <div key={i}>
-                <div className="aspect-[4/3] w-full animate-pulse bg-secondary/80" />
-                <div className="mt-3 h-5 w-3/4 animate-pulse rounded bg-secondary/80" />
-                <div className="mt-2 h-4 w-1/2 animate-pulse rounded bg-secondary/80" />
-              </div>
+              <div key={i} className="aspect-[2/3] w-full animate-pulse rounded-lg bg-secondary/80" />
             ))}
         </div>
       </div>

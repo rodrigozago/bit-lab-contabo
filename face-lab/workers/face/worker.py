@@ -103,12 +103,13 @@ def regen_thumb_job(r: redis.Redis, job: dict[str, Any]) -> None:
     photo_id: str = job["photoId"]
     image_path: str = job["imagePath"]
     watermark: bool = bool(job.get("watermark", False))
-    log.info("Rebatendo miniatura %s (watermark=%s)", photo_id, watermark)
+    variant: str | None = job.get("variant")
+    log.info("Rebatendo miniatura %s (watermark=%s, variant=%s)", photo_id, watermark, variant)
 
     try:
         if not Path(image_path).exists():
             raise FileNotFoundError(f"imagem não encontrada: {image_path}")
-        result = regenerate_thumb(photo_id, image_path, watermark)
+        result = regenerate_thumb(photo_id, image_path, watermark, variant=variant)
         r.publish(
             RESULTS_CHANNEL,
             json.dumps({"type": "thumb_regenerated", "photoId": photo_id, "status": "done", **result}),

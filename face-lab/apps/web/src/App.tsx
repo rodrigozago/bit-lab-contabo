@@ -18,6 +18,9 @@ import { Terms } from "./pages/Terms";
 import { Privacy } from "./pages/Privacy";
 import { AcceptTerms } from "./pages/AcceptTerms";
 import Resources from "./pages/Resources";
+import { PublicPortfolio } from "./pages/PublicPortfolio";
+import { PublicAlbum } from "./pages/PublicAlbum";
+import { ProducerPage } from "./pages/ProducerPage";
 
 // compat: páginas antigas importam de "../App"
 export { useAuth, loginUrl } from "@/lib/auth";
@@ -79,6 +82,9 @@ export function App() {
         <Route path="/terms" element={<Terms />} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/resources" element={<Resources />} />
+        {/* portfólio público do fotógrafo — sem auth e sem chrome do app */}
+        <Route path="/p/:slug" element={<PublicPortfolio />} />
+        <Route path="/p/:slug/:albumId" element={<PublicAlbum />} />
         <Route path="/consent" element={<RequireAuth><AcceptTerms /></RequireAuth>} />
 
         <Route element={<AppLayout />}>
@@ -87,6 +93,7 @@ export function App() {
           <Route path="/me/albums/:id" element={<RequireAuth><MyAlbum /></RequireAuth>} />
           <Route path="/me/albums/:id/all" element={<RequireAuth><MyAlbumAll /></RequireAuth>} />
           <Route path="/producer" element={<RequireAuth producer><Producer /></RequireAuth>} />
+          <Route path="/producer/page" element={<RequireAuth producer><ProducerPage /></RequireAuth>} />
           <Route path="/producer/albums/:id" element={<RequireAuth producer><ProducerAlbum /></RequireAuth>} />
           <Route path="/admin" element={<RequireAuth admin><Admin /></RequireAuth>} />
         </Route>

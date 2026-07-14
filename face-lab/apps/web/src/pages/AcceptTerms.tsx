@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../App";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 
 // gate obrigatório pós-login — App.tsx força essa rota enquanto
 // me.needsTermsAcceptance for true, antes de qualquer outra página
@@ -42,11 +43,10 @@ export function AcceptTerms() {
         </p>
 
         <label className="mt-6 flex items-start gap-3 text-sm">
-          <input
-            type="checkbox"
+          <Checkbox
             checked={checked}
-            onChange={(e) => setChecked(e.target.checked)}
-            className="mt-0.5 h-4 w-4 shrink-0"
+            onCheckedChange={(v) => setChecked(v === true)}
+            className="mt-0.5"
           />
           Li e concordo com os Termos de Uso e a Política de Privacidade.
         </label>

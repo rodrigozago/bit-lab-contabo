@@ -4,6 +4,7 @@ import type { EnrollmentInfo } from "@face-lab/shared";
 import { api } from "../api";
 import { useAuth } from "../App";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import { Camera, CheckCircle, ScanFace, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
@@ -173,7 +174,7 @@ export function Enroll() {
           return (
             <>
               <div className="flex items-center gap-3">
-                <ScanFace className="h-8 w-8 text-ok" strokeWidth={1.5} />
+                <ScanFace className="h-8 w-8 text-success" strokeWidth={1.5} />
                 <div>
                   <h2 className="heading-editorial text-2xl">Seu rosto está cadastrado</h2>
                 </div>
@@ -223,11 +224,10 @@ export function Enroll() {
             </p>
 
             <label className="mt-6 flex items-start gap-3 text-sm">
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={biometricConsent}
-                onChange={(e) => setBiometricConsent(e.target.checked)}
-                className="mt-0.5 h-4 w-4 shrink-0"
+                onCheckedChange={(v) => setBiometricConsent(v === true)}
+                className="mt-0.5"
               />
               Autorizo o processamento do meu rosto para reconhecimento facial, conforme a{" "}
               <a href="/privacy" target="_blank" rel="noreferrer" className="underline">
@@ -296,7 +296,7 @@ export function Enroll() {
       case "done":
         return (
             <div className="text-center">
-                <CheckCircle className="mx-auto h-12 w-12 text-green-500" />
+                <CheckCircle className="mx-auto h-12 w-12 text-success-light" />
                 <h3 className="mt-4 text-lg font-semibold">Rosto cadastrado!</h3>
                 <p className="mt-2 text-sm text-muted-foreground">Redirecionando para sua galeria...</p>
             </div>

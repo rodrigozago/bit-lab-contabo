@@ -9,7 +9,7 @@ export function FaceBox({ photo }: { photo: MyPhoto }) {
   return (
     <div
       className={`absolute border-2 box-content pointer-events-none
-        ${confirmed ? "border-green-500" : "border-primary"}`}
+        ${confirmed ? "border-accent shadow-[0_0_12px_2px_var(--accent-light)]" : "border-accent-secondary/70"}`}
       style={{
         left: `${(b.x / w) * 100}%`,
         top: `${(b.y / h) * 100}%`,
@@ -50,7 +50,7 @@ export function PhotoCard({ photo, isBusy, onConfirm, onReject, onClick }: Photo
 
       <figcaption className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
         {isConfirmed ? (
-          <span className="flex items-center gap-1 font-medium text-ok">
+          <span className="flex items-center gap-1 font-medium text-success">
             <Check size={13} /> Você
           </span>
         ) : (
