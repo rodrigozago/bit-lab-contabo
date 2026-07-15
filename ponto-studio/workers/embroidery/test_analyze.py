@@ -231,10 +231,82 @@ class TestAnalyzeImageEndToEnd(unittest.TestCase):
             self.assertEqual(svg1, svg2)
 
     def test_parametros_sao_limitados(self):
-        p = AnalyzeParams(colors=99, min_region_pct=-5, detail=0).clamped()
+        p = AnalyzeParams(colors=99, min_region_pct=-5, detail=0, color_tolerance=999).clamped()
         self.assertEqual(p.colors, 8)
         self.assertEqual(p.min_region_pct, 0.0)
         self.assertEqual(p.detail, 1)
+        self.assertEqual(p.color_tolerance, 40.0)
+
+    def test_colors_aceita_1_no_limite_inferior(self):
+        p = AnalyzeParams(colors=0).clamped()
+        self.assertEqual(p.colors, 1)
+
+
+def make_single_shape_image(path: str) -> None:
+    """Fundo branco + um quadrado vermelho no meio (caso de uso de colors=1)."""
+    img = np.full((200, 200, 3), 255, dtype=np.uint8)
+    img[60:140, 60:140] = (0, 0, 200)  # vermelho (BGR)
+    cv2.imwrite(path, img)
+
+
+def make_two_blobs_same_color_image(path: str) -> None:
+    """Fundo branco + duas manchas vermelhas DESCONECTADAS da mesma cor."""
+    img = np.full((200, 200, 3), 255, dtype=np.uint8)
+    img[20:60, 20:60] = (0, 0, 200)
+    img[140:180, 140:180] = (0, 0, 200)
+    cv2.imwrite(path, img)
+
+
+class TestExcludeBackground(unittest.TestCase):
+    """colors=1 → só o primeiro plano, fundo excluído automaticamente (PONTO-29)."""
+
+    def test_colors_1_remove_o_fundo(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "img.png")
+            make_single_shape_image(path)
+            svg = analyze_image(path, AnalyzeParams(colors=1))
+            groups = svg_color_groups(svg)
+            self.assertEqual(len(groups), 1, f"esperava só o primeiro plano: {groups}")
+            color = next(iter(groups))
+            r, g, b = int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16)
+            self.assertLess(min(r, g, b), 200, f"cor restante parece o fundo (quase branco): {color}")
+
+    def test_colors_1_mantem_regioes_desconectadas_juntas(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "img.png")
+            make_two_blobs_same_color_image(path)
+            svg = analyze_image(path, AnalyzeParams(colors=1))
+            groups = svg_color_groups(svg)
+            self.assertEqual(len(groups), 1, f"esperava 1 única camada: {groups}")
+            self.assertGreaterEqual(next(iter(groups.values())), 2, "as duas manchas deveriam estar no mesmo grupo")
+
+
+def make_near_red_image(path: str) -> None:
+    """Fundo branco + duas manchas de vermelho ligeiramente diferentes, desconectadas."""
+    img = np.full((200, 200, 3), 255, dtype=np.uint8)
+    img[40:100, 40:100] = (0, 0, 200)     # vermelho A
+    img[100:160, 100:160] = (0, 0, 220)   # vermelho B, tom levemente diferente
+    cv2.imwrite(path, img)
+
+
+class TestColorTolerance(unittest.TestCase):
+    """color_tolerance controla se tons próximos viram a mesma camada (PONTO-31)."""
+
+    def test_tolerancia_zero_mantem_tons_separados(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "img.png")
+            make_near_red_image(path)
+            svg = analyze_image(path, AnalyzeParams(colors=3, color_tolerance=0))
+            groups = svg_color_groups(svg)
+            self.assertEqual(len(groups), 3, f"esperava 3 grupos com tolerância 0: {groups}")
+
+    def test_tolerancia_alta_funde_tons_proximos(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "img.png")
+            make_near_red_image(path)
+            svg = analyze_image(path, AnalyzeParams(colors=3, color_tolerance=25))
+            groups = svg_color_groups(svg)
+            self.assertEqual(len(groups), 2, f"esperava 2 grupos (vermelhos fundidos) com tolerância alta: {groups}")
 
 
 if __name__ == "__main__":

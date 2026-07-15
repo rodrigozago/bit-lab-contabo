@@ -23,7 +23,6 @@ services:
       PORT: "3001"
       PUBLIC_URL: "https://ponto.bit-lab.tech"
       REDIS_URL: "redis://redis:6379"
-      OPENROUTER_API_KEY: "${OPENROUTER_API_KEY}"
       NODE_ENV: production
     volumes:
       - exports:/app/apps/api/exports

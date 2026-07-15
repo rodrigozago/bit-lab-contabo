@@ -1,17 +1,15 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef } from "react";
 import {
   Tldraw,
   AssetRecordType,
   type Editor as TldrawEditor,
   type TLShape,
-  type TLAssetId,
 } from "@tldraw/tldraw";
 import "@tldraw/tldraw/tldraw.css";
-import type { EmbroideryProject, EmbroideryElement } from "@ponto-studio/shared";
+import type { EmbroideryProject } from "@ponto-studio/shared";
 import { useProjectStore } from "../store/projectStore.ts";
 import { rectToSvgPath } from "../utils/geometry.ts";
 import { splitSvgByColor } from "../utils/svgLayers.ts";
-import { api, pollPreviewUntilDone } from "../api/client.ts";
 import { PropertiesPanel } from "./PropertiesPanel.tsx";
 import { ExportModal } from "./ExportModal.tsx";
 import { ImportModal } from "./ImportModal.tsx";
@@ -86,50 +84,6 @@ export function Editor({ project, onProjectChange, onNewProject }: Props) {
   const [tldrawEditor, setTldrawEditor] = useState<TldrawEditor | null>(null);
   const [layers, setLayers] = useState<LayerState>({ reference: true, embroidery: true });
   const initialSvgLoaded = useRef(false);
-
-  // Preview de bordado: mapa elemento→asset do shape, timers de debounce e
-  // assinatura anterior (p/ só regenerar quando o ponto/cor realmente muda)
-  const previewAssets = useRef<Map<string, TLAssetId>>(new Map());
-  const previewTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
-  const previewSig = useRef<Map<string, string>>(new Map());
-
-  // Gera o preview de linhas de ponto de um elemento (mesmo motor do DST) e
-  // troca o asset do shape correspondente no canvas.
-  const refreshPreview = useCallback(async (element: EmbroideryElement, assetId: TLAssetId) => {
-    if (!tldrawEditor || !element.svgContent) return;
-    try {
-      const { jobId } = await api.preview.create({ element, canvas: localProject.canvas });
-      const svg = await pollPreviewUntilDone(jobId);
-      const dataUrl = await svgToDataUrl(svg);
-      // updateAssets exige o objeto props completo → mescla sobre o asset atual
-      const current = tldrawEditor.getAsset(assetId);
-      if (!current) return;
-      tldrawEditor.updateAssets([
-        { ...current, props: { ...current.props, src: dataUrl } },
-      ]);
-    } catch (err) {
-      console.error("[preview] falhou:", err);
-    }
-  }, [tldrawEditor, localProject.canvas]);
-
-  // Ao criar elementos (import) ou mudar ponto/cor, (re)gera o preview do(s)
-  // elemento(s) afetado(s), com debounce por elemento.
-  useEffect(() => {
-    for (const el of localProject.elements) {
-      const assetId = previewAssets.current.get(el.id);
-      if (!assetId) continue;
-      const sig = JSON.stringify({ s: el.stitch, c: el.color, n: el.svgContent?.length ?? 0 });
-      if (previewSig.current.get(el.id) === sig) continue;
-      previewSig.current.set(el.id, sig);
-
-      const pending = previewTimers.current.get(el.id);
-      if (pending) clearTimeout(pending);
-      previewTimers.current.set(
-        el.id,
-        setTimeout(() => refreshPreview(el, assetId), 400)
-      );
-    }
-  }, [localProject.elements, refreshPreview]);
 
   const handleMount = useCallback((editor: TldrawEditor) => {
     setTldrawEditor(editor);
@@ -304,9 +258,6 @@ export function Editor({ project, onProjectChange, onNewProject }: Props) {
         props: { assetId: svgAssetId, w: canvasW, h: canvasH },
         meta: { layer: 'embroidery', elementId },
       } as Parameters<typeof tldrawEditor.createShape>[0]);
-
-      // vincula elemento→asset para o effect gerar/atualizar o preview de pontos
-      previewAssets.current.set(elementId, svgAssetId);
     }
 
     tldrawEditor.zoomToFit();

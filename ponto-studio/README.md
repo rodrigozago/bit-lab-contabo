@@ -7,11 +7,11 @@
 Ponto Studio é uma ferramenta web simples onde qualquer pessoa pode:
 
 1. **Importar** uma imagem (PNG/JPG) como referência
-2. **Analisar** a imagem — **processamento local (default, sem IA)** ou via IA:
-   - Local: k-means (OpenCV) separa as cores → limpeza morfológica → VTracer
-     vetoriza → **uma camada de bordado por cor** (regiões desconectadas da
-     mesma cor ficam na mesma camada). Determinístico, rápido e grátis.
-   - IA: envia a imagem ao OpenRouter (requer `OPENROUTER_API_KEY`).
+2. **Analisar** a imagem — 100% local, sem IA: k-means (OpenCV) separa as
+   cores → limpeza morfológica → VTracer vetoriza → **uma camada de bordado
+   por cor** (regiões desconectadas da mesma cor ficam na mesma camada).
+   Determinístico, rápido e grátis. Slider "Nº de cores" também aceita 1, que
+   exclui o fundo automaticamente e deixa só o desenho.
 3. **Configurar** o tipo de ponto, cor e densidade de cada camada/cor
 4. **Exportar** o design em formato compatível com sua máquina de bordado (DST, PES, JEF)
 
@@ -53,9 +53,6 @@ REDIS_URL=redis://localhost:6379 EXPORTS_DIR=../../apps/api/exports python3 work
 ## Início Rápido (Docker)
 
 ```bash
-# Cria arquivo de variáveis de ambiente
-echo "OPENROUTER_API_KEY=sua_chave_aqui" > .env
-
 # Sobe toda a stack: Web, API, Worker Python e Redis
 docker-compose up --build
 
@@ -101,7 +98,7 @@ pnpm test                                                    # api + web (vitest
 docker compose run --rm worker python -m unittest test_analyze -v   # pipeline de análise (Python)
 ```
 
-## Fluxo da Análise Local (sem IA)
+## Fluxo da Análise (100% local, sem IA)
 
 ```
 Imagem (PNG/JPG) → POST /api/analyze/local → uploads/ → RPUSH embroidery:jobs {type:"analyze"}
@@ -133,7 +130,6 @@ Projeto (JSON) → API → Salva SVG → RPUSH embroidery:jobs (Redis)
 
 | Variável | Descrição | Padrão |
 |----------|-----------|--------|
-| `OPENROUTER_API_KEY` | Chave da API OpenRouter (análise de imagem IA) | — |
 | `REDIS_URL` | URL de conexão ao Redis | `redis://localhost:6379` |
 | `PORT` | Porta da API | `3001` |
 | `PUBLIC_URL` | URL base pública da API (para URLs de download) | `http://localhost:3001` (`https://ponto.bit-lab.tech` nesta VPS) |

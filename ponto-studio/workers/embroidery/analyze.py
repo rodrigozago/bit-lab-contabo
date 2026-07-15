@@ -22,21 +22,25 @@ import vtracer
 MAX_DIMENSION = 800  # px — imagens maiores são reduzidas antes do pipeline
 KMEANS_SEED = 42
 # ΔE (distância euclidiana em Lab) abaixo do qual dois clusters são considerados
-# a mesma cor e fundidos — garante "cores iguais = mesma camada"
-MERGE_DELTA_E = 10.0
+# a mesma cor e fundidos — garante "cores iguais = mesma camada". Default do
+# parâmetro `color_tolerance`, ajustável pelo usuário (imagens com variação de
+# tom, ex. fotografadas, podem precisar de um valor maior).
+DEFAULT_MERGE_DELTA_E = 10.0
 
 
 @dataclass
 class AnalyzeParams:
-    colors: int = 4          # nº de cores/linhas alvo (2–8)
-    min_region_pct: float = 0.05  # regiões menores que isso (% da área) são absorvidas
+    colors: int = 4          # nº de cores/linhas alvo (1–8). 1 = só o primeiro plano, fundo excluído
+    min_region_pct: float = 0.0   # regiões menores que isso (% da área) são absorvidas
     detail: int = 2          # 1 = mais liso, 3 = mais detalhe (corner threshold do vtracer)
+    color_tolerance: float = DEFAULT_MERGE_DELTA_E  # ΔE em Lab — funde clusters de cor próxima
 
     def clamped(self) -> "AnalyzeParams":
         return AnalyzeParams(
-            colors=max(2, min(8, int(self.colors))),
+            colors=max(1, min(8, int(self.colors))),
             min_region_pct=max(0.0, min(5.0, float(self.min_region_pct))),
             detail=max(1, min(3, int(self.detail))),
+            color_tolerance=max(0.0, min(40.0, float(self.color_tolerance))),
         )
 
 
@@ -64,11 +68,13 @@ def is_flat_image(img_bgr: np.ndarray) -> bool:
     return len(buckets) <= 256
 
 
-def quantize(img_bgr: np.ndarray, n_colors: int) -> tuple[np.ndarray, np.ndarray]:
+def quantize(
+    img_bgr: np.ndarray, n_colors: int, merge_delta_e: float = DEFAULT_MERGE_DELTA_E
+) -> tuple[np.ndarray, np.ndarray]:
     """
     K-means em espaço Lab (agrupamento perceptual) com seed fixa.
     Retorna (labels HxW, palette BGR n×3 uint8) já com clusters de cores
-    praticamente iguais fundidos.
+    a menos de `merge_delta_e` de distância fundidos entre si.
     """
     # bilateral só para fotos — em line-art ele borra os traços finos
     smoothed = img_bgr if is_flat_image(img_bgr) else cv2.bilateralFilter(img_bgr, d=9, sigmaColor=75, sigmaSpace=75)
@@ -82,23 +88,25 @@ def quantize(img_bgr: np.ndarray, n_colors: int) -> tuple[np.ndarray, np.ndarray
     )
     labels = labels.reshape(img_bgr.shape[:2])
 
-    # Funde clusters com centróides praticamente iguais (ΔE < MERGE_DELTA_E)
-    labels, centers = _merge_similar_clusters(labels, centers)
+    # Funde clusters com centróides a menos de merge_delta_e de distância
+    labels, centers = _merge_similar_clusters(labels, centers, merge_delta_e)
 
     palette_lab = centers.reshape(-1, 1, 3).astype(np.uint8)
     palette_bgr = cv2.cvtColor(palette_lab, cv2.COLOR_Lab2BGR).reshape(-1, 3)
     return labels, palette_bgr
 
 
-def _merge_similar_clusters(labels: np.ndarray, centers: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Une clusters cujos centros Lab distam menos que MERGE_DELTA_E."""
+def _merge_similar_clusters(
+    labels: np.ndarray, centers: np.ndarray, delta_e: float
+) -> tuple[np.ndarray, np.ndarray]:
+    """Une clusters cujos centros Lab distam menos que delta_e."""
     n = len(centers)
     mapping = list(range(n))
     for i in range(n):
         for j in range(i + 1, n):
             if mapping[j] != j:
                 continue
-            if np.linalg.norm(centers[i] - centers[j]) < MERGE_DELTA_E:
+            if np.linalg.norm(centers[i] - centers[j]) < delta_e:
                 mapping[j] = mapping[i]
 
     # Reindexa para labels compactos (0..k-1)
@@ -308,14 +316,60 @@ def _normalize_fill(value: str) -> str:
     return f"#{hex_part}"
 
 
+def _bgr_to_hex(bgr: np.ndarray) -> str:
+    """(B, G, R) uint8 → "#rrggbb" minúsculo."""
+    b, g, r = (int(c) for c in bgr)
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+
+def _detect_background_index(labels: np.ndarray, n_colors: int) -> int:
+    """
+    Heurística simples e determinística: o "fundo" é o cluster com mais
+    pixels tocando a borda da imagem (comum em logos/recortes sobre fundo
+    sólido). Em caso de empate, o de maior área total.
+    """
+    border = np.concatenate([labels[0, :], labels[-1, :], labels[:, 0], labels[:, -1]])
+    border_counts = np.bincount(border, minlength=n_colors)
+    total_counts = np.bincount(labels.ravel(), minlength=n_colors)
+    # ordena por (pixels na borda, área total) — desempate por área
+    return int(max(range(n_colors), key=lambda i: (border_counts[i], total_counts[i])))
+
+
+def _remove_color_group(svg: str, hex_color: str) -> str:
+    """Remove do SVG o <g data-layer-color="hex_color"> (se existir)."""
+    ET.register_namespace("", SVG_NS)
+    root = ET.fromstring(svg)
+    for g in list(root.iter(f"{{{SVG_NS}}}g")):
+        if g.get("data-layer-color") == hex_color:
+            root.remove(g)
+    return ET.tostring(root, encoding="unicode")
+
+
 # ── Entrada principal ──────────────────────────────────────────────────────────
 
 def analyze_image(image_path: str, params: AnalyzeParams | None = None) -> str:
-    """Pipeline completo: imagem → SVG agrupado por cor."""
+    """
+    Pipeline completo: imagem → SVG agrupado por cor.
+
+    `colors == 1` é tratado como "só o primeiro plano": internamente sempre
+    segmenta em 2 clusters (fundo + primeiro plano) — k=1 no k-means não faz
+    sentido (colapsaria a imagem inteira numa única cor média) — detecta qual
+    dos dois é o fundo (cluster que mais toca a borda da imagem) e remove essa
+    camada do SVG final, sobrando só o desenho.
+    """
     p = (params or AnalyzeParams()).clamped()
+    exclude_background = p.colors == 1
+    n_colors = 2 if exclude_background else p.colors
+
     img = load_and_downscale(image_path)
-    labels, palette = quantize(img, p.colors)
+    labels, palette = quantize(img, n_colors, p.color_tolerance)
     labels = clean_labels(labels, len(palette), p.min_region_pct)
     quantized = render_quantized(labels, palette)
     svg = vectorize(quantized, p)
-    return group_paths_by_color(svg)
+    grouped = group_paths_by_color(svg)
+
+    if exclude_background and len(palette) > 1:
+        bg_index = _detect_background_index(labels, len(palette))
+        grouped = _remove_color_group(grouped, _bgr_to_hex(palette[bg_index]))
+
+    return grouped

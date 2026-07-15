@@ -104,12 +104,14 @@ export interface WorkerJobResult {
 // ─── Análise local (processamento digital, sem IA) ───────────────────────────
 
 export interface LocalAnalyzeParams {
-  /** Nº de cores/linhas de bordado (2–8) */
+  /** Nº de cores/linhas de bordado (1–8). 1 = só o primeiro plano, fundo excluído automaticamente */
   colors: number;
   /** Regiões menores que isso (% da área da imagem) são absorvidas */
   minRegionPct: number;
   /** 1 = mais liso, 3 = mais detalhe */
   detail: number;
+  /** ΔE (Lab) abaixo do qual duas cores são fundidas na mesma camada (0–40) */
+  colorTolerance: number;
 }
 
 export interface AnalyzeJobStatus {

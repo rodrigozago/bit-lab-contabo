@@ -346,7 +346,7 @@ def process_job(r: redis.Redis, job_data: dict[str, Any]) -> None:
 
 def process_analyze_job(r: redis.Redis, job_data: dict[str, Any]) -> None:
     """Análise local: imagem em UPLOADS_DIR → SVG por cor em EXPORTS_DIR."""
-    from analyze import AnalyzeParams, analyze_image
+    from analyze import DEFAULT_MERGE_DELTA_E, AnalyzeParams, analyze_image
 
     job_id: str = job_data["jobId"]
     image_file: str = job_data["imageFile"]
@@ -362,8 +362,9 @@ def process_analyze_job(r: redis.Redis, job_data: dict[str, Any]) -> None:
     try:
         params = AnalyzeParams(
             colors=int(raw_params.get("colors", 4)),
-            min_region_pct=float(raw_params.get("minRegionPct", 0.05)),
+            min_region_pct=float(raw_params.get("minRegionPct", 0)),
             detail=int(raw_params.get("detail", 2)),
+            color_tolerance=float(raw_params.get("colorTolerance", DEFAULT_MERGE_DELTA_E)),
         )
         svg = analyze_image(str(image_path), params)
 
