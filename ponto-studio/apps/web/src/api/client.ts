@@ -9,6 +9,7 @@ import type {
   LocalAnalyzeParams,
   EmbroideryElement,
   CanvasSize,
+  StitchPreviewJobStatus,
 } from "@ponto-studio/shared";
 
 const BASE = "/api";
@@ -62,6 +63,12 @@ export const api = {
       request<{ jobId: string }>("/preview", { method: "POST", body: JSON.stringify(body) }),
     poll: (jobId: string) => request<AnalyzeJobStatus>(`/preview/${jobId}`),
   },
+  stitchPreview: {
+    // Sequência de pontos do projeto inteiro, pro player de simulação (EXP-2)
+    create: (projectId: string) =>
+      request<{ jobId: string }>("/stitch-preview", { method: "POST", body: JSON.stringify({ projectId }) }),
+    poll: (jobId: string) => request<StitchPreviewJobStatus>(`/stitch-preview/${jobId}`),
+  },
   upload: {
     image: async (file: File): Promise<{ fileId: string; url: string }> => {
       const fd = new FormData();
@@ -109,6 +116,28 @@ export async function pollPreviewUntilDone(jobId: string, intervalMs = 300): Pro
         } else if (job.status === "error") {
           clearInterval(timer);
           reject(new Error(job.errorMessage ?? "Falha ao gerar preview"));
+        }
+      } catch (err) {
+        clearInterval(timer);
+        reject(err);
+      }
+    }, intervalMs);
+  });
+}
+
+/** Aguarda os dados do player de simulação (EXP-2) e resolve com o pattern. */
+export async function pollStitchDataUntilDone(jobId: string, intervalMs = 1000) {
+  return new Promise<NonNullable<StitchPreviewJobStatus["pattern"]>>((resolve, reject) => {
+    const timer = setInterval(async () => {
+      try {
+        const job = await api.stitchPreview.poll(jobId);
+        if (job.status === "done") {
+          clearInterval(timer);
+          if (!job.pattern) return reject(new Error("Stitch preview terminou sem dados"));
+          resolve(job.pattern);
+        } else if (job.status === "error") {
+          clearInterval(timer);
+          reject(new Error(job.errorMessage ?? "Falha ao gerar dados do player"));
         }
       } catch (err) {
         clearInterval(timer);

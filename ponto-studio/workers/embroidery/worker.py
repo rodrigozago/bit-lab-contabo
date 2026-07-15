@@ -284,6 +284,38 @@ def pattern_to_preview_svg(pattern: pyembroidery.EmbPattern, viewbox: str) -> st
     )
 
 
+# comando pyembroidery → código compacto no JSON do player (EXP-2)
+_STITCH_CMD_CODE: dict[int, int] = {
+    pyembroidery.STITCH: 0,
+    pyembroidery.JUMP: 1,
+    pyembroidery.COLOR_BREAK: 2,
+    pyembroidery.TRIM: 3,
+    pyembroidery.END: 4,
+}
+
+
+def pattern_to_stitch_json(pattern: pyembroidery.EmbPattern, viewbox: str) -> dict[str, Any]:
+    """
+    Serializa o EmbPattern (mesmo gerado pelo DST) na sequência ordenada de
+    pontos, para o player de simulação (EXP-2) animar no front — em vez de um
+    SVG achatado (pattern_to_preview_svg), aqui cada ponto vira [x_mm, y_mm,
+    cmdCode] (arrays, não objetos, pra manter o JSON compacto em designs com
+    muitos milhares de pontos).
+    """
+    threads = [f"#{t.color & 0xFFFFFF:06x}" for t in pattern.threadlist] or ["#333333"]
+    stitches = [
+        [round(x / SCALE_SVG_TO_EMB, 2), round(y / SCALE_SVG_TO_EMB, 2), _STITCH_CMD_CODE.get(cmd, 0)]
+        for x, y, cmd in pattern.stitches
+    ]
+    color_count = sum(1 for _x, _y, code in stitches if code == 2) + 1
+    return {
+        "viewBox": viewbox,
+        "threads": threads,
+        "stitches": stitches,
+        "stats": {"totalStitches": len(stitches), "colorCount": color_count},
+    }
+
+
 def _svg_viewbox(svg_path: Path) -> str:
     """Extrai o atributo viewBox do SVG (fallback 0 0 100 100)."""
     import re
@@ -299,13 +331,17 @@ def process_job(r: redis.Redis, job_data: dict[str, Any]) -> None:
     job_id: str = job_data["jobId"]
 
     # Dispatch por tipo: "export" (default, SVG → bordado), "analyze"
-    # (imagem → SVG, ver analyze.py) ou "preview" (SVG → linhas de ponto).
+    # (imagem → SVG, ver analyze.py), "preview" (SVG → linhas de ponto) ou
+    # "stitch_data" (SVG → sequência de pontos em JSON, para o player EXP-2).
     job_type = job_data.get("type", "export")
     if job_type == "analyze":
         process_analyze_job(r, job_data)
         return
     if job_type == "preview":
         process_preview_job(r, job_data)
+        return
+    if job_type == "stitch_data":
+        process_stitch_data_job(r, job_data)
         return
 
     svg_file: str = job_data["svgFile"]
@@ -407,6 +443,42 @@ def process_preview_job(r: redis.Redis, job_data: dict[str, Any]) -> None:
         r.publish(RESULTS_CHANNEL, json.dumps({"jobId": job_id, "status": "done", "outputFile": output_file}))
     except Exception as exc:
         log.exception("Preview %s falhou", job_id)
+        _publish_error(r, job_id, str(exc))
+
+
+def process_stitch_data_job(r: redis.Redis, job_data: dict[str, Any]) -> None:
+    """
+    Dados do player de simulação (EXP-2): SVG do projeto inteiro (mesmo
+    arquivo que alimenta o export) → sequência de pontos em JSON, via o
+    MESMO `svg_to_embroidery` do DST — o que se anima no player é fiel ao
+    que a máquina borda de verdade.
+    """
+    job_id: str = job_data["jobId"]
+    svg_file: str = job_data["svgFile"]
+
+    log.info("Processando stitch_data %s  svg=%s", job_id, svg_file)
+
+    svg_path = EXPORTS_DIR / svg_file
+    if not svg_path.exists():
+        _publish_error(r, job_id, f"SVG não encontrado: {svg_file}")
+        return
+
+    try:
+        pattern = svg_to_embroidery(svg_path, "dst")  # formato ignorado, só monta o EmbPattern
+
+        if len(pattern.stitches) == 0:
+            _publish_error(r, job_id, "Nenhum ponto gerado — SVG pode não ter paths válidos")
+            return
+
+        data = pattern_to_stitch_json(pattern, _svg_viewbox(svg_path))
+
+        output_file = f"{job_id}.json"
+        (EXPORTS_DIR / output_file).write_text(json.dumps(data), encoding="utf-8")
+        log.info("Stitch data %s concluído → %s (%d pontos)", job_id, output_file, len(pattern.stitches))
+
+        r.publish(RESULTS_CHANNEL, json.dumps({"jobId": job_id, "status": "done", "outputFile": output_file}))
+    except Exception as exc:
+        log.exception("Stitch data %s falhou", job_id)
         _publish_error(r, job_id, str(exc))
 
 

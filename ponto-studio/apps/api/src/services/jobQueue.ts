@@ -173,6 +173,37 @@ export async function enqueuePreviewJob(params: {
   return job;
 }
 
+// ── Enqueue: dados do player de simulação (EXP-2) ──────────────────────────────
+// SVG do projeto inteiro (mesmo formato do export) → sequência de pontos em
+// JSON. Grava exports/{jobId}.in.svg e enfileira type:"stitch_data"; o worker
+// devolve exports/{jobId}.json (mesmo listener/jobStore).
+export async function enqueueStitchDataJob(params: {
+  jobId: string;
+  svgContent: string;
+}): Promise<ExportJob> {
+  const { jobId, svgContent } = params;
+  const now = new Date().toISOString();
+
+  const job: ExportJob = {
+    jobId,
+    projectId: "",
+    format: "DST", // não usado em stitch_data — campo exigido pelo tipo
+    status: "pending",
+    createdAt: now,
+    updatedAt: now,
+  };
+  jobStore.set(jobId, job);
+
+  const inputFile = `${jobId}.in.svg`;
+  writeFileSync(join(EXPORTS_DIR, inputFile), svgContent, "utf-8");
+
+  const payload = JSON.stringify({ type: "stitch_data", jobId, svgFile: inputFile });
+  const pub = await getPublisher();
+  await pub.rPush(JOBS_QUEUE, payload);
+
+  return job;
+}
+
 function updateJob(jobId: string, patch: Partial<ExportJob>): void {
   const existing = jobStore.get(jobId);
   if (!existing) return;

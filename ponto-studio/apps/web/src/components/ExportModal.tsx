@@ -1,6 +1,7 @@
-import { useState } from "react";
-import type { ExportFormat, ExportJob } from "@ponto-studio/shared";
-import { api, pollUntilDone } from "../api/client.ts";
+import { useEffect, useState } from "react";
+import type { ExportFormat, ExportJob, StitchPattern } from "@ponto-studio/shared";
+import { api, pollStitchDataUntilDone, pollUntilDone } from "../api/client.ts";
+import { StitchPlayer } from "./StitchPlayer.tsx";
 
 type ModalFormat = ExportFormat | "SVG";
 
@@ -19,6 +20,7 @@ interface Props {
 }
 
 type Phase = "select" | "processing" | "done" | "error";
+type PreviewPhase = "loading" | "ready" | "error";
 
 export function ExportModal({ projectId, onClose }: Props) {
   const [format, setFormat] = useState<ModalFormat>("DST");
@@ -26,6 +28,30 @@ export function ExportModal({ projectId, onClose }: Props) {
   const [job, setJob] = useState<ExportJob | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
   const [downloadName, setDownloadName] = useState<string | null>(null);
+
+  // Player de simulação (EXP-2) — independente do fluxo de exportar: se falhar,
+  // não deve travar o picker de formato, só some o player.
+  const [previewPhase, setPreviewPhase] = useState<PreviewPhase>("loading");
+  const [pattern, setPattern] = useState<StitchPattern | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { jobId } = await api.stitchPreview.create(projectId);
+        const result = await pollStitchDataUntilDone(jobId);
+        if (!cancelled) {
+          setPattern(result);
+          setPreviewPhase("ready");
+        }
+      } catch {
+        if (!cancelled) setPreviewPhase("error");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
 
   // Exportação SVG é síncrona: a API devolve o arquivo direto (sem worker)
   async function exportSvg() {
@@ -71,6 +97,14 @@ export function ExportModal({ projectId, onClose }: Props) {
     <div style={styles.overlay} onClick={onClose}>
       <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
         <h2 style={styles.title}>Exportar Bordado</h2>
+
+        {previewPhase === "loading" && (
+          <div style={styles.previewLoading}>
+            <div style={styles.spinnerSmall} />
+            <span>Gerando pré-visualização dos pontos…</span>
+          </div>
+        )}
+        {previewPhase === "ready" && pattern && <StitchPlayer pattern={pattern} />}
 
         {phase === "select" && (
           <>
@@ -139,8 +173,17 @@ const styles: Record<string, React.CSSProperties> = {
   },
   modal: {
     background: "#fff", borderRadius: 16, padding: "32px 36px",
-    width: 420, boxShadow: "0 16px 48px rgba(0,0,0,0.18)",
+    width: 520, maxWidth: "94vw", boxShadow: "0 16px 48px rgba(0,0,0,0.18)",
     display: "flex", flexDirection: "column", gap: 20,
+  },
+  previewLoading: {
+    display: "flex", alignItems: "center", gap: 10,
+    fontSize: 13, color: "#6b6b6b", padding: "8px 0",
+  },
+  spinnerSmall: {
+    width: 18, height: 18, border: "3px solid #e2e0db",
+    borderTop: "3px solid #7c5cbf", borderRadius: "50%",
+    animation: "spin 0.8s linear infinite", flexShrink: 0,
   },
   title: { fontSize: 22, fontWeight: 700 },
   subtitle: { fontSize: 14, color: "#6b6b6b" },

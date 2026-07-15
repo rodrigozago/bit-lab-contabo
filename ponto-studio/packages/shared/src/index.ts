@@ -123,3 +123,25 @@ export interface AnalyzeJobStatus {
   svg?: string;
   errorMessage?: string;
 }
+
+// ─── Player de simulação de bordado (EXP-2) ──────────────────────────────────
+
+/** STITCH | JUMP | COLOR_BREAK | TRIM | END */
+export type StitchCommand = 0 | 1 | 2 | 3 | 4;
+
+export interface StitchPattern {
+  viewBox: string;
+  /** cores dos fios, na ordem em que aparecem no bordado */
+  threads: string[];
+  /** [x_mm, y_mm, cmd] por ponto, na ordem de costura */
+  stitches: [number, number, StitchCommand][];
+  stats: { totalStitches: number; colorCount: number };
+}
+
+export interface StitchPreviewJobStatus {
+  jobId: string;
+  status: JobStatus;
+  /** sequência de pontos do projeto, presente quando status === "done" */
+  pattern?: StitchPattern;
+  errorMessage?: string;
+}
