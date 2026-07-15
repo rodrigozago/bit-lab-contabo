@@ -404,9 +404,19 @@ def _closest_pair(labs: list[np.ndarray]) -> tuple[int, int, float]:
 
 
 def _merge_entry_pair(entries: list[dict], labs: list[np.ndarray], i: int, j: int) -> None:
-    """Funde entries[j] em entries[i], mantendo a cor do grupo com mais paths."""
+    """
+    Funde entries[j] em entries[i], mantendo a cor do grupo com mais paths.
+    Reescreve o `fill` de cada <path> absorvido pra cor do grupo alvo — cada
+    <path> carrega seu próprio `fill` (setado em group_paths_by_color), então
+    só trocar o `fill`/`data-layer-color` do <g> não é suficiente: quem lê a
+    cor do <path> direto (splitSvgByColor no front, svg2paths2 no worker de
+    export) ainda veria a cor antiga e a fusão não teria efeito nenhum.
+    """
     if len(entries[j]["paths"]) > len(entries[i]["paths"]):
         i, j = j, i
+    target_color = entries[i]["color"]
+    for path in entries[j]["paths"]:
+        path.set("fill", target_color)
     entries[i]["paths"].extend(entries[j]["paths"])
     del entries[j]
     del labs[j]

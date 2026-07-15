@@ -53,6 +53,16 @@ def svg_color_groups(svg: str) -> dict[str, int]:
     return groups
 
 
+def svg_path_fills(svg: str) -> set[str]:
+    """
+    Retorna o conjunto de valores de `fill` presentes DIRETAMENTE nos <path>
+    (não no <g> pai) — é o que splitSvgByColor (front) e svg2paths2 (worker de
+    export) realmente leem, então uma fusão só "de fachada" no <g> não conta.
+    """
+    root = ET.fromstring(svg)
+    return {p.get("fill") for p in root.iter(f"{{{SVG_NS}}}path") if p.get("fill")}
+
+
 class TestQuantize(unittest.TestCase):
     def test_agrupa_mesma_cor_em_um_unico_cluster(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -322,12 +332,14 @@ class TestMergeSimilarSvgColors(unittest.TestCase):
     """merge_similar_svg_colors funde grupos próximos no SVG final (não só no k-means)."""
 
     def _four_group_svg(self) -> str:
+        # fill no <path> também (como group_paths_by_color realmente gera) —
+        # é o que splitSvgByColor/svg2paths2 leem, não o fill do <g> pai.
         return (
             f'<svg xmlns="{SVG_NS}" viewBox="0 0 10 10">'
-            '<g fill="#ff0000" data-layer-color="#ff0000"><path d="M0 0h1v1H0Z"/></g>'
-            '<g fill="#fe0101" data-layer-color="#fe0101"><path d="M1 1h1v1H1Z"/></g>'
-            '<g fill="#0000ff" data-layer-color="#0000ff"><path d="M2 2h1v1H2Z"/></g>'
-            '<g fill="#00ff00" data-layer-color="#00ff00"><path d="M3 3h1v1H3Z"/></g>'
+            '<g fill="#ff0000" data-layer-color="#ff0000"><path d="M0 0h1v1H0Z" fill="#ff0000"/></g>'
+            '<g fill="#fe0101" data-layer-color="#fe0101"><path d="M1 1h1v1H1Z" fill="#fe0101"/></g>'
+            '<g fill="#0000ff" data-layer-color="#0000ff"><path d="M2 2h1v1H2Z" fill="#0000ff"/></g>'
+            '<g fill="#00ff00" data-layer-color="#00ff00"><path d="M3 3h1v1H3Z" fill="#00ff00"/></g>'
             "</svg>"
         )
 
@@ -347,6 +359,16 @@ class TestMergeSimilarSvgColors(unittest.TestCase):
         groups = svg_color_groups(result)
         self.assertIn("#0000ff", groups)
         self.assertIn("#00ff00", groups)
+
+    def test_fill_do_path_tambem_e_atualizado(self):
+        # Regressão: fundir só o <g> e deixar o <path> com a cor antiga é
+        # invisível pra quem lê o fill do <path> direto (splitSvgByColor no
+        # front, svg2paths2 no worker de export) — a fusão "não fazia nada".
+        svg = self._four_group_svg()
+        result = merge_similar_svg_colors(svg, tolerance=5)
+        fills = svg_path_fills(result)
+        self.assertNotIn("#fe0101", fills, f"path filho ainda com a cor pré-fusão: {fills}")
+        self.assertEqual(len(fills), 3, f"esperava 3 fills distintos nos <path>: {fills}")
 
 
 class TestExcludeBackgroundToleranciaNaoColapsaFundo(unittest.TestCase):
@@ -384,12 +406,14 @@ class TestCapMaxAreas(unittest.TestCase):
     """max_areas funde as cores mais próximas até caber no teto (pedido do usuário: 'muitas áreas')."""
 
     def _four_group_svg(self) -> str:
+        # fill no <path> também (como group_paths_by_color realmente gera) —
+        # é o que splitSvgByColor/svg2paths2 leem, não o fill do <g> pai.
         return (
             f'<svg xmlns="{SVG_NS}" viewBox="0 0 10 10">'
-            '<g fill="#ff0000" data-layer-color="#ff0000"><path d="M0 0h1v1H0Z"/></g>'
-            '<g fill="#fe0101" data-layer-color="#fe0101"><path d="M1 1h1v1H1Z"/></g>'
-            '<g fill="#0000ff" data-layer-color="#0000ff"><path d="M2 2h1v1H2Z"/></g>'
-            '<g fill="#00ff00" data-layer-color="#00ff00"><path d="M3 3h1v1H3Z"/></g>'
+            '<g fill="#ff0000" data-layer-color="#ff0000"><path d="M0 0h1v1H0Z" fill="#ff0000"/></g>'
+            '<g fill="#fe0101" data-layer-color="#fe0101"><path d="M1 1h1v1H1Z" fill="#fe0101"/></g>'
+            '<g fill="#0000ff" data-layer-color="#0000ff"><path d="M2 2h1v1H2Z" fill="#0000ff"/></g>'
+            '<g fill="#00ff00" data-layer-color="#00ff00"><path d="M3 3h1v1H3Z" fill="#00ff00"/></g>'
             "</svg>"
         )
 
@@ -403,6 +427,16 @@ class TestCapMaxAreas(unittest.TestCase):
         result = cap_max_areas(svg, max_areas=2)
         groups = svg_color_groups(result)
         self.assertEqual(len(groups), 2, f"esperava 2 grupos: {groups}")
+
+    def test_fill_do_path_tambem_e_atualizado(self):
+        # Regressão (bug real reportado pelo usuário): sem isso, quem lê o
+        # fill do <path> direto — splitSvgByColor no front, svg2paths2 no
+        # worker de export — ainda via a fragmentação de antes da fusão,
+        # então "Máximo de áreas" não tinha efeito nenhum na prática.
+        svg = self._four_group_svg()
+        result = cap_max_areas(svg, max_areas=2)
+        fills = svg_path_fills(result)
+        self.assertEqual(len(fills), 2, f"esperava 2 fills distintos nos <path>: {fills}")
 
     def test_funde_par_mais_proximo_primeiro(self):
         # #ff0000 e #fe0101 são quase idênticos — devem virar 1 grupo antes de
