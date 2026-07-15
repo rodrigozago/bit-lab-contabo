@@ -164,12 +164,7 @@ export default function App() {
 
           <div className={styles.sectionTag}>// 02 · INSCRIÇÃO</div>
 
-          {false ? (
-            <div className={styles.success}>
-              <div className={styles.successIcon}>△</div>
-              <p>// inscrições encerradas. fique ligado nas próximas edições.</p>
-            </div>
-          ) : submitted ? (
+          {submitted ? (
             <div className={styles.success}>
               <div className={styles.successIcon}>△</div>
               <p>{frontmatter.successMessage}</p>
