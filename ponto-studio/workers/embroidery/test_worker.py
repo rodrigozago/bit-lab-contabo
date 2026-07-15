@@ -3,11 +3,14 @@ Testes do worker (worker.py) que não dependem de imagem/vtracer.
 Rodar no container: docker compose run --rm worker python -m unittest test_worker -v
 """
 
+import os
+import tempfile
 import unittest
+from pathlib import Path
 
 import pyembroidery
 
-from worker import SCALE_SVG_TO_EMB, pattern_to_stitch_json
+from worker import SCALE_SVG_TO_EMB, pattern_to_stitch_json, svg_to_embroidery
 
 
 def make_two_color_pattern() -> pyembroidery.EmbPattern:
@@ -66,6 +69,93 @@ class TestPatternToStitchJson(unittest.TestCase):
         pattern.add_stitch_absolute(pyembroidery.END, 0, 0)
         data = pattern_to_stitch_json(pattern, "0 0 10 10")
         self.assertEqual(data["threads"], ["#333333"])
+
+
+def _run_svg_to_embroidery(svg: str) -> pyembroidery.EmbPattern:
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "in.svg")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(svg)
+        return svg_to_embroidery(Path(path), "dst")
+
+
+class TestSvgToEmbroideryColorGrouping(unittest.TestCase):
+    """
+    Regressão (relato do usuário): uma cor com várias regiões desconectadas
+    (mesma camada de bordado, ver group_paths_by_color) não pode virar uma
+    troca de linha por região — só quando o fill muda de verdade.
+    """
+
+    def test_mesma_cor_em_varios_paths_desconectados_e_1_thread(self):
+        blobs = "".join(
+            f'<path d="M{i} {i} h1 v1 h-1 Z" fill="#ff0000" '
+            'inkstitch:fill_method="tatami_fill" inkstitch:line_distance="1mm" inkstitch:angle="0" />'
+            for i in range(0, 34, 2)  # 17 regiões desconectadas, mesma cor
+        )
+        svg = (
+            f'<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkstitch="http://inkstitch.org/namespace" '
+            f'viewBox="0 0 40 40">{blobs}</svg>'
+        )
+        pattern = _run_svg_to_embroidery(svg)
+        self.assertEqual(len(pattern.threadlist), 1)
+        self.assertEqual(sum(1 for s in pattern.stitches if s[2] == pyembroidery.COLOR_BREAK), 0)
+
+    def test_troca_de_cor_real_ainda_gera_color_break(self):
+        svg = (
+            '<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkstitch="http://inkstitch.org/namespace" '
+            'viewBox="0 0 40 40">'
+            '<path d="M0 0 h1 v1 h-1 Z" fill="#ff0000" inkstitch:fill_method="tatami_fill" '
+            'inkstitch:line_distance="1mm" inkstitch:angle="0" />'
+            '<path d="M35 35 h1 v1 h-1 Z" fill="#0000ff" inkstitch:fill_method="tatami_fill" '
+            'inkstitch:line_distance="1mm" inkstitch:angle="0" />'
+            "</svg>"
+        )
+        pattern = _run_svg_to_embroidery(svg)
+        self.assertEqual(len(pattern.threadlist), 2)
+        self.assertEqual(sum(1 for s in pattern.stitches if s[2] == pyembroidery.COLOR_BREAK), 1)
+
+
+class TestSatinTatamiHoleParity(unittest.TestCase):
+    """
+    O worker hoje não tem um algoritmo de coluna dedicado pro cetim
+    (contour_fill) — cai no mesmo preenchimento par-ímpar do tatami (STI-2) —
+    então os dois devem respeitar buracos igualmente. Cobre o relato do
+    usuário de que o cetim "não deixava o espaço vazado das letras".
+    """
+
+    RING_D = "M0 0 H8 V8 H0 Z M2.5 2.5 H5.5 V5.5 H2.5 Z"  # anel 8x8 com miolo 3x3
+
+    def _hole_stitch_count(self, fill_method_attrs: str) -> tuple[int, int]:
+        svg = (
+            f'<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkstitch="http://inkstitch.org/namespace" '
+            f'viewBox="0 0 8 8"><path d="{self.RING_D}" fill="#ff0000" fill-rule="evenodd" '
+            f'inkstitch:angle="0" {fill_method_attrs} /></svg>'
+        )
+        pattern = _run_svg_to_embroidery(svg)
+        total = in_hole = 0
+        for x, y, cmd in pattern.stitches:
+            if cmd != pyembroidery.STITCH:
+                continue
+            total += 1
+            xm, ym = x / SCALE_SVG_TO_EMB, y / SCALE_SVG_TO_EMB
+            if 2.5 < xm < 5.5 and 2.5 < ym < 5.5:
+                in_hole += 1
+        return total, in_hole
+
+    def test_cetim_respeita_o_buraco(self):
+        total, in_hole = self._hole_stitch_count(
+            'inkstitch:fill_method="contour_fill" inkstitch:contour_strategy="inner_to_outer" '
+            'inkstitch:line_distance="0.4mm"'
+        )
+        self.assertGreater(total, 0)
+        self.assertEqual(in_hole, 0, "cetim preenchendo por cima do miolo/buraco")
+
+    def test_tatami_respeita_o_buraco(self):
+        total, in_hole = self._hole_stitch_count(
+            'inkstitch:fill_method="tatami_fill" inkstitch:line_distance="0.4mm"'
+        )
+        self.assertGreater(total, 0)
+        self.assertEqual(in_hole, 0, "tatami preenchendo por cima do miolo/buraco")
 
 
 if __name__ == "__main__":

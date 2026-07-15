@@ -167,10 +167,12 @@ function buildStitchAttributes(el: EmbroideryElement, lineDistanceOverride?: num
 
   switch (type) {
     case "satin":
-      // no preview precisamos de um espaçamento explícito p/ o fill do worker
+      // O worker hoje não tem um algoritmo de coluna dedicado pro contour_fill
+      // (STI-2) — cai no mesmo preenchimento par-ímpar do tatami — mas density
+      // tem que valer igual, senão o slider fica sem nenhum efeito no cetim.
       return isPreview
         ? `${base} inkstitch:fill_method="tatami_fill" inkstitch:line_distance="${lineDistance}"`
-        : `${base} inkstitch:fill_method="contour_fill" inkstitch:contour_strategy="inner_to_outer"`;
+        : `${base} inkstitch:fill_method="contour_fill" inkstitch:contour_strategy="inner_to_outer" inkstitch:line_distance="${lineDistance}${suffix}"`;
     case "tatami":
       return `${base} inkstitch:fill_method="tatami_fill" inkstitch:line_distance="${lineDistance}${suffix}"`;
     case "running":

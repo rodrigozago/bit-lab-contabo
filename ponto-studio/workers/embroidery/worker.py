@@ -164,6 +164,12 @@ def svg_to_embroidery(svg_path: Path, format_ext: str) -> pyembroidery.EmbPatter
         log.error("Falha ao ler SVG %s: %s", svg_path, exc)
         return pattern
 
+    # Uma cor pode vir espalhada em vários <path> desconectados (mesma camada
+    # de bordado, ver group_paths_by_color) — só conta como troca de LINHA/cor
+    # quando o fill muda de fato, senão cada região vira uma parada de troca
+    # de linha na máquina para a MESMA cor (ex.: 17 "cores" pra 1 única linha).
+    last_color: str | None = None
+
     for path, attrs in zip(paths, attributes):
         if not path:
             continue
@@ -203,15 +209,19 @@ def svg_to_embroidery(svg_path: Path, format_ext: str) -> pyembroidery.EmbPatter
         if not points:
             continue
 
-        # Cor do fio
-        try:
-            r, g, b = hex_to_rgb(fill_color)
-            thread = pyembroidery.EmbThread()
-            thread.color = (r << 16) | (g << 8) | b
-            thread.name = fill_color
-            pattern.add_thread(thread)
-        except Exception:
-            pattern.add_thread(pyembroidery.EmbThread())
+        # Cor do fio — só troca de thread/linha quando a cor muda de verdade
+        if fill_color != last_color:
+            if last_color is not None:
+                pattern.add_stitch_absolute(pyembroidery.COLOR_BREAK, 0, 0)
+            try:
+                r, g, b = hex_to_rgb(fill_color)
+                thread = pyembroidery.EmbThread()
+                thread.color = (r << 16) | (g << 8) | b
+                thread.name = fill_color
+                pattern.add_thread(thread)
+            except Exception:
+                pattern.add_thread(pyembroidery.EmbThread())
+            last_color = fill_color
 
         # Adiciona pontos ao padrão (unidade: décimos de mm)
         scale = SCALE_SVG_TO_EMB
@@ -220,8 +230,6 @@ def svg_to_embroidery(svg_path: Path, format_ext: str) -> pyembroidery.EmbPatter
             cmd = pyembroidery.STITCH if not first else pyembroidery.JUMP
             pattern.add_stitch_absolute(cmd, x * scale, y * scale)
             first = False
-
-        pattern.add_stitch_absolute(pyembroidery.COLOR_BREAK, 0, 0)
 
     pattern.add_stitch_absolute(pyembroidery.END, 0, 0)
     return pattern
