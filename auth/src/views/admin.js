@@ -36,7 +36,13 @@ function renderAdmin({ email }) {
 </header>
 
 <section>
-  <h2 style="margin-top:0">Usuários</h2>
+  <h2 style="margin-top:0">Solicitações pendentes</h2>
+  <table id="requests-table"><thead><tr><th>Usuário</th><th>App</th><th>Solicitado em</th><th></th></tr></thead><tbody></tbody></table>
+  <div class="msg" id="requests-msg"></div>
+</section>
+
+<section>
+  <h2>Usuários</h2>
   <table id="users-table"><thead><tr><th>E-mail</th><th>Admin</th><th>Criado em</th><th></th></tr></thead><tbody></tbody></table>
   <form class="inline" onsubmit="createUser(event)">
     <input type="email" id="new-user-email" placeholder="email@bit-lab.tech" required />
@@ -92,10 +98,38 @@ async function loadAll() {
   usersCache = await api('/admin/api/users')
   appsCache = await api('/admin/api/apps')
   const access = await api('/admin/api/access')
+  const requests = await api('/admin/api/access-requests')
   renderUsers()
   renderApps()
   renderAccess(access)
+  renderRequests(requests)
   renderSelects()
+}
+
+function renderRequests(requests) {
+  const tbody = document.querySelector('#requests-table tbody')
+  if (requests.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="4" style="color:#888;">Nenhuma solicitação pendente.</td></tr>'
+    return
+  }
+  tbody.innerHTML = requests.map(r => \`
+    <tr>
+      <td>\${r.email}</td>
+      <td>\${r.name}</td>
+      <td>\${fmtDate(r.requested_at)}</td>
+      <td>
+        <button onclick="decideRequest('\${r.id}', 'approve')">aprovar</button>
+        <button class="danger" onclick="decideRequest('\${r.id}', 'reject')">recusar</button>
+      </td>
+    </tr>\`).join('')
+}
+
+async function decideRequest(id, action) {
+  try {
+    await api('/admin/api/access-requests/' + id + '/' + action, { method: 'POST' })
+    showMsg('requests-msg', action === 'approve' ? 'Acesso concedido.' : 'Solicitação recusada.', true)
+    await loadAll()
+  } catch (err) { showMsg('requests-msg', err.message, false) }
 }
 
 function renderUsers() {

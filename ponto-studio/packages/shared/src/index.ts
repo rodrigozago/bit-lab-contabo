@@ -31,6 +31,8 @@ export interface EmbroideryProject {
   name: string;
   canvas: CanvasSize;
   elements: EmbroideryElement[];
+  /** sub (OIDC) do usuário dono do projeto — ausente em projetos criados antes do login existir */
+  ownerId?: string;
   createdAt: string;
   updatedAt: string;
 }

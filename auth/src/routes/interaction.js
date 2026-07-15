@@ -1,7 +1,9 @@
 const express = require('express')
 const oidc = require('../oidc')
 const users = require('../models/users')
+const apps = require('../models/apps')
 const appAccess = require('../models/appAccess')
+const accessRequests = require('../models/accessRequests')
 const session = require('../session')
 const { checkLimit } = require('../rateLimit')
 const { renderLogin } = require('../views/login')
@@ -19,7 +21,20 @@ function loginPage(uid, extra = {}) {
   })
 }
 
-async function finishWithAccessDenied(req, res) {
+// Registra a solicitação pendente (idempotente) pra aparecer na fila do
+// admin sem o usuário precisar fazer mais nada além de tentar logar.
+async function ensureAccessRequest(userId, appSlug) {
+  try {
+    const app = await apps.findBySlug(appSlug)
+    if (app) await accessRequests.ensurePending(userId, app.id)
+  } catch (err) {
+    console.error('[interaction] falha ao registrar solicitação pendente:', err)
+  }
+}
+
+async function finishWithAccessDenied(req, res, userId, appSlug) {
+  await ensureAccessRequest(userId, appSlug)
+
   return oidc.interactionFinished(
     req,
     res,
@@ -38,7 +53,7 @@ router.get('/:uid', async (req, res, next) => {
       const current = await session.read(req)
       if (current) {
         if (!(await appAccess.hasAccess(current.userId, params.client_id))) {
-          return await finishWithAccessDenied(req, res)
+          return await finishWithAccessDenied(req, res, current.userId, params.client_id)
         }
         return await oidc.interactionFinished(
           req,
@@ -54,7 +69,7 @@ router.get('/:uid', async (req, res, next) => {
       // todos os clients são apps nossos — auto-consent, mas respeitando app_access
       const accountId = details.session.accountId
       if (!(await appAccess.hasAccess(accountId, params.client_id))) {
-        return await finishWithAccessDenied(req, res)
+        return await finishWithAccessDenied(req, res, accountId, params.client_id)
       }
 
       let grant = details.grantId ? await oidc.Grant.find(details.grantId) : undefined
@@ -104,6 +119,7 @@ router.post('/:uid/login', express.urlencoded({ extended: false }), async (req, 
     }
 
     if (!(await appAccess.hasAccess(user.id, params.client_id))) {
+      await ensureAccessRequest(user.id, params.client_id)
       return res.status(403).type('html').send(loginPage(uid, { error: 'Sua conta não tem acesso a este app — fale com o admin.' }))
     }
 

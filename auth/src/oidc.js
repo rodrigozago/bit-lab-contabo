@@ -37,6 +37,22 @@ if (process.env.FACE_LAB_OIDC_SECRET) {
   console.warn('[oidc] FACE_LAB_OIDC_SECRET não definido — client face-lab NÃO registrado.')
 }
 
+if (process.env.PONTO_STUDIO_OIDC_SECRET) {
+  clients.push({
+    client_id: 'ponto-studio',
+    client_secret: process.env.PONTO_STUDIO_OIDC_SECRET,
+    grant_types: ['authorization_code'],
+    response_types: ['code'],
+    redirect_uris: [
+      'https://ponto.bit-lab.tech/api/auth/callback',
+      ...(IS_PROD ? [] : ['http://localhost:4001/api/auth/callback']),
+    ],
+    token_endpoint_auth_method: 'client_secret_basic',
+  })
+} else {
+  console.warn('[oidc] PONTO_STUDIO_OIDC_SECRET não definido — client ponto-studio NÃO registrado.')
+}
+
 const configuration = {
   adapter: RedisAdapter,
   clients,

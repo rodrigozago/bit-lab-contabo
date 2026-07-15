@@ -11,6 +11,7 @@ import type {
   CanvasSize,
   StitchPreviewJobStatus,
 } from "@ponto-studio/shared";
+import type { Me } from "../lib/auth.ts";
 
 const BASE = "/api";
 
@@ -68,6 +69,10 @@ export const api = {
     create: (projectId: string) =>
       request<{ jobId: string }>("/stitch-preview", { method: "POST", body: JSON.stringify({ projectId }) }),
     poll: (jobId: string) => request<StitchPreviewJobStatus>(`/stitch-preview/${jobId}`),
+  },
+  auth: {
+    me: () => request<Me>("/me"),
+    logout: () => request<{ ssoLogoutUrl: string }>("/auth/logout", { method: "POST" }),
   },
   upload: {
     image: async (file: File): Promise<{ fileId: string; url: string }> => {

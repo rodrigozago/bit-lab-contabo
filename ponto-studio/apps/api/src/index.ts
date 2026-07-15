@@ -1,4 +1,5 @@
 import Fastify from "fastify";
+import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
 import staticFiles from "@fastify/static";
@@ -10,13 +11,15 @@ import { uploadRoutes } from "./routes/upload.js";
 import { analyzeRoutes } from "./routes/analyze.js";
 import { previewRoutes } from "./routes/preview.js";
 import { stitchPreviewRoutes } from "./routes/stitchPreview.js";
+import { authRoutes } from "./routes/auth.js";
 import { startResultListener } from "./services/jobQueue.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const app = Fastify({ logger: { level: "info" } });
 
-await app.register(cors, { origin: true });
+await app.register(cors, { origin: true, credentials: true });
+await app.register(cookie);
 await app.register(multipart, { limits: { fileSize: 10 * 1024 * 1024 } });
 
 // Serve exports (arquivos de bordado gerados)
@@ -38,6 +41,7 @@ await app.register(uploadRoutes, { prefix: "/api/upload" });
 await app.register(analyzeRoutes, { prefix: "/api/analyze" });
 await app.register(previewRoutes, { prefix: "/api/preview" });
 await app.register(stitchPreviewRoutes, { prefix: "/api/stitch-preview" });
+await app.register(authRoutes);
 
 app.get("/health", async () => ({ ok: true, service: "ponto-studio-api" }));
 
