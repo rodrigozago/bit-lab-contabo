@@ -41,6 +41,7 @@ export function ImportModal({ onClose, onConfirm }: Props) {
 
   // Parâmetros da análise local (único método — sem IA)
   const [colors, setColors] = useState(4);
+  const [maxAreas, setMaxAreas] = useState(6);
   const [colorTolerance, setColorTolerance] = useState(10);
   const [minRegionPct, setMinRegionPct] = useState(0);
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -109,7 +110,7 @@ export function ImportModal({ onClose, onConfirm }: Props) {
     if (f.type === "image/svg+xml") {
       throw new Error("SVG já é vetorial — o processamento local aceita PNG ou JPG.");
     }
-    const { jobId } = await api.analyze.local(f, { colors, minRegionPct, detail: 2, colorTolerance });
+    const { jobId } = await api.analyze.local(f, { colors, minRegionPct, detail: 2, colorTolerance, maxAreas });
     return pollAnalysisUntilDone(jobId);
   }
 
@@ -241,10 +242,10 @@ export function ImportModal({ onClose, onConfirm }: Props) {
                     />
                   </label>
                   <label style={s.paramLabel}>
-                    Tolerância de cor: <strong>{colorTolerance}</strong>
+                    Máximo de áreas: <strong>{maxAreas}</strong>
                     <input
-                      type="range" min={0} max={40} step={1} value={colorTolerance}
-                      onChange={(e) => setColorTolerance(Number(e.target.value))}
+                      type="range" min={1} max={8} step={1} value={maxAreas}
+                      onChange={(e) => setMaxAreas(Number(e.target.value))}
                       style={s.paramSlider}
                     />
                   </label>
@@ -252,6 +253,9 @@ export function ImportModal({ onClose, onConfirm }: Props) {
                 {colors === 1 && (
                   <p style={s.paramHint}>1 cor exclui o fundo automaticamente — sobra só o desenho.</p>
                 )}
+                <p style={s.paramHint}>
+                  Limita o total de camadas de bordado — cores parecidas demais são agrupadas até caber no limite.
+                </p>
 
                 <label style={s.advancedToggle}>
                   <input
@@ -262,14 +266,24 @@ export function ImportModal({ onClose, onConfirm }: Props) {
                 </label>
 
                 {advancedOpen && (
-                  <label style={s.paramLabel}>
-                    Ignorar detalhes pequenos: <strong>{minRegionPct.toFixed(2)}%</strong>
-                    <input
-                      type="range" min={0} max={1} step={0.05} value={minRegionPct}
-                      onChange={(e) => setMinRegionPct(Number(e.target.value))}
-                      style={s.paramSlider}
-                    />
-                  </label>
+                  <>
+                    <label style={s.paramLabel}>
+                      Tolerância de cor: <strong>{colorTolerance}</strong>
+                      <input
+                        type="range" min={0} max={40} step={1} value={colorTolerance}
+                        onChange={(e) => setColorTolerance(Number(e.target.value))}
+                        style={s.paramSlider}
+                      />
+                    </label>
+                    <label style={s.paramLabel}>
+                      Ignorar detalhes pequenos: <strong>{minRegionPct.toFixed(2)}%</strong>
+                      <input
+                        type="range" min={0} max={1} step={0.05} value={minRegionPct}
+                        onChange={(e) => setMinRegionPct(Number(e.target.value))}
+                        style={s.paramSlider}
+                      />
+                    </label>
+                  </>
                 )}
               </div>
 

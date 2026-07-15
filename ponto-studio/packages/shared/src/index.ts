@@ -112,6 +112,8 @@ export interface LocalAnalyzeParams {
   detail: number;
   /** ΔE (Lab) abaixo do qual duas cores são fundidas na mesma camada (0–40) */
   colorTolerance: number;
+  /** Teto duro de camadas no SVG final (1–8) — funde as cores mais próximas até caber no limite */
+  maxAreas: number;
 }
 
 export interface AnalyzeJobStatus {

@@ -17,6 +17,7 @@ from analyze import (
     AnalyzeParams,
     analyze_image,
     bake_translate,
+    cap_max_areas,
     clean_labels,
     group_paths_by_color,
     quantize,
@@ -307,6 +308,71 @@ class TestColorTolerance(unittest.TestCase):
             svg = analyze_image(path, AnalyzeParams(colors=3, color_tolerance=25))
             groups = svg_color_groups(svg)
             self.assertEqual(len(groups), 2, f"esperava 2 grupos (vermelhos fundidos) com tolerância alta: {groups}")
+
+
+def make_four_color_image(path: str) -> None:
+    """Fundo branco + 4 quadrados de cores bem distintas (vermelho, verde, azul, amarelo)."""
+    img = np.full((200, 200, 3), 255, dtype=np.uint8)
+    img[10:60, 10:60] = (0, 0, 220)     # vermelho (BGR)
+    img[10:60, 140:190] = (0, 180, 0)   # verde
+    img[140:190, 10:60] = (200, 0, 0)   # azul
+    img[140:190, 140:190] = (0, 220, 220)  # amarelo
+    cv2.imwrite(path, img)
+
+
+class TestCapMaxAreas(unittest.TestCase):
+    """max_areas funde as cores mais próximas até caber no teto (pedido do usuário: 'muitas áreas')."""
+
+    def _four_group_svg(self) -> str:
+        return (
+            f'<svg xmlns="{SVG_NS}" viewBox="0 0 10 10">'
+            '<g fill="#ff0000" data-layer-color="#ff0000"><path d="M0 0h1v1H0Z"/></g>'
+            '<g fill="#fe0101" data-layer-color="#fe0101"><path d="M1 1h1v1H1Z"/></g>'
+            '<g fill="#0000ff" data-layer-color="#0000ff"><path d="M2 2h1v1H2Z"/></g>'
+            '<g fill="#00ff00" data-layer-color="#00ff00"><path d="M3 3h1v1H3Z"/></g>'
+            "</svg>"
+        )
+
+    def test_nao_mexe_se_ja_esta_dentro_do_limite(self):
+        svg = self._four_group_svg()
+        result = cap_max_areas(svg, max_areas=4)
+        self.assertEqual(svg_color_groups(result), svg_color_groups(svg))
+
+    def test_funde_ate_caber_no_limite(self):
+        svg = self._four_group_svg()
+        result = cap_max_areas(svg, max_areas=2)
+        groups = svg_color_groups(result)
+        self.assertEqual(len(groups), 2, f"esperava 2 grupos: {groups}")
+
+    def test_funde_par_mais_proximo_primeiro(self):
+        # #ff0000 e #fe0101 são quase idênticos — devem virar 1 grupo antes de
+        # tocar no azul/verde (bem distantes em Lab).
+        svg = self._four_group_svg()
+        result = cap_max_areas(svg, max_areas=3)
+        groups = svg_color_groups(result)
+        self.assertEqual(len(groups), 3, f"esperava 3 grupos: {groups}")
+        self.assertTrue(
+            "#0000ff" in groups and "#00ff00" in groups,
+            f"azul/verde não deveriam ter sido fundidos: {groups}",
+        )
+
+    def test_max_areas_zero_ou_negativo_nao_altera_svg(self):
+        svg = self._four_group_svg()
+        self.assertEqual(cap_max_areas(svg, max_areas=0), svg)
+
+    def test_end_to_end_limita_camadas_finais(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "img.png")
+            make_four_color_image(path)
+            svg = analyze_image(path, AnalyzeParams(colors=5, color_tolerance=0, max_areas=2))
+            groups = svg_color_groups(svg)
+            self.assertLessEqual(len(groups), 2, f"esperava no máximo 2 camadas: {groups}")
+
+    def test_parametro_max_areas_e_limitado(self):
+        p = AnalyzeParams(max_areas=99).clamped()
+        self.assertEqual(p.max_areas, 8)
+        p2 = AnalyzeParams(max_areas=0).clamped()
+        self.assertEqual(p2.max_areas, 1)
 
 
 if __name__ == "__main__":

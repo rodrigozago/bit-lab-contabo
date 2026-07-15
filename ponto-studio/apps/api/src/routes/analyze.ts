@@ -42,6 +42,7 @@ export async function analyzeRoutes(app: FastifyInstance) {
       minRegionPct: fieldNumber(data.fields, "minRegionPct", 0),
       detail: fieldNumber(data.fields, "detail", 2),
       colorTolerance: fieldNumber(data.fields, "colorTolerance", 10),
+      maxAreas: fieldNumber(data.fields, "maxAreas", 8),
     };
 
     await enqueueAnalyzeJob({ jobId, imageFile, analyzeParams });

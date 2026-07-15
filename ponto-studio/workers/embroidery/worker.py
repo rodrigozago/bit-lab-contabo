@@ -365,6 +365,7 @@ def process_analyze_job(r: redis.Redis, job_data: dict[str, Any]) -> None:
             min_region_pct=float(raw_params.get("minRegionPct", 0)),
             detail=int(raw_params.get("detail", 2)),
             color_tolerance=float(raw_params.get("colorTolerance", DEFAULT_MERGE_DELTA_E)),
+            max_areas=int(raw_params.get("maxAreas", AnalyzeParams().max_areas)),
         )
         svg = analyze_image(str(image_path), params)
 
