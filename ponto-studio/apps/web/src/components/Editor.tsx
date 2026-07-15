@@ -2,7 +2,15 @@ import { useState, useCallback, useRef } from "react";
 import {
   Tldraw,
   AssetRecordType,
+  DefaultToolbar,
+  SelectToolbarItem,
+  HandToolbarItem,
+  DrawToolbarItem,
+  RectangleToolbarItem,
+  EllipseToolbarItem,
+  EraserToolbarItem,
   type Editor as TldrawEditor,
+  type TLComponents,
   type TLShape,
 } from "@tldraw/tldraw";
 import "@tldraw/tldraw/tldraw.css";
@@ -60,6 +68,31 @@ const layerPanelStyles: Record<string, React.CSSProperties> = {
   label: { color: "#1a1a1a", userSelect: "none" }
 };
 
+
+// ── UI do tldraw enxuta (EDIT-2) ────────────────────────────────────────────────
+// Só o essencial pra desenhar/editar áreas de bordado: seleção, mover (hand),
+// desenho livre e as 2 formas mais úteis pra delimitar área (retângulo/elipse) +
+// borracha. Sem texto/nota/frame/seta/formas decorativas — não fazem sentido
+// como área de bordado. Sem asset (import de imagem) — o app tem fluxo próprio
+// ("📷 Importar imagem"), o botão nativo do tldraw só confundiria.
+function CustomToolbar() {
+  return (
+    <DefaultToolbar>
+      <SelectToolbarItem />
+      <HandToolbarItem />
+      <DrawToolbarItem />
+      <RectangleToolbarItem />
+      <EllipseToolbarItem />
+      <EraserToolbarItem />
+    </DefaultToolbar>
+  );
+}
+
+// Sem PageMenu: o projeto não tem conceito de múltiplas páginas (1 EmbroideryProject = 1 canvas).
+const tldrawComponents: TLComponents = {
+  Toolbar: CustomToolbar,
+  PageMenu: null,
+};
 
 // ── Main Editor Component ─────────────────────────────────────────────────────
 
@@ -307,7 +340,7 @@ export function Editor({ project, onProjectChange, onNewProject }: Props) {
       {/* ── Main layout ── */}
       <div style={styles.body}>
         <div style={styles.canvas}>
-          <Tldraw onMount={handleMount} hideUi={false} />
+          <Tldraw onMount={handleMount} components={tldrawComponents} />
         </div>
 
         <aside style={styles.sidebar}>
