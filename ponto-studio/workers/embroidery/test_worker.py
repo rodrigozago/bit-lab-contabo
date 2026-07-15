@@ -158,5 +158,44 @@ class TestSatinTatamiHoleParity(unittest.TestCase):
         self.assertEqual(in_hole, 0, "tatami preenchendo por cima do miolo/buraco")
 
 
+class TestFillDoesNotBridgeGaps(unittest.TestCase):
+    """
+    Regressão (relato do usuário: "buracos somem entre as letras" com
+    densidade alta): quando uma linha de varredura cruza um vão entre duas
+    formas separadas (ou os dois lados de um buraco), o ponto final de um
+    segmento não pode ser costurado em linha reta até o início do próximo —
+    tem que pular (JUMP). Sem o fix, isso piorava com densidade alta (mais
+    linhas de varredura = mais pontos-ponte costurando por cima do vão).
+    """
+
+    # dois blocos retangulares 8x20 com um vão de x=8 a x=12 (como duas letras lado a lado)
+    TWO_BLOCKS_D = "M0 0 H8 V20 H0 Z M12 0 H20 V20 H12 Z"
+
+    def _bridging_stitches(self, spacing_mm: float) -> int:
+        svg = (
+            f'<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkstitch="http://inkstitch.org/namespace" '
+            f'viewBox="0 0 20 20"><path d="{self.TWO_BLOCKS_D}" fill="#ff0000" fill-rule="evenodd" '
+            f'inkstitch:angle="0" inkstitch:fill_method="tatami_fill" '
+            f'inkstitch:line_distance="{spacing_mm}mm" /></svg>'
+        )
+        pattern = _run_svg_to_embroidery(svg)
+        pts = [(x / SCALE_SVG_TO_EMB, cmd) for x, _y, cmd in pattern.stitches]
+        bridges = 0
+        for i in range(1, len(pts)):
+            x0, _c0 = pts[i - 1]
+            x1, c1 = pts[i]
+            if c1 == pyembroidery.STITCH and ((x0 < 8 and x1 > 12) or (x0 > 12 and x1 < 8)):
+                bridges += 1
+        return bridges
+
+    def test_espacamento_grosso_nao_costura_por_cima_do_vao(self):
+        self.assertEqual(self._bridging_stitches(1.38), 0)
+
+    def test_espacamento_fino_nao_costura_por_cima_do_vao(self):
+        # é justamente com espaçamento fino (densidade alta) que o bug era
+        # mais visível — muitas linhas de varredura, muitas pontes
+        self.assertEqual(self._bridging_stitches(0.3), 0)
+
+
 if __name__ == "__main__":
     unittest.main()

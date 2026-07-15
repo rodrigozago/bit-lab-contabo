@@ -26,6 +26,26 @@ export function StitchPlayer({ pattern }: Props) {
     return idxs;
   }, [pattern]);
 
+  // Enquadra pelo bounding box REAL dos pontos, não pelo canvas.viewBox do
+  // projeto inteiro (que pode ser bem maior que o desenho) — senão um
+  // desenho pequeno some minúsculo no canvas e linhas muito próximas se
+  // sobrepõem visualmente, parecendo "cobrir" buracos que na verdade
+  // continuam vazios nos dados.
+  const bbox = useMemo(() => {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const [x, y] of pattern.stitches) {
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+    if (!Number.isFinite(minX)) return { x: 0, y: 0, w: 1, h: 1 };
+    const w = maxX - minX || 1;
+    const h = maxY - minY || 1;
+    const pad = Math.max(w, h) * 0.08;
+    return { x: minX - pad, y: minY - pad, w: w + pad * 2, h: h + pad * 2 };
+  }, [pattern]);
+
   // ── animação (play/pause) ───────────────────────────────────────────────────
   useEffect(() => {
     if (!playing || total === 0) return;
@@ -60,11 +80,9 @@ export function StitchPlayer({ pattern }: Props) {
     ctx.fillStyle = "#fafaf9";
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-    const [vx, vy, vw, vh] = pattern.viewBox.split(/\s+/).map(Number);
-    if (!vw || !vh) return;
-    const scale = Math.min(CANVAS_W / vw, CANVAS_H / vh) * 0.9;
-    const offsetX = (CANVAS_W - vw * scale) / 2 - vx * scale;
-    const offsetY = (CANVAS_H - vh * scale) / 2 - vy * scale;
+    const scale = Math.min(CANVAS_W / bbox.w, CANVAS_H / bbox.h) * 0.95;
+    const offsetX = (CANVAS_W - bbox.w * scale) / 2 - bbox.x * scale;
+    const offsetY = (CANVAS_H - bbox.h * scale) / 2 - bbox.y * scale;
 
     ctx.lineWidth = 1;
     ctx.lineJoin = "round";
@@ -99,7 +117,7 @@ export function StitchPlayer({ pattern }: Props) {
       }
     }
     if (penDown) ctx.stroke();
-  }, [pattern, index]);
+  }, [pattern, index, bbox]);
 
   function jumpToColor(direction: -1 | 1) {
     setPlaying(false);

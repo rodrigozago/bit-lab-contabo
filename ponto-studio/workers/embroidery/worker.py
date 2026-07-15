@@ -86,17 +86,25 @@ def fill_path_with_stitches(
     path: svgpathtools.Path,
     spacing_mm: float = STITCH_SPACING_MM,
     angle_deg: float = 45.0,
-) -> list[tuple[float, float]]:
+) -> list[tuple[float, float, bool]]:
     """
     Preenchimento por varredura de linhas paralelas ao ângulo dado, com regra
     PAR-ÍMPAR: em cada linha, as interseções reais com o contorno são ordenadas
     e os pontos são emitidos só ENTRE PARES consecutivos (0–1, 2–3, …). Assim,
     buracos (miolo de letras como a/b/6) adicionam duas interseções e viram
     lacunas vazias — não são bordados por cima.
+
+    Retorna (x, y, jump_before): quando uma linha de varredura cruza um
+    buraco OU um vão entre formas separadas (ex.: entre duas letras), ela
+    produz 2+ pares na MESMA linha — sem marcar o início de cada par novo
+    com jump_before=True, o ponto final de um par era costurado em linha
+    reta até o início do próximo, "fechando" o buraco/vão com um ponto por
+    cima dele (bug real: some ao vivo o efeito piora com densidade alta,
+    porque mais linhas de varredura = mais desses pontos-ponte).
     """
     xmin, xmax, ymin, ymax = path.bbox()
     if xmax == xmin or ymax == ymin:
-        return path_to_polyline(path)
+        return [(x, y, i == 0) for i, (x, y) in enumerate(path_to_polyline(path))]
 
     spacing = max(spacing_mm, 1e-3)  # unidades SVG
     rad = math.radians(angle_deg)
@@ -112,7 +120,7 @@ def fill_path_with_stitches(
     perp_projs = [cx * px + cy * py for cx, cy in corners]
     t_min, t_max = min(perp_projs), max(perp_projs)
 
-    stitches: list[tuple[float, float]] = []
+    stitches: list[tuple[float, float, bool]] = []
     n_rows = int((t_max - t_min) / spacing) + 1
     for row in range(n_rows + 1):
         t = t_min + row * spacing
@@ -139,15 +147,19 @@ def fill_path_with_stitches(
         if row % 2 == 1:
             pairs = [(hi, lo) for lo, hi in reversed(pairs)]  # zig-zag
 
-        for s_a, s_b in pairs:
+        for pair_idx, (s_a, s_b) in enumerate(pairs):
             lo, hi = min(s_a, s_b), max(s_a, s_b)
             seq = [lo + k * spacing for k in range(int((hi - lo) / spacing) + 1)]
             if s_a > s_b:
                 seq.reverse()
-            for s in seq:
-                stitches.append((bx + s * dx, by + s * dy))
+            for k, s in enumerate(seq):
+                # novo par na MESMA linha = atravessou um buraco/vão — pula
+                jump_before = pair_idx > 0 and k == 0
+                stitches.append((bx + s * dx, by + s * dy, jump_before))
 
-    return stitches if stitches else path_to_polyline(path)
+    if stitches:
+        return stitches
+    return [(x, y, i == 0) for i, (x, y) in enumerate(path_to_polyline(path))]
 
 
 def svg_to_embroidery(svg_path: Path, format_ext: str) -> pyembroidery.EmbPattern:
@@ -199,12 +211,12 @@ def svg_to_embroidery(svg_path: Path, format_ext: str) -> pyembroidery.EmbPatter
 
         try:
             if is_running:
-                points = path_to_polyline(path, samples=128)
+                points = [(x, y, i == 0) for i, (x, y) in enumerate(path_to_polyline(path, samples=128))]
             else:
                 points = fill_path_with_stitches(path, spacing_mm=spacing, angle_deg=angle)
         except Exception as exc:
             log.warning("Erro ao gerar pontos para path: %s — usando polyline", exc)
-            points = path_to_polyline(path)
+            points = [(x, y, i == 0) for i, (x, y) in enumerate(path_to_polyline(path))]
 
         if not points:
             continue
@@ -223,11 +235,13 @@ def svg_to_embroidery(svg_path: Path, format_ext: str) -> pyembroidery.EmbPatter
                 pattern.add_thread(pyembroidery.EmbThread())
             last_color = fill_color
 
-        # Adiciona pontos ao padrão (unidade: décimos de mm)
+        # Adiciona pontos ao padrão (unidade: décimos de mm) — pula (JUMP) no
+        # 1º ponto do path e sempre que jump_before marcar um novo segmento
+        # desconectado (buraco/vão), senão a agulha "costura" por cima do vão
         scale = SCALE_SVG_TO_EMB
         first = True
-        for x, y in points:
-            cmd = pyembroidery.STITCH if not first else pyembroidery.JUMP
+        for x, y, jump_before in points:
+            cmd = pyembroidery.JUMP if (first or jump_before) else pyembroidery.STITCH
             pattern.add_stitch_absolute(cmd, x * scale, y * scale)
             first = False
 
