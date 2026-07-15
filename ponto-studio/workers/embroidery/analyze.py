@@ -338,22 +338,105 @@ def _detect_background_index(labels: np.ndarray, n_colors: int) -> int:
     return int(max(range(n_colors), key=lambda i: (border_counts[i], total_counts[i])))
 
 
-def _remove_color_group(svg: str, hex_color: str) -> str:
-    """Remove do SVG o <g data-layer-color="hex_color"> (se existir)."""
-    ET.register_namespace("", SVG_NS)
-    root = ET.fromstring(svg)
-    for g in list(root.iter(f"{{{SVG_NS}}}g")):
-        if g.get("data-layer-color") == hex_color:
-            root.remove(g)
-    return ET.tostring(root, encoding="unicode")
-
-
 def _hex_to_lab(hex_color: str) -> np.ndarray:
     """"#rrggbb" → vetor Lab (float64), para medir distância perceptual entre cores finais."""
     r, g, b = int(hex_color[1:3], 16), int(hex_color[3:5], 16), int(hex_color[5:7], 16)
     bgr = np.array([[[b, g, r]]], dtype=np.uint8)
     lab = cv2.cvtColor(bgr, cv2.COLOR_BGR2Lab)
     return lab[0, 0].astype(np.float64)
+
+
+# ΔE abaixo do qual duas cores do SVG final são consideradas a mesma "na prática"
+# — cobre só arredondamento (vtracer/PNG), não a tolerância que o usuário escolhe.
+_ROUNDING_DELTA_E = 6.0
+
+
+def _remove_color_group(svg: str, hex_color: str, tolerance: float = _ROUNDING_DELTA_E) -> str:
+    """
+    Remove do SVG os grupos perceptualmente iguais a `hex_color` (ΔE < tolerance),
+    não só o match exato — o vtracer pode gerar uma cor de fundo com um hex
+    ligeiramente diferente do calculado (arredondamento), e nesse caso o match
+    exato deixaria um "fundo fantasma" no resultado.
+    """
+    ET.register_namespace("", SVG_NS)
+    root = ET.fromstring(svg)
+    target = _hex_to_lab(hex_color)
+    for g in list(root.iter(f"{{{SVG_NS}}}g")):
+        color = g.get("data-layer-color")
+        if color and float(np.linalg.norm(_hex_to_lab(color) - target)) < tolerance:
+            root.remove(g)
+    return ET.tostring(root, encoding="unicode")
+
+
+def _extract_color_groups(root: ET.Element) -> list[dict]:
+    """Lê os <g data-layer-color="..."> do root em [{"color", "paths"}, ...]."""
+    entries: list[dict] = []
+    for g in list(root.iter(f"{{{SVG_NS}}}g")):
+        color = g.get("data-layer-color")
+        if color:
+            entries.append({"color": color, "paths": list(g)})
+    return entries
+
+
+def _rebuild_grouped_svg(root: ET.Element, entries: list[dict]) -> str:
+    for child in list(root):
+        root.remove(child)
+    for entry in entries:
+        g = ET.SubElement(root, f"{{{SVG_NS}}}g")
+        g.set("fill", entry["color"])
+        g.set("data-layer-color", entry["color"])
+        for path in entry["paths"]:
+            g.append(path)
+    return ET.tostring(root, encoding="unicode")
+
+
+def _closest_pair(labs: list[np.ndarray]) -> tuple[int, int, float]:
+    """Índices (i, j) do par de cores mais próximo em Lab, e a distância entre eles."""
+    best_pair = (0, 1)
+    best_dist = float(np.linalg.norm(labs[0] - labs[1]))
+    for i in range(len(labs)):
+        for j in range(i + 1, len(labs)):
+            d = float(np.linalg.norm(labs[i] - labs[j]))
+            if d < best_dist:
+                best_dist = d
+                best_pair = (i, j)
+    return best_pair[0], best_pair[1], best_dist
+
+
+def _merge_entry_pair(entries: list[dict], labs: list[np.ndarray], i: int, j: int) -> None:
+    """Funde entries[j] em entries[i], mantendo a cor do grupo com mais paths."""
+    if len(entries[j]["paths"]) > len(entries[i]["paths"]):
+        i, j = j, i
+    entries[i]["paths"].extend(entries[j]["paths"])
+    del entries[j]
+    del labs[j]
+
+
+def merge_similar_svg_colors(svg: str, tolerance: float) -> str:
+    """
+    Funde grupos de cor cuja distância Lab é menor que `tolerance` — cobre
+    fragmentação que sobra do vtracer no SVG final (cores quase idênticas que
+    deveriam ser uma só camada de bordado), não apenas a fusão de clusters
+    feita no k-means.
+    """
+    if tolerance <= 0:
+        return svg
+
+    ET.register_namespace("", SVG_NS)
+    root = ET.fromstring(svg)
+    entries = _extract_color_groups(root)
+    if len(entries) <= 1:
+        return svg
+
+    labs = [_hex_to_lab(e["color"]) for e in entries]
+
+    while len(entries) > 1:
+        i, j, dist = _closest_pair(labs)
+        if dist >= tolerance:
+            break
+        _merge_entry_pair(entries, labs, i, j)
+
+    return _rebuild_grouped_svg(root, entries)
 
 
 def cap_max_areas(svg: str, max_areas: int) -> str:
@@ -368,45 +451,17 @@ def cap_max_areas(svg: str, max_areas: int) -> str:
 
     ET.register_namespace("", SVG_NS)
     root = ET.fromstring(svg)
-
-    entries: list[dict] = []
-    for g in list(root.iter(f"{{{SVG_NS}}}g")):
-        color = g.get("data-layer-color")
-        if color:
-            entries.append({"color": color, "paths": list(g)})
-
+    entries = _extract_color_groups(root)
     if len(entries) <= max_areas:
         return svg
 
     labs = [_hex_to_lab(e["color"]) for e in entries]
 
     while len(entries) > max_areas:
-        best_pair = None
-        best_dist = None
-        for i in range(len(entries)):
-            for j in range(i + 1, len(entries)):
-                d = float(np.linalg.norm(labs[i] - labs[j]))
-                if best_dist is None or d < best_dist:
-                    best_dist = d
-                    best_pair = (i, j)
-        i, j = best_pair
-        if len(entries[j]["paths"]) > len(entries[i]["paths"]):
-            i, j = j, i
-        entries[i]["paths"].extend(entries[j]["paths"])
-        del entries[j]
-        del labs[j]
+        i, j, _dist = _closest_pair(labs)
+        _merge_entry_pair(entries, labs, i, j)
 
-    for child in list(root):
-        root.remove(child)
-
-    for entry in entries:
-        g = ET.SubElement(root, f"{{{SVG_NS}}}g")
-        g.set("fill", entry["color"])
-        g.set("data-layer-color", entry["color"])
-        for path in entry["paths"]:
-            g.append(path)
-
-    return ET.tostring(root, encoding="unicode")
+    return _rebuild_grouped_svg(root, entries)
 
 
 # ── Entrada principal ──────────────────────────────────────────────────────────
@@ -424,9 +479,16 @@ def analyze_image(image_path: str, params: AnalyzeParams | None = None) -> str:
     p = (params or AnalyzeParams()).clamped()
     exclude_background = p.colors == 1
     n_colors = 2 if exclude_background else p.colors
+    # No modo "só o primeiro plano", a tolerância de cor do usuário NÃO pode
+    # se aplicar ao split fundo/desenho: se fundo e desenho forem tons
+    # próximos (ex. bege sobre branco), a fusão colapsaria os 2 clusters num
+    # só ANTES de sabermos qual é o fundo — palette ficaria com 1 cor e o
+    # fundo nunca seria removido. A tolerância só faz sentido entre cores do
+    # desenho em si (colors > 1).
+    cluster_tolerance = 0.0 if exclude_background else p.color_tolerance
 
     img = load_and_downscale(image_path)
-    labels, palette = quantize(img, n_colors, p.color_tolerance)
+    labels, palette = quantize(img, n_colors, cluster_tolerance)
     labels = clean_labels(labels, len(palette), p.min_region_pct)
     quantized = render_quantized(labels, palette)
     svg = vectorize(quantized, p)
@@ -436,6 +498,7 @@ def analyze_image(image_path: str, params: AnalyzeParams | None = None) -> str:
         bg_index = _detect_background_index(labels, len(palette))
         grouped = _remove_color_group(grouped, _bgr_to_hex(palette[bg_index]))
 
+    grouped = merge_similar_svg_colors(grouped, p.color_tolerance)
     grouped = cap_max_areas(grouped, p.max_areas)
 
     return grouped

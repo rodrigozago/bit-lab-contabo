@@ -20,6 +20,7 @@ from analyze import (
     cap_max_areas,
     clean_labels,
     group_paths_by_color,
+    merge_similar_svg_colors,
     quantize,
 )
 
@@ -308,6 +309,65 @@ class TestColorTolerance(unittest.TestCase):
             svg = analyze_image(path, AnalyzeParams(colors=3, color_tolerance=25))
             groups = svg_color_groups(svg)
             self.assertEqual(len(groups), 2, f"esperava 2 grupos (vermelhos fundidos) com tolerância alta: {groups}")
+
+
+def make_near_white_shape_image(path: str) -> None:
+    """Fundo branco puro + forma bege bem clara (tons próximos, caso de uso real de colors=1)."""
+    img = np.full((200, 200, 3), 255, dtype=np.uint8)
+    img[60:140, 60:140] = (225, 240, 245)  # bege claro (BGR), perto do branco
+    cv2.imwrite(path, img)
+
+
+class TestMergeSimilarSvgColors(unittest.TestCase):
+    """merge_similar_svg_colors funde grupos próximos no SVG final (não só no k-means)."""
+
+    def _four_group_svg(self) -> str:
+        return (
+            f'<svg xmlns="{SVG_NS}" viewBox="0 0 10 10">'
+            '<g fill="#ff0000" data-layer-color="#ff0000"><path d="M0 0h1v1H0Z"/></g>'
+            '<g fill="#fe0101" data-layer-color="#fe0101"><path d="M1 1h1v1H1Z"/></g>'
+            '<g fill="#0000ff" data-layer-color="#0000ff"><path d="M2 2h1v1H2Z"/></g>'
+            '<g fill="#00ff00" data-layer-color="#00ff00"><path d="M3 3h1v1H3Z"/></g>'
+            "</svg>"
+        )
+
+    def test_tolerancia_zero_nao_altera_svg(self):
+        svg = self._four_group_svg()
+        self.assertEqual(merge_similar_svg_colors(svg, 0), svg)
+
+    def test_funde_so_as_cores_proximas(self):
+        svg = self._four_group_svg()
+        result = merge_similar_svg_colors(svg, tolerance=5)
+        groups = svg_color_groups(result)
+        self.assertEqual(len(groups), 3, f"esperava #ff0000/#fe0101 fundidos, resto intacto: {groups}")
+
+    def test_tolerancia_alta_nao_funde_cores_bem_diferentes(self):
+        svg = self._four_group_svg()
+        result = merge_similar_svg_colors(svg, tolerance=5)
+        groups = svg_color_groups(result)
+        self.assertIn("#0000ff", groups)
+        self.assertIn("#00ff00", groups)
+
+
+class TestExcludeBackgroundToleranciaNaoColapsaFundo(unittest.TestCase):
+    """
+    Regressão: com colors=1, a tolerância de cor do usuário não pode fundir
+    fundo+desenho no k-means (senão a camada de fundo nunca é detectada e
+    removida) — só deve valer para múltiplas cores do próprio desenho.
+    """
+
+    def test_fundo_e_forma_proximos_nao_ficam_grudados(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "img.png")
+            make_near_white_shape_image(path)
+            # tolerância alta o bastante para fundir fundo+forma se fosse
+            # aplicada ao split fundo/desenho (o que não deve mais acontecer)
+            svg = analyze_image(path, AnalyzeParams(colors=1, color_tolerance=30))
+            groups = svg_color_groups(svg)
+            self.assertEqual(len(groups), 1, f"esperava só o primeiro plano: {groups}")
+            color = next(iter(groups))
+            r, g, b = int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16)
+            self.assertFalse(r > 250 and g > 250 and b > 250, f"sobrou o fundo branco: {color}")
 
 
 def make_four_color_image(path: str) -> None:

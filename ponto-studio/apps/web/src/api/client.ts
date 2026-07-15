@@ -47,6 +47,8 @@ export const api = {
       fd.append("colors", String(params.colors));
       fd.append("minRegionPct", String(params.minRegionPct));
       fd.append("detail", String(params.detail));
+      fd.append("colorTolerance", String(params.colorTolerance));
+      fd.append("maxAreas", String(params.maxAreas));
       const res = await fetch(`${BASE}/analyze/local`, { method: "POST", body: fd });
       const json = (await res.json()) as ApiResponse<{ jobId: string }>;
       if (!json.ok) throw new Error(json.error);
