@@ -44,7 +44,7 @@ export function Welcome({ onStart, onCancel }: Props) {
         )}
         <div style={styles.logo}>🪡</div>
         <h1 style={styles.title}>Ponto Studio</h1>
-        <p style={styles.subtitle}>O Canva do Bordado</p>
+        <p style={styles.subtitle}>Digitalize seus bordados</p>
 
         <div style={styles.field}>
           <label style={styles.label}>Nome do projeto</label>

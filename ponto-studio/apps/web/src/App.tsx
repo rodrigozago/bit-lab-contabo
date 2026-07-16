@@ -58,7 +58,7 @@ function AuthGate() {
             </>
           ) : (
             <>
-              <p style={styles.subtitle}>O Canva do Bordado</p>
+              <p style={styles.subtitle}>Digitalize seus bordados</p>
               <button style={styles.cta} onClick={() => (window.location.href = loginUrl())}>
                 Entrar →
               </button>
