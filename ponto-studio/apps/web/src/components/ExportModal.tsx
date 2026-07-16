@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import type { ExportFormat, ExportJob, StitchPattern } from "@ponto-studio/shared";
+import type { CanvasSize, ExportFormat, ExportJob, StitchPattern } from "@ponto-studio/shared";
 import { api, pollStitchDataUntilDone, pollUntilDone } from "../api/client.ts";
 import { StitchPlayer } from "./StitchPlayer.tsx";
+import { EstimateSummary } from "./EstimateSummary.tsx";
 
 type ModalFormat = ExportFormat | "SVG";
 
@@ -16,13 +17,14 @@ const FORMAT_DESC: Record<ModalFormat, string> = {
 
 interface Props {
   projectId: string;
+  canvas: CanvasSize;
   onClose: () => void;
 }
 
 type Phase = "select" | "processing" | "done" | "error";
 type PreviewPhase = "loading" | "ready" | "error";
 
-export function ExportModal({ projectId, onClose }: Props) {
+export function ExportModal({ projectId, canvas, onClose }: Props) {
   const [format, setFormat] = useState<ModalFormat>("DST");
   const [phase, setPhase] = useState<Phase>("select");
   const [job, setJob] = useState<ExportJob | null>(null);
@@ -108,6 +110,7 @@ export function ExportModal({ projectId, onClose }: Props) {
 
         {phase === "select" && (
           <>
+            <EstimateSummary pattern={pattern} canvas={canvas} />
             <p style={styles.subtitle}>Escolha o formato compatível com sua máquina:</p>
             <div style={styles.formatList}>
               {FORMATS.map((f) => (

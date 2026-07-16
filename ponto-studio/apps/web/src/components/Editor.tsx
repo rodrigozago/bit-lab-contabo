@@ -496,7 +496,7 @@ export function Editor({ project, onProjectChange, onBackToHome }: Props) {
       </div>
 
       {showExport && (
-        <ExportModal projectId={localProject.id} onClose={() => setShowExport(false)} />
+        <ExportModal projectId={localProject.id} canvas={localProject.canvas} onClose={() => setShowExport(false)} />
       )}
       {showImport && (
         <ImportModal onClose={() => setShowImport(false)} onConfirm={handleImportConfirm} />
