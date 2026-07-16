@@ -87,6 +87,7 @@ export function composeThumbnail(elements: EmbroideryElement[]): string | null {
   const serializer = new XMLSerializer();
 
   let viewBox: string | null = null;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   const innerParts: string[] = [];
 
   for (const el of withSvg) {
@@ -97,14 +98,40 @@ export function composeThumbnail(elements: EmbroideryElement[]): string | null {
     if (!root) continue;
 
     if (!viewBox) viewBox = root.getAttribute("viewBox");
+
+    // Calcula o bounding box dos paths para detectar se há overflow
+    for (const path of Array.from(root.querySelectorAll("path"))) {
+      try {
+        const bbox = path.getBBox?.();
+        if (bbox) {
+          minX = Math.min(minX, bbox.x);
+          minY = Math.min(minY, bbox.y);
+          maxX = Math.max(maxX, bbox.x + bbox.width);
+          maxY = Math.max(maxY, bbox.y + bbox.height);
+        }
+      } catch {
+        // Se getBBox falhar, ignora
+      }
+    }
+
     for (const child of Array.from(root.children)) {
       innerParts.push(serializer.serializeToString(child));
     }
   }
 
   if (innerParts.length === 0) return null;
+
   const finalViewBox = viewBox ?? "0 0 100 100";
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${finalViewBox}" width="100%" height="100%" preserveAspectRatio="xMidYMid slice" style="display:block;">${innerParts.join("")}</svg>`;
+
+  // Se há overflow detectado, ajusta o viewBox para o bounding box real
+  let adjustedViewBox = finalViewBox;
+  if (isFinite(minX) && isFinite(minY) && isFinite(maxX) && isFinite(maxY)) {
+    const width = maxX - minX || 100;
+    const height = maxY - minY || 100;
+    adjustedViewBox = `${minX} ${minY} ${width} ${height}`;
+  }
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${adjustedViewBox}" width="100%" height="100%" preserveAspectRatio="xMidYMid slice" style="display:block;">${innerParts.join("")}</svg>`;
 }
 
 export function splitSvgByColor(svg: string): ColorLayer[] {
