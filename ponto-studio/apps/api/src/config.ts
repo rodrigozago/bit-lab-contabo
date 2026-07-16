@@ -9,6 +9,7 @@ export const config = {
   isProd: process.env["NODE_ENV"] === "production",
   publicUrl: env("PUBLIC_URL", "http://localhost:3001"),
   redisUrl: env("REDIS_URL", "redis://localhost:6379"),
+  databaseUrl: env("DATABASE_URL", "postgres://ponto:ponto@localhost:5432/ponto"),
   sessionTtlSeconds: 60 * 60 * 24 * 7,
 
   oidc: {

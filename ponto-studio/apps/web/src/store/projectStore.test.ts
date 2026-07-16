@@ -125,4 +125,62 @@ describe("useProjectStore", () => {
     expect(onSync).toHaveBeenCalledTimes(1);
     expect(onSync.mock.calls[0][0].elements[0].color).toBe("#00ff00");
   });
+
+  it("saveStatus começa idle e vai pra saved quando onSync resolve", async () => {
+    const onSync = vi.fn().mockResolvedValue(undefined);
+    const { result } = renderHook(() => useProjectStore(makeProject(), onSync));
+
+    expect(result.current.saveStatus).toBe("idle");
+
+    act(() => {
+      result.current.addElement("M 0 0 Z", "#000");
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(600);
+      await Promise.resolve();
+    });
+
+    expect(result.current.saveStatus).toBe("saved");
+  });
+
+  it("saveStatus vai pra error quando onSync rejeita", async () => {
+    const onSync = vi.fn().mockRejectedValue(new Error("network"));
+    const { result } = renderHook(() => useProjectStore(makeProject(), onSync));
+
+    act(() => {
+      result.current.addElement("M 0 0 Z", "#000");
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(600);
+      await Promise.resolve();
+    });
+
+    expect(result.current.saveStatus).toBe("error");
+  });
+
+  it("retrySync tenta salvar de novo com o estado atual do projeto", async () => {
+    const onSync = vi.fn()
+      .mockRejectedValueOnce(new Error("net"))
+      .mockResolvedValueOnce(undefined);
+    const { result } = renderHook(() => useProjectStore(makeProject(), onSync));
+
+    act(() => {
+      result.current.addElement("M 0 0 Z", "#000");
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(600);
+      await Promise.resolve();
+    });
+    expect(result.current.saveStatus).toBe("error");
+
+    await act(async () => {
+      result.current.retrySync();
+      await Promise.resolve();
+    });
+
+    expect(result.current.saveStatus).toBe("saved");
+    expect(onSync).toHaveBeenCalledTimes(2);
+  });
 });

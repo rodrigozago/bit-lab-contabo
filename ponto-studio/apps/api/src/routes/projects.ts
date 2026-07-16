@@ -7,9 +7,7 @@ import type {
   ApiResponse,
 } from "@ponto-studio/shared";
 import { readSession, type SessionUser } from "../services/session.js";
-
-// In-memory store — substituir por banco de dados na V2
-export const store = new Map<string, EmbroideryProject>();
+import * as projectsRepo from "../services/projectsRepo.js";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -35,7 +33,7 @@ export async function projectsRoutes(app: FastifyInstance) {
 
   // GET /api/projects — só os do usuário logado
   app.get("/", async (req): Promise<ApiResponse<EmbroideryProject[]>> => {
-    const mine = Array.from(store.values()).filter((p) => p.ownerId === ownerId(req));
+    const mine = await projectsRepo.listByOwner(ownerId(req));
     return { ok: true, data: mine };
   });
 
@@ -43,7 +41,7 @@ export async function projectsRoutes(app: FastifyInstance) {
   app.get<{ Params: { id: string } }>(
     "/:id",
     async (req, reply): Promise<ApiResponse<EmbroideryProject>> => {
-      const project = store.get(req.params.id);
+      const project = await projectsRepo.get(req.params.id);
       if (!project || project.ownerId !== ownerId(req)) {
         reply.status(404);
         return { ok: false, error: "Project not found" };
@@ -56,17 +54,12 @@ export async function projectsRoutes(app: FastifyInstance) {
   app.post<{ Body: CreateProjectRequest }>(
     "/",
     async (req): Promise<ApiResponse<EmbroideryProject>> => {
-      const now = new Date().toISOString();
-      const project: EmbroideryProject = {
+      const project = await projectsRepo.create({
         id: uuid(),
+        ownerId: ownerId(req),
         name: req.body.name,
         canvas: req.body.canvas,
-        elements: [],
-        ownerId: ownerId(req),
-        createdAt: now,
-        updatedAt: now,
-      };
-      store.set(project.id, project);
+      });
       return { ok: true, data: project };
     }
   );
@@ -75,20 +68,13 @@ export async function projectsRoutes(app: FastifyInstance) {
   app.put<{ Params: { id: string }; Body: UpdateProjectRequest }>(
     "/:id",
     async (req, reply): Promise<ApiResponse<EmbroideryProject>> => {
-      const existing = store.get(req.params.id);
+      const existing = await projectsRepo.get(req.params.id);
       if (!existing || existing.ownerId !== ownerId(req)) {
         reply.status(404);
         return { ok: false, error: "Project not found" };
       }
-      const updated: EmbroideryProject = {
-        ...existing,
-        ...req.body,
-        id: existing.id,
-        ownerId: existing.ownerId,
-        updatedAt: new Date().toISOString(),
-      };
-      store.set(updated.id, updated);
-      return { ok: true, data: updated };
+      const updated = await projectsRepo.update(req.params.id, req.body);
+      return { ok: true, data: updated! };
     }
   );
 
@@ -96,12 +82,12 @@ export async function projectsRoutes(app: FastifyInstance) {
   app.delete<{ Params: { id: string } }>(
     "/:id",
     async (req, reply): Promise<ApiResponse<null>> => {
-      const existing = store.get(req.params.id);
+      const existing = await projectsRepo.get(req.params.id);
       if (!existing || existing.ownerId !== ownerId(req)) {
         reply.status(404);
         return { ok: false, error: "Project not found" };
       }
-      store.delete(req.params.id);
+      await projectsRepo.remove(req.params.id);
       return { ok: true, data: null };
     }
   );

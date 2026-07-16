@@ -1,16 +1,21 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import type { EmbroideryProject, EmbroideryElement } from "@ponto-studio/shared";
 
+export type SaveStatus = "idle" | "saving" | "saved" | "error";
+
 /**
- * Store local do projeto com sync automático para a API.
- * onSync é chamado com debounce de 600ms após qualquer mutação.
+ * Store local do projeto com sync automático para a API (modelo Canva: edita
+ * → salva sozinho em background). onSync é chamado com debounce de 600ms após
+ * qualquer mutação; saveStatus reflete o resultado pra dar feedback visual.
  */
 export function useProjectStore(
   initial: EmbroideryProject,
-  onSync?: (p: EmbroideryProject) => void
+  onSync?: (p: EmbroideryProject) => Promise<void>
 ) {
   const [project, setProject] = useState<EmbroideryProject>(initial);
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
 
   const selectedElement = project.elements.find((e) => e.id === selectedElementId) ?? null;
 
@@ -19,12 +24,24 @@ export function useProjectStore(
   const onSyncRef = useRef(onSync);
   useEffect(() => { onSyncRef.current = onSync; }, [onSync]);
 
+  const runSync = useCallback(async (p: EmbroideryProject) => {
+    setSaveStatus("saving");
+    try {
+      await onSyncRef.current?.(p);
+      setSaveStatus("saved");
+      setLastSavedAt(new Date().toISOString());
+    } catch {
+      setSaveStatus("error");
+    }
+  }, []);
+
   function scheduleSync(p: EmbroideryProject) {
     if (syncTimer.current) clearTimeout(syncTimer.current);
-    syncTimer.current = setTimeout(() => {
-      onSyncRef.current?.(p);
-    }, 600);
+    syncTimer.current = setTimeout(() => { void runSync(p); }, 600);
   }
+
+  // Retry manual — clique no indicador "Erro ao salvar" tenta de novo com o estado atual
+  const retrySync = useCallback(() => { void runSync(project); }, [project, runSync]);
 
   const addElement = useCallback((svgPath: string, color: string, svgContent?: string) => {
     const el: EmbroideryElement = {
@@ -77,5 +94,8 @@ export function useProjectStore(
     addElement,
     updateElement,
     removeElement,
+    saveStatus,
+    lastSavedAt,
+    retrySync,
   };
 }

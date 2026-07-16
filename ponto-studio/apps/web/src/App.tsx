@@ -99,11 +99,13 @@ function ProjectApp() {
     api.projects.get(projectId).then(setProject);
   }
 
-  function handleProjectChange(p: EmbroideryProject) {
+  // Retorna a Promise (não fire-and-forget) — o projectStore usa isso pra saber
+  // se salvou ou não e mostrar o indicador de status certo no Editor.
+  function handleProjectChange(p: EmbroideryProject): Promise<void> {
     setProject(p);
-    // Sincroniza elementos na API a cada mudança
-    api.projects.update(p.id, { name: p.name, canvas: p.canvas, elements: p.elements })
-      .catch((err) => console.error("[app] failed to sync project:", err));
+    return api.projects
+      .update(p.id, { name: p.name, canvas: p.canvas, elements: p.elements })
+      .then(() => {});
   }
 
   function handleNewProject() {

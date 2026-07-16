@@ -13,10 +13,15 @@ import { previewRoutes } from "./routes/preview.js";
 import { stitchPreviewRoutes } from "./routes/stitchPreview.js";
 import { authRoutes } from "./routes/auth.js";
 import { startResultListener } from "./services/jobQueue.js";
+import { migrate } from "./db.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const app = Fastify({ logger: { level: "info" } });
+
+// Persistência de projetos depende do Postgres — diferente do Redis (que é
+// opcional), aqui não faz sentido subir a API sem conseguir ler/gravar dados.
+await migrate();
 
 await app.register(cors, { origin: true, credentials: true });
 await app.register(cookie);

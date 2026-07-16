@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import {
   Tldraw,
   AssetRecordType,
@@ -15,7 +15,7 @@ import {
 } from "@tldraw/tldraw";
 import "@tldraw/tldraw/tldraw.css";
 import type { EmbroideryProject } from "@ponto-studio/shared";
-import { useProjectStore } from "../store/projectStore.ts";
+import { useProjectStore, type SaveStatus } from "../store/projectStore.ts";
 import { rectToSvgPath } from "../utils/geometry.ts";
 import { splitSvgByColor } from "../utils/svgLayers.ts";
 import { PropertiesPanel } from "./PropertiesPanel.tsx";
@@ -69,6 +69,54 @@ const layerPanelStyles: Record<string, React.CSSProperties> = {
 };
 
 
+// ── Indicador de autosave (modelo Canva: sem botão "Salvar", só status) ────────
+
+/** "Salvo agora" / "Salvo há 23min" / "Salvo há 2h" / "Salvo há 2 dias" */
+function formatSavedAgo(iso: string): string {
+  const diffSec = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+  if (diffSec < 60) return "Salvo agora";
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `Salvo há ${diffMin}min`;
+  const diffH = Math.floor(diffMin / 60);
+  if (diffH < 24) return `Salvo há ${diffH}h`;
+  const diffDays = Math.floor(diffH / 24);
+  return `Salvo há ${diffDays} dia${diffDays > 1 ? "s" : ""}`;
+}
+
+function SaveStatusIndicator({
+  status,
+  lastSavedAt,
+  onRetry,
+}: {
+  status: SaveStatus;
+  lastSavedAt: string | null;
+  onRetry: () => void;
+}) {
+  // Reforça o texto periodicamente (ex.: "agora" → "1min" → "2min"...) mesmo
+  // sem nenhuma edição nova acontecer.
+  const [, forceTick] = useState(0);
+  useEffect(() => {
+    if (status !== "saved" || !lastSavedAt) return;
+    const id = setInterval(() => forceTick((t) => t + 1), 30_000);
+    return () => clearInterval(id);
+  }, [status, lastSavedAt]);
+
+  if (status === "idle") return null;
+  if (status === "saving") return <span style={styles.saveStatus}>Salvando…</span>;
+  if (status === "error") {
+    return (
+      <button
+        style={{ ...styles.saveStatus, ...styles.saveStatusError }}
+        onClick={onRetry}
+        title="Clique para tentar salvar de novo"
+      >
+        ⚠ Erro ao salvar — tentar de novo
+      </button>
+    );
+  }
+  return <span style={styles.saveStatus}>{lastSavedAt ? formatSavedAgo(lastSavedAt) : "Salvo"}</span>;
+}
+
 // ── UI do tldraw enxuta (EDIT-2) ────────────────────────────────────────────────
 // Só o essencial pra desenhar/editar áreas de bordado: seleção, mover (hand),
 // desenho livre e as 2 formas mais úteis pra delimitar área (retângulo/elipse) +
@@ -98,7 +146,7 @@ const tldrawComponents: TLComponents = {
 
 interface Props {
   project: EmbroideryProject;
-  onProjectChange: (p: EmbroideryProject) => void;
+  onProjectChange: (p: EmbroideryProject) => Promise<void>;
   onNewProject: () => void;
 }
 
@@ -110,6 +158,9 @@ export function Editor({ project, onProjectChange, onNewProject }: Props) {
     addElement,
     updateElement,
     removeElement,
+    saveStatus,
+    lastSavedAt,
+    retrySync,
   } = useProjectStore(project, onProjectChange);
 
   const [showExport, setShowExport] = useState(false);
@@ -323,6 +374,7 @@ export function Editor({ project, onProjectChange, onNewProject }: Props) {
         <div style={styles.topbarLeft}>
           <span style={styles.logoMark}>🪡</span>
           <span style={styles.projectName}>{localProject.name}</span>
+          <SaveStatusIndicator status={saveStatus} lastSavedAt={lastSavedAt} onRetry={retrySync} />
         </div>
         <div style={styles.topbarRight}>
           <button style={styles.newBtn} onClick={onNewProject} title="Criar novo projeto">
@@ -420,6 +472,11 @@ const styles: Record<string, React.CSSProperties> = {
   topbarLeft: { display: "flex", alignItems: "center", gap: 10 },
   logoMark: { fontSize: 22 },
   projectName: { fontSize: 16, fontWeight: 700 },
+  saveStatus: {
+    fontSize: 12, color: "#9b9b9b", fontWeight: 500,
+    border: "none", background: "transparent", padding: 0, fontFamily: "inherit",
+  },
+  saveStatusError: { color: "#e05252", cursor: "pointer", textDecoration: "underline" },
   topbarRight: { display: "flex", alignItems: "center", gap: 8 },
   newBtn: {
     padding: "8px 14px", borderRadius: 8,

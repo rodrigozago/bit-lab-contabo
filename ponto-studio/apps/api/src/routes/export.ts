@@ -7,7 +7,7 @@ import type {
 } from "@ponto-studio/shared";
 import { convertProjectToSvg } from "../services/svgConverter.js";
 import { enqueueJob, getJob } from "../services/jobQueue.js";
-import { store as projectStore } from "./projects.js";
+import * as projectsRepo from "../services/projectsRepo.js";
 
 export async function exportRoutes(app: FastifyInstance) {
   // POST /api/export/svg — exportação síncrona: devolve o SVG do projeto
@@ -15,7 +15,7 @@ export async function exportRoutes(app: FastifyInstance) {
   app.post<{ Body: { projectId: string } }>(
     "/svg",
     async (req, reply) => {
-      const project = projectStore.get(req.body.projectId);
+      const project = await projectsRepo.get(req.body.projectId);
       if (!project) {
         return reply.status(404).send({ ok: false, error: "Project not found" });
       }
@@ -34,7 +34,7 @@ export async function exportRoutes(app: FastifyInstance) {
     async (req, reply): Promise<ApiResponse<ExportJob>> => {
       const { projectId, format } = req.body;
 
-      const project = projectStore.get(projectId);
+      const project = await projectsRepo.get(projectId);
       if (!project) {
         reply.status(404);
         return { ok: false, error: "Project not found" };

@@ -38,6 +38,9 @@ RUN pnpm install --prod --frozen-lockfile
 COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 
+# schema aplicado no boot (migrate-on-boot) — dist/db.js procura ../db/schema.sql
+COPY db/schema.sql ./apps/api/db/schema.sql
+
 WORKDIR /app/apps/api
 
 ENV NODE_ENV=production

@@ -11,6 +11,23 @@ services:
       timeout: 3s
       retries: 5
 
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ponto
+      POSTGRES_USER: ponto
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - ponto
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ponto"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   api:
     build:
       context: .
@@ -23,6 +40,12 @@ services:
       PORT: "3001"
       PUBLIC_URL: "https://ponto.bit-lab.tech"
       REDIS_URL: "redis://redis:6379"
+      # vars discretas (não DATABASE_URL composta) — evita bug de senha com
+      # caracteres especiais quebrando parse de URL, mesmo padrão do face-lab
+      PGHOST: postgres
+      PGUSER: ponto
+      PGPASSWORD: "${POSTGRES_PASSWORD}"
+      PGDATABASE: ponto
       NODE_ENV: production
       OIDC_ISSUER: "https://auth.bit-lab.tech"
       OIDC_CLIENT_ID: "ponto-studio"
@@ -32,6 +55,8 @@ services:
       - uploads:/app/apps/api/uploads
     depends_on:
       redis:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
     networks:
       - ponto
@@ -73,6 +98,7 @@ services:
 volumes:
   exports:
   uploads:
+  pgdata:
 
 networks:
   ponto:
