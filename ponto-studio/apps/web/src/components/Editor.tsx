@@ -23,6 +23,7 @@ import { splitSvgByColor, recolorSvg } from "../utils/svgLayers.ts";
 import { PropertiesPanel } from "./PropertiesPanel.tsx";
 import { ExportModal } from "./ExportModal.tsx";
 import { ImportModal } from "./ImportModal.tsx";
+import { UserMenu } from "./UserMenu.tsx";
 import type { ImportConfirmPayload } from "./ImportModal.tsx";
 
 // ── Layer System ──────────────────────────────────────────────────────────────
@@ -440,6 +441,7 @@ export function Editor({ project, onProjectChange, onBackToHome }: Props) {
           >
             🗑️ Deletar
           </button>
+          <UserMenu />
         </div>
       </header>
 

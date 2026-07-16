@@ -4,6 +4,7 @@ import type { EmbroideryProject } from "@ponto-studio/shared";
 import { api } from "../api/client.ts";
 import { composeThumbnail } from "../utils/svgLayers.ts";
 import { Welcome } from "./Welcome.tsx";
+import { UserMenu } from "./UserMenu.tsx";
 
 export function Home() {
   const navigate = useNavigate();
@@ -51,9 +52,12 @@ export function Home() {
             <span style={styles.logo}>🪡</span>
             <h1 style={styles.title}>Meus projetos</h1>
           </div>
-          <button style={styles.newBtn} onClick={() => setCreating(true)}>
-            ＋ Novo projeto
-          </button>
+          <div style={styles.headerRight}>
+            <button style={styles.newBtn} onClick={() => setCreating(true)}>
+              ＋ Novo projeto
+            </button>
+            <UserMenu />
+          </div>
         </header>
 
         {error && <p style={styles.errorMsg}>{error}</p>}
@@ -121,6 +125,7 @@ const styles: Record<string, React.CSSProperties> = {
   container: { width: "100%", maxWidth: 1000, display: "flex", flexDirection: "column", gap: 24 },
   header: { display: "flex", alignItems: "center", justifyContent: "space-between" },
   headerLeft: { display: "flex", alignItems: "center", gap: 12 },
+  headerRight: { display: "flex", alignItems: "center", gap: 12 },
   logo: { fontSize: 28 },
   title: { fontSize: 24, fontWeight: 700, color: "#1a1a1a", margin: 0 },
   newBtn: {
