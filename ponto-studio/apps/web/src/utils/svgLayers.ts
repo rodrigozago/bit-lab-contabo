@@ -103,7 +103,8 @@ export function composeThumbnail(elements: EmbroideryElement[]): string | null {
   }
 
   if (innerParts.length === 0) return null;
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox ?? "0 0 100 100"}" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">${innerParts.join("")}</svg>`;
+  const finalViewBox = viewBox ?? "0 0 100 100";
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${finalViewBox}" width="100%" height="100%" preserveAspectRatio="xMidYMid slice" style="display:block;">${innerParts.join("")}</svg>`;
 }
 
 export function splitSvgByColor(svg: string): ColorLayer[] {

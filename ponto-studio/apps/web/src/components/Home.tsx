@@ -69,18 +69,44 @@ export function Home() {
 }
 
 function ProjectCard({ project }: { project: EmbroideryProject }) {
+  const [deleting, setDeleting] = useState(false);
+  const navigate = useNavigate();
   const thumbnail = composeThumbnail(project.elements);
+
+  async function handleDelete(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!window.confirm(`Deletar projeto "${project.name}"? Esta ação não pode ser desfeita.`)) return;
+    setDeleting(true);
+    try {
+      await api.projects.delete(project.id);
+      navigate(0); // reload Home
+    } catch (err) {
+      alert("Erro ao deletar projeto");
+      setDeleting(false);
+    }
+  }
+
   return (
-    <Link to={`/projects/${project.id}`} style={styles.card}>
-      <div style={styles.thumbBox}>
-        {thumbnail ? (
-          <div style={styles.thumbSvg} dangerouslySetInnerHTML={{ __html: thumbnail }} />
-        ) : (
-          <span style={styles.thumbPlaceholder}>🪡</span>
-        )}
-      </div>
-      <span style={styles.cardName}>{project.name}</span>
-    </Link>
+    <div style={{ ...styles.cardWrapper, position: "relative" }}>
+      <Link to={`/projects/${project.id}`} style={styles.card}>
+        <div style={styles.thumbBox}>
+          {thumbnail ? (
+            <div style={styles.thumbSvg} dangerouslySetInnerHTML={{ __html: thumbnail }} />
+          ) : (
+            <span style={styles.thumbPlaceholder}>🪡</span>
+          )}
+        </div>
+        <span style={styles.cardName}>{project.name}</span>
+      </Link>
+      <button
+        style={styles.deleteBtn}
+        onClick={handleDelete}
+        disabled={deleting}
+        title="Deletar projeto"
+      >
+        🗑️
+      </button>
+    </div>
   );
 }
 
@@ -113,11 +139,17 @@ const styles: Record<string, React.CSSProperties> = {
     gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
     gap: 16,
   },
+  cardWrapper: {
+    position: "relative",
+    display: "flex",
+    borderRadius: 12,
+  },
   card: {
     display: "flex",
     flexDirection: "column",
     gap: 10,
     padding: 12,
+    flex: 1,
     borderRadius: 12,
     border: "1.5px solid #e2e0db",
     background: "#fff",
@@ -138,4 +170,17 @@ const styles: Record<string, React.CSSProperties> = {
   thumbSvg: { width: "80%", height: "80%" },
   thumbPlaceholder: { fontSize: 32, opacity: 0.4 },
   cardName: { fontSize: 14, fontWeight: 600, color: "#1a1a1a" },
+  deleteBtn: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    background: "rgba(255, 255, 255, 0.9)",
+    border: "none",
+    borderRadius: 6,
+    padding: "6px 8px",
+    fontSize: 14,
+    cursor: "pointer",
+    opacity: 0.7,
+    transition: "opacity 0.15s",
+  },
 };

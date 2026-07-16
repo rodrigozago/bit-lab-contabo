@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Tldraw,
   AssetRecordType,
@@ -16,6 +17,7 @@ import {
 import "@tldraw/tldraw/tldraw.css";
 import type { EmbroideryElement, EmbroideryProject } from "@ponto-studio/shared";
 import { useProjectStore, type SaveStatus } from "../store/projectStore.ts";
+import { api } from "../api/client.ts";
 import { rectToSvgPath } from "../utils/geometry.ts";
 import { splitSvgByColor, recolorSvg } from "../utils/svgLayers.ts";
 import { PropertiesPanel } from "./PropertiesPanel.tsx";
@@ -151,6 +153,8 @@ interface Props {
 }
 
 export function Editor({ project, onProjectChange, onBackToHome }: Props) {
+  const navigate = useNavigate();
+  const [deleting, setDeleting] = useState(false);
   const {
     project: localProject,
     selectedElement,
@@ -397,6 +401,18 @@ export function Editor({ project, onProjectChange, onBackToHome }: Props) {
     ] as Parameters<typeof tldrawEditor.updateAssets>[0]);
   }
 
+  async function handleDeleteProject() {
+    if (!window.confirm(`Deletar projeto "${localProject.name}"? Esta ação não pode ser desfeita.`)) return;
+    setDeleting(true);
+    try {
+      await api.projects.delete(project.id);
+      navigate("/");
+    } catch (err) {
+      alert("Erro ao deletar projeto");
+      setDeleting(false);
+    }
+  }
+
   return (
     <div style={styles.root}>
       {/* ── Topbar ── */}
@@ -415,6 +431,14 @@ export function Editor({ project, onProjectChange, onBackToHome }: Props) {
           </button>
           <button style={styles.exportBtn} onClick={() => setShowExport(true)}>
             ✦ Exportar bordado
+          </button>
+          <button
+            style={{ ...styles.deleteProjectBtn, opacity: deleting ? 0.5 : 1 }}
+            onClick={handleDeleteProject}
+            disabled={deleting}
+            title="Deletar projeto"
+          >
+            🗑️ Deletar
           </button>
         </div>
       </header>
@@ -522,6 +546,12 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "8px 16px", borderRadius: 8,
     background: "#7c5cbf", color: "#fff",
     fontSize: 13, fontWeight: 700, cursor: "pointer",
+  },
+  deleteProjectBtn: {
+    padding: "8px 12px", borderRadius: 8,
+    background: "#f0f0f0", color: "#666",
+    fontSize: 13, fontWeight: 600, cursor: "pointer", border: "none",
+    transition: "background 0.15s",
   },
   body: { display: "flex", flex: 1, overflow: "hidden" },
   canvas: { flex: 1, position: "relative" },
