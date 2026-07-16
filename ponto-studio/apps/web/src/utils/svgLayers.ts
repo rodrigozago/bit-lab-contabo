@@ -51,6 +51,26 @@ function effectiveFill(el: Element): string {
   return DEFAULT_FILL;
 }
 
+/**
+ * Substitui o fill de todos os elementos (path, g, ...) de um SVG por uma
+ * cor nova — usado pra recolorir o preview no canvas quando o usuário muda
+ * a "Cor do fio" no painel de propriedades (o asset da shape no tldraw é
+ * uma imagem estática, então precisa ser regenerado pra refletir a mudança).
+ */
+export function recolorSvg(svg: string, newColor: string): string {
+  const doc = new DOMParser().parseFromString(svg, "image/svg+xml");
+  const docEl = doc.documentElement as Element | undefined;
+  const root = docEl && docEl.tagName?.toLowerCase() === "svg" ? docEl : doc.querySelector("svg");
+  if (!root) return svg;
+
+  for (const el of Array.from(root.querySelectorAll("[fill]"))) {
+    el.setAttribute("fill", newColor);
+  }
+  if (root.hasAttribute("fill")) root.setAttribute("fill", newColor);
+
+  return new XMLSerializer().serializeToString(root);
+}
+
 export function splitSvgByColor(svg: string): ColorLayer[] {
   const doc = new DOMParser().parseFromString(svg, "image/svg+xml");
   // documentElement é o caminho normal; happy-dom (testes) não o popula em

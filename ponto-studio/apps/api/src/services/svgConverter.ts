@@ -46,14 +46,20 @@ function elementToSvgGroup(el: EmbroideryElement, canvas: CanvasSize): string {
 interface PathPart {
   /** atributos originais sem fill/stroke/d/inkstitch (para não duplicar) */
   cleanAttrs: string;
-  /** cor fill do path (ou fallback) */
-  fill: string;
   /** atributo "d" cru */
   d: string;
 }
 
-/** Extrai os <path> de um SVG, separando attrs limpos, fill e d. Reusado por export e preview. */
-function extractPathParts(svg: string, fillFallback: string): PathPart[] {
+/**
+ * Extrai os <path> de um SVG, separando attrs limpos e d. Reusado por export
+ * e preview. O `fill` NÃO vem daqui — é sempre `el.color` (a cor do fio que o
+ * usuário escolhe no painel de propriedades), nunca a cor original detectada
+ * na análise da imagem. Antes disso, `el.color` só valia como fallback quando
+ * o path não tinha `fill` próprio — como o pipeline local sempre grava um
+ * `fill` explícito em cada path, mudar a cor no painel não tinha efeito
+ * nenhum no SVG final (preview/export). Ver `elementToSvgGroup`/callers.
+ */
+function extractPathParts(svg: string): PathPart[] {
   const pathRegex = /<path([^>]*)\/?>/gi;
   const parts: PathPart[] = [];
   let match: RegExpExecArray | null;
@@ -61,7 +67,6 @@ function extractPathParts(svg: string, fillFallback: string): PathPart[] {
   while ((match = pathRegex.exec(svg)) !== null) {
     // normaliza espaços/quebras de linha e remove a barra do self-closing
     const attrs = (match[1] ?? "").replace(/\s+/g, " ").replace(/\/\s*$/, "");
-    const fillMatch = /fill=["']([^"']+)["']/i.exec(attrs);
     // (?<![a-zA-Z]) evita casar o "d=" de dentro de id="..." (a IA gera id antes de d)
     const dMatch = /(?<![a-zA-Z])d=["']([^"']+)["']/i.exec(attrs);
 
@@ -73,7 +78,7 @@ function extractPathParts(svg: string, fillFallback: string): PathPart[] {
       .replace(/\s+/g, " ")
       .trim();
 
-    parts.push({ cleanAttrs, fill: fillMatch ? fillMatch[1]! : fillFallback, d: dMatch?.[1] ?? "" });
+    parts.push({ cleanAttrs, d: dMatch?.[1] ?? "" });
   }
 
   return parts;
@@ -96,9 +101,9 @@ function extractAndAnnotatePaths(el: EmbroideryElement, canvas: CanvasSize): str
     ? computeContainTransform(sourceDims, { width: canvas.widthMm, height: canvas.heightMm })
     : null;
 
-  const paths = extractPathParts(svg, el.color).map(({ cleanAttrs, fill, d }) => {
+  const paths = extractPathParts(svg).map(({ cleanAttrs, d }) => {
     const scaledD = transform ? scalePathData(d, transform.scale, transform.offsetX, transform.offsetY) : d;
-    return `<path ${cleanAttrs} d="${escapeXml(scaledD)}" fill="${fill}" stroke="none" ${stitchAttrs} />`;
+    return `<path ${cleanAttrs} d="${escapeXml(scaledD)}" fill="${el.color}" stroke="none" ${stitchAttrs} />`;
   });
 
   if (paths.length === 0) {
@@ -124,9 +129,9 @@ export function buildElementPreviewSvg(el: EmbroideryElement, canvas: CanvasSize
   const lineDistanceUnits = +(densityToMm(el.stitch.density) * unitsPerMm).toFixed(3);
   const stitchAttrs = buildStitchAttributes(el, lineDistanceUnits);
 
-  const paths = extractPathParts(svg, el.color).map(
-    ({ cleanAttrs, fill, d }) =>
-      `<path ${cleanAttrs} d="${escapeXml(d)}" fill="${fill}" stroke="none" ${stitchAttrs} />`
+  const paths = extractPathParts(svg).map(
+    ({ cleanAttrs, d }) =>
+      `<path ${cleanAttrs} d="${escapeXml(d)}" fill="${el.color}" stroke="none" ${stitchAttrs} />`
   );
 
   return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkstitch="http://inkstitch.org/namespace" viewBox="${viewBox}">

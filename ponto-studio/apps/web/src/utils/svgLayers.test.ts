@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { splitSvgByColor, normalizeColor } from "./svgLayers.ts";
+import { splitSvgByColor, normalizeColor, recolorSvg } from "./svgLayers.ts";
 
 const NS = 'xmlns="http://www.w3.org/2000/svg"';
 
@@ -61,5 +61,35 @@ describe("splitSvgByColor", () => {
 
   it("retorna vazio para conteúdo que não é SVG", () => {
     expect(splitSvgByColor("<div>oi</div>")).toEqual([]);
+  });
+});
+
+describe("recolorSvg", () => {
+  it("troca o fill de todos os paths pela cor nova", () => {
+    const svg = `<svg ${NS} viewBox="0 0 10 10">
+      <path d="M0 0h1v1H0Z" fill="#ff0000"/>
+      <path d="M2 2h1v1H2Z" fill="#ff0000"/>
+    </svg>`;
+    const result = recolorSvg(svg, "#00ff00");
+    expect(result).not.toContain('fill="#ff0000"');
+    expect((result.match(/fill="#00ff00"/g) ?? []).length).toBe(2);
+  });
+
+  it("troca o fill herdado do <g> pai também", () => {
+    const svg = `<svg ${NS} viewBox="0 0 10 10"><g fill="#123456"><path d="M0 0Z"/></g></svg>`;
+    const result = recolorSvg(svg, "#abcdef");
+    expect(result).toContain('fill="#abcdef"');
+    expect(result).not.toContain('fill="#123456"');
+  });
+
+  it("preserva o viewBox e a estrutura do documento", () => {
+    const svg = `<svg ${NS} viewBox="0 0 50 40"><path d="M0 0Z" fill="#000"/></svg>`;
+    const result = recolorSvg(svg, "#7c5cbf");
+    expect(result).toContain('viewBox="0 0 50 40"');
+  });
+
+  it("retorna o svg original se não conseguir parsear como SVG", () => {
+    const notSvg = "<div>oi</div>";
+    expect(recolorSvg(notSvg, "#fff")).toBe(notSvg);
   });
 });

@@ -64,25 +64,30 @@ describe("convertProjectToSvg", () => {
     expect(svg).toContain('inkstitch:running_stitch_length="0.3mm"');
   });
 
-  it("extrai paths de svgContent preservando as cores originais", () => {
+  it("usa a cor do elemento (el.color) em todos os paths, mesmo os com fill próprio", () => {
+    // Regressão: antes, um path com fill próprio (ex.: cor detectada na
+    // análise da imagem) IGNORAVA a cor escolhida no painel de propriedades —
+    // mudar "Cor do fio" não tinha efeito nenhum no SVG exportado/preview.
     const el = makeElement({
+      color: "#00ff00",
       svgContent: `<svg viewBox="0 0 10 10">
         <path d="M 1 1 Z" fill="#aabbcc" inkstitch:fill_method="antigo"/>
         <path d="M 2 2 Z"/>
       </svg>`,
     });
     const svg = convertProjectToSvg(makeProject([el]));
-    // path 1 mantém a cor própria; atributo inkstitch antigo é substituído
-    expect(svg).toContain('fill="#aabbcc"');
+    // os dois paths (com e sem fill próprio) usam a cor do elemento
+    expect(svg).not.toContain('fill="#aabbcc"');
+    const fillCount = (svg.match(/fill="#00ff00"/g) ?? []).length;
+    expect(fillCount).toBe(2);
     expect(svg).not.toContain('inkstitch:fill_method="antigo"');
-    // path 2 sem fill herda a cor do elemento
-    expect(svg).toContain('fill="#ff5733"');
     // agrupado pelo id do elemento
     expect(svg).toContain('<g id="el-1">');
   });
 
   it("não duplica o atributo stroke quando o path original já tem stroke=\"none\"", () => {
     const el = makeElement({
+      color: "#aabbcc",
       svgContent: `<svg viewBox="0 0 10 10"><path d="M 1 1 Z" fill="#aabbcc" stroke="none"/></svg>`,
     });
     const svg = convertProjectToSvg(makeProject([el]));
@@ -93,6 +98,7 @@ describe("convertProjectToSvg", () => {
 
   it("normaliza paths self-closing com atributos em várias linhas", () => {
     const el = makeElement({
+      color: "#E64980",
       svgContent: `<svg viewBox="0 0 100 100">\n  <path\r\n     d="M 10,10 H 50 V 50 H 10 Z"\r\n     fill="#E64980"\r\n     inkstitch:angle="30" />\n</svg>`,
     });
     const svg = convertProjectToSvg(makeProject([el]));

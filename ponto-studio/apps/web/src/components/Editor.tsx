@@ -14,10 +14,10 @@ import {
   type TLShape,
 } from "@tldraw/tldraw";
 import "@tldraw/tldraw/tldraw.css";
-import type { EmbroideryProject } from "@ponto-studio/shared";
+import type { EmbroideryElement, EmbroideryProject } from "@ponto-studio/shared";
 import { useProjectStore, type SaveStatus } from "../store/projectStore.ts";
 import { rectToSvgPath } from "../utils/geometry.ts";
-import { splitSvgByColor } from "../utils/svgLayers.ts";
+import { splitSvgByColor, recolorSvg } from "../utils/svgLayers.ts";
 import { PropertiesPanel } from "./PropertiesPanel.tsx";
 import { ExportModal } from "./ExportModal.tsx";
 import { ImportModal } from "./ImportModal.tsx";
@@ -367,6 +367,30 @@ export function Editor({ project, onProjectChange, onNewProject }: Props) {
     if (shape) tldrawEditor.deleteShapes([shape.id]);
   }
 
+  // Muda propriedades do elemento (tipo/densidade/ângulo/cor). O shape no
+  // canvas é uma imagem estática (asset gerado uma vez na importação) — se a
+  // cor mudou, regenera o asset recolorido pra refletir no canvas também
+  // (antes, mudar a cor só afetava o dado, não o que aparecia na tela).
+  async function handlePropertiesChange(elementId: string, patch: Partial<EmbroideryElement>) {
+    updateElement(elementId, patch);
+    if (!patch.color || !tldrawEditor) return;
+
+    const el = localProject.elements.find((e) => e.id === elementId);
+    if (!el?.svgContent) return;
+
+    const recolored = recolorSvg(el.svgContent, patch.color);
+    const dataUrl = await svgToDataUrl(recolored);
+    const shape = tldrawEditor
+      .getCurrentPageShapes()
+      .find((s: TLShape) => s.meta?.["elementId"] === elementId);
+    if (!shape) return;
+
+    const assetId = (shape.props as { assetId: string }).assetId;
+    tldrawEditor.updateAssets([
+      { id: assetId, type: "image", props: { src: dataUrl } },
+    ] as Parameters<typeof tldrawEditor.updateAssets>[0]);
+  }
+
   return (
     <div style={styles.root}>
       {/* ── Topbar ── */}
@@ -405,7 +429,7 @@ export function Editor({ project, onProjectChange, onNewProject }: Props) {
               </div>
               <PropertiesPanel
                 element={selectedElement}
-                onChange={(patch) => updateElement(selectedElement.id, patch)}
+                onChange={(patch) => { void handlePropertiesChange(selectedElement.id, patch); }}
                 onDelete={() => handleDeleteElement(selectedElement.id)}
               />
             </>
