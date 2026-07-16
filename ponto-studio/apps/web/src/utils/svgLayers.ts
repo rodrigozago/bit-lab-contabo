@@ -1,3 +1,5 @@
+import type { EmbroideryElement } from "@ponto-studio/shared";
+
 /**
  * Separa um SVG em camadas por cor: todos os <path> com o mesmo fill
  * (mesmo desconectados ou espalhados em grupos) viram UM documento SVG
@@ -69,6 +71,39 @@ export function recolorSvg(svg: string, newColor: string): string {
   if (root.hasAttribute("fill")) root.setAttribute("fill", newColor);
 
   return new XMLSerializer().serializeToString(root);
+}
+
+/**
+ * Compõe uma miniatura de um projeto inteiro empilhando os elementos (cada um
+ * já recolorido pra `el.color`, a cor de fio atual) num único SVG — usado nos
+ * cards da Home (lista de projetos), sem nenhum round-trip novo à API: os
+ * elementos já vêm completos em `GET /api/projects`.
+ */
+export function composeThumbnail(elements: EmbroideryElement[]): string | null {
+  const withSvg = elements.filter((el): el is EmbroideryElement & { svgContent: string } => !!el.svgContent);
+  if (withSvg.length === 0) return null;
+
+  const parser = new DOMParser();
+  const serializer = new XMLSerializer();
+
+  let viewBox: string | null = null;
+  const innerParts: string[] = [];
+
+  for (const el of withSvg) {
+    const recolored = recolorSvg(el.svgContent, el.color);
+    const doc = parser.parseFromString(recolored, "image/svg+xml");
+    const docEl = doc.documentElement as Element | undefined;
+    const root = docEl && docEl.tagName?.toLowerCase() === "svg" ? docEl : doc.querySelector("svg");
+    if (!root) continue;
+
+    if (!viewBox) viewBox = root.getAttribute("viewBox");
+    for (const child of Array.from(root.children)) {
+      innerParts.push(serializer.serializeToString(child));
+    }
+  }
+
+  if (innerParts.length === 0) return null;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox ?? "0 0 100 100"}" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">${innerParts.join("")}</svg>`;
 }
 
 export function splitSvgByColor(svg: string): ColorLayer[] {

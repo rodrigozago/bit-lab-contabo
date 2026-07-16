@@ -15,7 +15,8 @@
     "@ponto-studio/shared": "workspace:*",
     "@tldraw/tldraw": "^2.4.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.2"
   },
   "devDependencies": {
     "@testing-library/react": "^14.3.1",

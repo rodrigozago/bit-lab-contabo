@@ -1,5 +1,16 @@
 import { describe, it, expect } from "vitest";
-import { splitSvgByColor, normalizeColor, recolorSvg } from "./svgLayers.ts";
+import type { EmbroideryElement } from "@ponto-studio/shared";
+import { splitSvgByColor, normalizeColor, recolorSvg, composeThumbnail } from "./svgLayers.ts";
+
+function makeElement(overrides: Partial<EmbroideryElement> = {}): EmbroideryElement {
+  return {
+    id: "el-1",
+    svgPath: "M 0 0 Z",
+    color: "#ff0000",
+    stitch: { type: "satin", density: 0.6, angle: 45 },
+    ...overrides,
+  };
+}
 
 const NS = 'xmlns="http://www.w3.org/2000/svg"';
 
@@ -91,5 +102,52 @@ describe("recolorSvg", () => {
   it("retorna o svg original se não conseguir parsear como SVG", () => {
     const notSvg = "<div>oi</div>";
     expect(recolorSvg(notSvg, "#fff")).toBe(notSvg);
+  });
+});
+
+describe("composeThumbnail", () => {
+  it("retorna null quando nenhum elemento tem svgContent", () => {
+    const elements = [makeElement({ svgContent: undefined })];
+    expect(composeThumbnail(elements)).toBeNull();
+  });
+
+  it("empilha os paths de todos os elementos recoloridos pela cor atual", () => {
+    const elements = [
+      makeElement({
+        id: "el-1",
+        color: "#00ff00",
+        svgContent: `<svg ${NS} viewBox="0 0 100 100"><path d="M0 0h5v5H0Z" fill="#ff0000"/></svg>`,
+      }),
+      makeElement({
+        id: "el-2",
+        color: "#0000ff",
+        svgContent: `<svg ${NS} viewBox="0 0 100 100"><path d="M10 10h5v5H10Z" fill="#ff0000"/></svg>`,
+      }),
+    ];
+    const result = composeThumbnail(elements);
+    expect(result).not.toBeNull();
+    expect(result).toContain('viewBox="0 0 100 100"');
+    expect((result!.match(/<path/g) ?? []).length).toBe(2);
+    expect(result).toContain('fill="#00ff00"');
+    expect(result).toContain('fill="#0000ff"');
+    expect(result).not.toContain('fill="#ff0000"');
+  });
+
+  it("usa o viewBox do primeiro elemento com svgContent", () => {
+    const elements = [
+      makeElement({ id: "el-1", svgContent: `<svg ${NS} viewBox="0 0 40 40"><path d="M0 0Z" fill="#000"/></svg>` }),
+    ];
+    const result = composeThumbnail(elements);
+    expect(result).toContain('viewBox="0 0 40 40"');
+  });
+
+  it("ignora elementos sem svgContent mas usa os que têm", () => {
+    const elements = [
+      makeElement({ id: "el-1", svgContent: undefined }),
+      makeElement({ id: "el-2", svgContent: `<svg ${NS} viewBox="0 0 10 10"><path d="M0 0Z" fill="#000"/></svg>` }),
+    ];
+    const result = composeThumbnail(elements);
+    expect(result).not.toBeNull();
+    expect((result!.match(/<path/g) ?? []).length).toBe(1);
   });
 });

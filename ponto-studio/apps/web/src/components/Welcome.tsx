@@ -11,9 +11,10 @@ const PRESET_SIZES: Array<{ label: string; canvas: CanvasSize }> = [
 
 interface Props {
   onStart: (projectId: string) => void;
+  onCancel?: () => void;
 }
 
-export function Welcome({ onStart }: Props) {
+export function Welcome({ onStart, onCancel }: Props) {
   const [name, setName] = useState("Meu Bordado");
   const [selectedSize, setSelectedSize] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -36,6 +37,11 @@ export function Welcome({ onStart }: Props) {
   return (
     <div style={styles.page}>
       <div style={styles.card}>
+        {onCancel && (
+          <button style={styles.backLink} onClick={onCancel}>
+            ← Voltar
+          </button>
+        )}
         <div style={styles.logo}>🪡</div>
         <h1 style={styles.title}>Ponto Studio</h1>
         <p style={styles.subtitle}>O Canva do Bordado</p>
@@ -94,6 +100,16 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     flexDirection: "column",
     gap: 20,
+  },
+  backLink: {
+    alignSelf: "flex-start",
+    background: "none",
+    border: "none",
+    padding: 0,
+    fontSize: 13,
+    fontWeight: 600,
+    color: "#7c5cbf",
+    cursor: "pointer",
   },
   logo: { fontSize: 40, textAlign: "center" },
   title: { fontSize: 28, fontWeight: 700, textAlign: "center", color: "#1a1a1a" },

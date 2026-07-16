@@ -1,11 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
-import { Editor } from "./components/Editor.tsx";
-import { Welcome } from "./components/Welcome.tsx";
-import type { EmbroideryProject } from "@ponto-studio/shared";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { Home } from "./components/Home.tsx";
+import { EditorRoute } from "./components/EditorRoute.tsx";
 import { api } from "./api/client.ts";
 import { AuthContext, useAuth, loginUrl, type Me } from "./lib/auth.ts";
-
-const STORAGE_KEY = "ponto-studio:projectId";
 
 export default function App() {
   const [me, setMe] = useState<Me | null>(null);
@@ -71,66 +69,13 @@ function AuthGate() {
     );
   }
 
-  return <ProjectApp />;
-}
-
-function ProjectApp() {
-  const [project, setProject] = useState<EmbroideryProject | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  // Na montagem, tenta restaurar o projeto salvo no localStorage
-  useEffect(() => {
-    const savedId = localStorage.getItem(STORAGE_KEY);
-    if (!savedId) {
-      setLoading(false);
-      return;
-    }
-    api.projects.get(savedId)
-      .then((p) => setProject(p))
-      .catch(() => {
-        // Projeto não existe mais na API (ex: container reiniciou, ou não é do usuário atual) — limpa o storage
-        localStorage.removeItem(STORAGE_KEY);
-      })
-      .finally(() => setLoading(false));
-  }, []);
-
-  function handleStart(projectId: string) {
-    localStorage.setItem(STORAGE_KEY, projectId);
-    api.projects.get(projectId).then(setProject);
-  }
-
-  // Retorna a Promise (não fire-and-forget) — o projectStore usa isso pra saber
-  // se salvou ou não e mostrar o indicador de status certo no Editor.
-  function handleProjectChange(p: EmbroideryProject): Promise<void> {
-    setProject(p);
-    return api.projects
-      .update(p.id, { name: p.name, canvas: p.canvas, elements: p.elements })
-      .then(() => {});
-  }
-
-  function handleNewProject() {
-    localStorage.removeItem(STORAGE_KEY);
-    setProject(null);
-  }
-
-  if (loading) {
-    return (
-      <div style={styles.page}>
-        <span style={{ fontSize: 32 }}>🪡</span>
-      </div>
-    );
-  }
-
-  if (!project) {
-    return <Welcome onStart={handleStart} />;
-  }
-
   return (
-    <Editor
-      project={project}
-      onProjectChange={handleProjectChange}
-      onNewProject={handleNewProject}
-    />
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/projects/:id" element={<EditorRoute />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
 

@@ -147,10 +147,10 @@ const tldrawComponents: TLComponents = {
 interface Props {
   project: EmbroideryProject;
   onProjectChange: (p: EmbroideryProject) => Promise<void>;
-  onNewProject: () => void;
+  onBackToHome: () => void;
 }
 
-export function Editor({ project, onProjectChange, onNewProject }: Props) {
+export function Editor({ project, onProjectChange, onBackToHome }: Props) {
   const {
     project: localProject,
     selectedElement,
@@ -386,8 +386,14 @@ export function Editor({ project, onProjectChange, onNewProject }: Props) {
     if (!shape) return;
 
     const assetId = (shape.props as { assetId: string }).assetId;
+    // updateAssets NÃO faz merge profundo de `props` — passar só { src }
+    // sobrescreve o objeto inteiro e derruba w/h/mimeType (ValidationError:
+    // props.w esperado number, veio undefined). Busca o asset atual e
+    // mescla manualmente antes de atualizar.
+    const currentAsset = tldrawEditor.getAsset(assetId as Parameters<typeof tldrawEditor.getAsset>[0]);
+    if (!currentAsset) return;
     tldrawEditor.updateAssets([
-      { id: assetId, type: "image", props: { src: dataUrl } },
+      { id: assetId, type: "image", props: { ...currentAsset.props, src: dataUrl } },
     ] as Parameters<typeof tldrawEditor.updateAssets>[0]);
   }
 
@@ -401,8 +407,8 @@ export function Editor({ project, onProjectChange, onNewProject }: Props) {
           <SaveStatusIndicator status={saveStatus} lastSavedAt={lastSavedAt} onRetry={retrySync} />
         </div>
         <div style={styles.topbarRight}>
-          <button style={styles.newBtn} onClick={onNewProject} title="Criar novo projeto">
-            ＋ Novo
+          <button style={styles.newBtn} onClick={onBackToHome} title="Voltar para meus projetos">
+            ← Meus projetos
           </button>
           <button style={styles.importBtn} onClick={() => setShowImport(true)}>
             📷 Importar imagem
