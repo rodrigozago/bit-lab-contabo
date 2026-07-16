@@ -73,6 +73,17 @@ export function recolorSvg(svg: string, newColor: string): string {
   return new XMLSerializer().serializeToString(root);
 }
 
+/** Extrai todas as coordenadas numéricas de um path `d` atributo */
+function extractCoordinatesFromPath(d: string): number[] {
+  const coords: number[] = [];
+  const numberRegex = /-?\d+\.?\d*/g;
+  let match;
+  while ((match = numberRegex.exec(d)) !== null) {
+    coords.push(parseFloat(match[0]));
+  }
+  return coords;
+}
+
 /**
  * Compõe uma miniatura de um projeto inteiro empilhando os elementos (cada um
  * já recolorido pra `el.color`, a cor de fio atual) num único SVG — usado nos
@@ -99,18 +110,21 @@ export function composeThumbnail(elements: EmbroideryElement[]): string | null {
 
     if (!viewBox) viewBox = root.getAttribute("viewBox");
 
-    // Calcula o bounding box dos paths para detectar se há overflow
+    // Extrai coordenadas dos path `d` atributos para calcular bounding box real
     for (const path of Array.from(root.querySelectorAll("path"))) {
-      try {
-        const bbox = path.getBBox?.();
-        if (bbox) {
-          minX = Math.min(minX, bbox.x);
-          minY = Math.min(minY, bbox.y);
-          maxX = Math.max(maxX, bbox.x + bbox.width);
-          maxY = Math.max(maxY, bbox.y + bbox.height);
+      const d = path.getAttribute("d");
+      if (d) {
+        const coords = extractCoordinatesFromPath(d);
+        for (let i = 0; i < coords.length; i += 2) {
+          const x = coords[i];
+          const y = coords[i + 1];
+          if (isFinite(x) && isFinite(y)) {
+            minX = Math.min(minX, x);
+            minY = Math.min(minY, y);
+            maxX = Math.max(maxX, x);
+            maxY = Math.max(maxY, y);
+          }
         }
-      } catch {
-        // Se getBBox falhar, ignora
       }
     }
 
@@ -123,15 +137,18 @@ export function composeThumbnail(elements: EmbroideryElement[]): string | null {
 
   const finalViewBox = viewBox ?? "0 0 100 100";
 
-  // Se há overflow detectado, ajusta o viewBox para o bounding box real
+  // Se há coordenadas extraídas, ajusta o viewBox para caber tudo
   let adjustedViewBox = finalViewBox;
-  if (isFinite(minX) && isFinite(minY) && isFinite(maxX) && isFinite(maxY)) {
-    const width = maxX - minX || 100;
-    const height = maxY - minY || 100;
-    adjustedViewBox = `${minX} ${minY} ${width} ${height}`;
+  if (isFinite(minX) && isFinite(minY) && isFinite(maxX) && isFinite(maxY) && minX !== Infinity) {
+    // Adiciona padding de 10% ao redor
+    const width = maxX - minX;
+    const height = maxY - minY;
+    const paddingX = width * 0.05;
+    const paddingY = height * 0.05;
+    adjustedViewBox = `${minX - paddingX} ${minY - paddingY} ${width + paddingX * 2} ${height + paddingY * 2}`;
   }
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${adjustedViewBox}" width="100%" height="100%" preserveAspectRatio="xMidYMid slice" style="display:block;">${innerParts.join("")}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${adjustedViewBox}" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style="display:block;">${innerParts.join("")}</svg>`;
 }
 
 export function splitSvgByColor(svg: string): ColorLayer[] {
