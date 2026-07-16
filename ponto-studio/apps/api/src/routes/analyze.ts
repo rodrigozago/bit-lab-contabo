@@ -37,12 +37,14 @@ export async function analyzeRoutes(app: FastifyInstance) {
     const imageFile = `${jobId}${ext}`;
     await pipeline(data.file, createWriteStream(join(UPLOADS_DIR, imageFile)));
 
+    const excludeBgField = data.fields["excludeBackground"] as { value?: string } | undefined;
     const analyzeParams: LocalAnalyzeParams = {
       colors: fieldNumber(data.fields, "colors", 4),
       minRegionPct: fieldNumber(data.fields, "minRegionPct", 0),
       detail: fieldNumber(data.fields, "detail", 2),
       colorTolerance: fieldNumber(data.fields, "colorTolerance", 10),
       maxAreas: fieldNumber(data.fields, "maxAreas", 8),
+      excludeBackground: excludeBgField?.value !== "false",
     };
 
     await enqueueAnalyzeJob({ jobId, imageFile, analyzeParams });

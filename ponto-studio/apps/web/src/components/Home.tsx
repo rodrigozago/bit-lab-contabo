@@ -5,6 +5,7 @@ import { api } from "../api/client.ts";
 import { composeThumbnail } from "../utils/svgLayers.ts";
 import { Welcome } from "./Welcome.tsx";
 import { UserMenu } from "./UserMenu.tsx";
+import { useToast } from "./Toast.tsx";
 
 export function Home() {
   const navigate = useNavigate();
@@ -75,6 +76,7 @@ export function Home() {
 function ProjectCard({ project }: { project: EmbroideryProject }) {
   const [deleting, setDeleting] = useState(false);
   const navigate = useNavigate();
+  const toast = useToast();
   const thumbnail = composeThumbnail(project.elements);
 
   async function handleDelete(e: React.MouseEvent) {
@@ -85,7 +87,9 @@ function ProjectCard({ project }: { project: EmbroideryProject }) {
       await api.projects.delete(project.id);
       navigate(0); // reload Home
     } catch (err) {
-      alert("Erro ao deletar projeto");
+      toast.error(
+        `Erro ao deletar projeto: ${err instanceof Error ? err.message : "erro desconhecido"}`
+      );
       setDeleting(false);
     }
   }

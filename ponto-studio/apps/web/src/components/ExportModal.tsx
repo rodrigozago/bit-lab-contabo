@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { CanvasSize, ExportFormat, ExportJob, StitchPattern } from "@ponto-studio/shared";
 import { api, pollStitchDataUntilDone, pollUntilDone } from "../api/client.ts";
 import { StitchPlayer } from "./StitchPlayer.tsx";
-import { EstimateSummary } from "./EstimateSummary.tsx";
+import { EstimateSummary, stitchBounds, exceedsHoop } from "./EstimateSummary.tsx";
 
 type ModalFormat = ExportFormat | "SVG";
 type ExportStep = "preview" | "format" | "processing" | "done" | "error";
@@ -32,10 +32,13 @@ export function ExportModal({ projectId, canvas, onClose }: Props) {
 
   // Player de simulação (EXP-2)
   const [previewPhase, setPreviewPhase] = useState<PreviewPhase>("loading");
+  const [previewError, setPreviewError] = useState("");
+  const [previewAttempt, setPreviewAttempt] = useState(0);
   const [pattern, setPattern] = useState<StitchPattern | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    setPreviewPhase("loading");
     (async () => {
       try {
         const { jobId } = await api.stitchPreview.create(projectId);
@@ -44,14 +47,17 @@ export function ExportModal({ projectId, canvas, onClose }: Props) {
           setPattern(result);
           setPreviewPhase("ready");
         }
-      } catch {
-        if (!cancelled) setPreviewPhase("error");
+      } catch (err) {
+        if (!cancelled) {
+          setPreviewError(err instanceof Error ? err.message : "erro desconhecido");
+          setPreviewPhase("error");
+        }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [projectId]);
+  }, [projectId, previewAttempt]);
 
   // Exportação SVG é síncrona: a API devolve o arquivo direto (sem worker)
   async function exportSvg() {
@@ -135,7 +141,12 @@ export function ExportModal({ projectId, canvas, onClose }: Props) {
               </>
             )}
             {previewPhase === "error" && (
-              <p style={styles.errorText}>Erro ao gerar pré-visualização</p>
+              <div style={styles.previewErrorBox}>
+                <p style={styles.errorText}>Erro ao gerar pré-visualização: {previewError}</p>
+                <button style={styles.retryBtn} onClick={() => setPreviewAttempt((n) => n + 1)}>
+                  Tentar de novo
+                </button>
+              </div>
             )}
             <div style={styles.actions}>
               <button style={styles.cancelBtn} onClick={onClose}>Cancelar</button>
@@ -153,6 +164,11 @@ export function ExportModal({ projectId, canvas, onClose }: Props) {
         {/* Step 2: Format Selection */}
         {step === "format" && (
           <>
+            {exceedsHoop(stitchBounds(pattern), canvas) && (
+              <p style={styles.overflowNote}>
+                ⚠ O desenho extrapola o bastidor — exportar mesmo assim pode não caber na máquina.
+              </p>
+            )}
             <p style={styles.subtitle}>Escolha o formato compatível com sua máquina:</p>
             <div style={styles.formatList}>
               {FORMATS.map((f) => (
@@ -273,6 +289,15 @@ const styles: Record<string, React.CSSProperties> = {
   checkIcon: { width: 48, height: 48, borderRadius: "50%", background: "#e6f9f0", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, color: "#22c55e" },
   errorIcon: { width: 48, height: 48, borderRadius: "50%", background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, color: "#e05252" },
   errorText: { fontSize: 13, color: "#e05252", textAlign: "center", padding: "12px 0" },
+  previewErrorBox: { display: "flex", flexDirection: "column", alignItems: "center", gap: 4 },
+  retryBtn: {
+    padding: "7px 14px", borderRadius: 8, border: "1.5px solid #e2e0db",
+    background: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer", color: "#7c5cbf",
+  },
+  overflowNote: {
+    fontSize: 12, color: "#c03030", background: "#fff0f0",
+    border: "1px solid #f0c0c0", borderRadius: 8, padding: "8px 12px",
+  },
   downloadBtn: {
     padding: "12px 24px", borderRadius: 10, background: "#7c5cbf",
     color: "#fff", fontSize: 15, fontWeight: 700, textDecoration: "none",

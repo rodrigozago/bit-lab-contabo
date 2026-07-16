@@ -4,6 +4,7 @@ import { Home } from "./components/Home.tsx";
 import { EditorRoute } from "./components/EditorRoute.tsx";
 import { api } from "./api/client.ts";
 import { AuthContext, useAuth, loginUrl, type Me } from "./lib/auth.ts";
+import { ToastProvider } from "./components/Toast.tsx";
 
 export default function App() {
   const [me, setMe] = useState<Me | null>(null);
@@ -25,7 +26,9 @@ export default function App() {
 
   return (
     <AuthContext.Provider value={{ me, loading: authLoading, refresh }}>
-      <AuthGate />
+      <ToastProvider>
+        <AuthGate />
+      </ToastProvider>
     </AuthContext.Provider>
   );
 }

@@ -115,12 +115,141 @@ class TestSvgToEmbroideryColorGrouping(unittest.TestCase):
         self.assertEqual(sum(1 for s in pattern.stitches if s[2] == pyembroidery.COLOR_BREAK), 1)
 
 
+class TestStitchTypesAreDistinct(unittest.TestCase):
+    """
+    STI-2: cada tipo de ponto tem que gerar um padrão DIFERENTE — antes,
+    cetim caía no mesmo preenchimento do tatami e o running ignorava o
+    comprimento de ponto configurado.
+    """
+
+    SQUARE_D = "M0 0 H10 V10 H0 Z"  # quadrado 10x10 mm
+
+    def _pattern(self, attrs: str) -> pyembroidery.EmbPattern:
+        svg = (
+            f'<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkstitch="http://inkstitch.org/namespace" '
+            f'viewBox="0 0 10 10"><path d="{self.SQUARE_D}" fill="#ff0000" {attrs} /></svg>'
+        )
+        return _run_svg_to_embroidery(svg)
+
+    def test_cetim_e_zigue_zague_borda_a_borda(self):
+        # cetim: cada linha de varredura tem SÓ 2 pontos (as duas bordas) —
+        # todos os pontos ficam nas bordas x=0 ou x=10 (varredura a 0°).
+        # Tolerância 0.4 acomoda as travas (±0.3mm em volta do 1º/último ponto).
+        pattern = self._pattern(
+            'inkstitch:fill_method="contour_fill" inkstitch:line_distance="1mm" inkstitch:angle="0"'
+        )
+        xs = [s[0] / SCALE_SVG_TO_EMB for s in pattern.stitches if s[2] == pyembroidery.STITCH]
+        self.assertGreater(len(xs), 0)
+        for x in xs:
+            self.assertTrue(
+                abs(x) < 0.4 or abs(x - 10) < 0.4,
+                f"ponto de cetim no MEIO da forma (x={x}) — deveria ir borda a borda",
+            )
+
+    def test_tatami_preenche_o_interior(self):
+        # tatami: tem pontos NO MEIO da forma (não só nas bordas)
+        pattern = self._pattern(
+            'inkstitch:fill_method="tatami_fill" inkstitch:line_distance="1mm" inkstitch:angle="0"'
+        )
+        xs = [s[0] / SCALE_SVG_TO_EMB for s in pattern.stitches if s[2] == pyembroidery.STITCH]
+        interior = [x for x in xs if 2 < x < 8]
+        self.assertGreater(len(interior), 0, "tatami sem pontos no interior da forma")
+
+    def test_running_respeita_comprimento_do_ponto(self):
+        # perímetro 40mm / 2mm por ponto ≈ 21 pontos + 6 de travas
+        # (tie-in/tie-off, 3 cada) — não os 128 fixos de antes
+        pattern = self._pattern(
+            'inkstitch:stroke_method="running_stitch" inkstitch:running_stitch_length="2mm"'
+        )
+        n = sum(1 for s in pattern.stitches if s[2] in (pyembroidery.STITCH, pyembroidery.JUMP))
+        self.assertLess(abs(n - 27), 5, f"esperava ~27 pontos (40mm/2mm + travas), veio {n}")
+
+    def test_running_pula_entre_subpaths_desconectados(self):
+        # dois quadrados desconectados no mesmo "d": o segundo tem que começar com JUMP
+        svg = (
+            '<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkstitch="http://inkstitch.org/namespace" '
+            'viewBox="0 0 30 10"><path d="M0 0 H10 V10 H0 Z M20 0 H30 V10 H20 Z" fill="#ff0000" '
+            'inkstitch:stroke_method="running_stitch" inkstitch:running_stitch_length="2mm" /></svg>'
+        )
+        pattern = _run_svg_to_embroidery(svg)
+        jumps = sum(1 for s in pattern.stitches if s[2] == pyembroidery.JUMP)
+        self.assertGreaterEqual(jumps, 2, "subpath desconectado sem JUMP — agulha costura ponte")
+
+
+class TestSti3UnderlayPullCompLocks(unittest.TestCase):
+    """STI-3: underlay, pull compensation e travas (tie-in/tie-off)."""
+
+    SQUARE_D = "M0 0 H10 V10 H0 Z"
+
+    def _pattern(self, attrs: str) -> pyembroidery.EmbPattern:
+        svg = (
+            f'<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkstitch="http://inkstitch.org/namespace" '
+            f'viewBox="0 0 10 10"><path d="{self.SQUARE_D}" fill="#ff0000" {attrs} /></svg>'
+        )
+        return _run_svg_to_embroidery(svg)
+
+    BASE = 'inkstitch:fill_method="tatami_fill" inkstitch:line_distance="1mm" inkstitch:angle="0"'
+
+    def test_pull_compensation_alarga_o_desenho(self):
+        # comp=0.5 estica cada linha 0.5mm pra cada lado → bbox ~1mm mais largo
+        def width(attrs: str) -> float:
+            pattern = self._pattern(attrs)
+            xs = [s[0] / SCALE_SVG_TO_EMB for s in pattern.stitches if s[2] == pyembroidery.STITCH]
+            return max(xs) - min(xs)
+
+        base_w = width(self.BASE)
+        comp_w = width(f'{self.BASE} inkstitch:pull_compensation_mm="0.5"')
+        self.assertGreater(comp_w, base_w + 0.6, f"pull comp sem efeito: {base_w} → {comp_w}")
+
+    def test_underlay_adiciona_pontos_sem_trocar_de_linha(self):
+        base = self._pattern(self.BASE)
+        with_underlay = self._pattern(f'{self.BASE} inkstitch:underlay="true"')
+        n_base = sum(1 for s in base.stitches if s[2] == pyembroidery.STITCH)
+        n_under = sum(1 for s in with_underlay.stitches if s[2] == pyembroidery.STITCH)
+        self.assertGreater(n_under, n_base, "underlay não adicionou pontos")
+        # underlay é a mesma cor — nenhuma troca de linha extra
+        breaks = sum(1 for s in with_underlay.stitches if s[2] == pyembroidery.COLOR_BREAK)
+        self.assertEqual(breaks, 0)
+        self.assertEqual(len(with_underlay.threadlist), 1)
+
+    def test_travas_no_inicio_e_fim_de_cada_bloco_de_cor(self):
+        # dois blocos de cor → cada um com tie-in e tie-off: sequências de
+        # 3 pontos consecutivos e próximos (offsets de trava são ±0.3mm, logo
+        # até 0.6mm entre pontos adjacentes — bem abaixo do espaçamento de
+        # 1mm do preenchimento normal, que não deve ser confundido com trava)
+        svg = (
+            '<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkstitch="http://inkstitch.org/namespace" '
+            'viewBox="0 0 30 10">'
+            f'<path d="M0 0 H10 V10 H0 Z" fill="#ff0000" {self.BASE} />'
+            f'<path d="M20 0 H30 V10 H20 Z" fill="#0000ff" {self.BASE} />'
+            "</svg>"
+        )
+        pattern = _run_svg_to_embroidery(svg)
+
+        def lock_runs(stitches) -> int:
+            """Conta corridas de 3+ STITCHes consecutivos dentro de 0.7mm."""
+            runs = tight = 0
+            prev = None
+            for x, y, cmd in stitches:
+                if cmd == pyembroidery.STITCH and prev is not None:
+                    dist = ((x - prev[0]) ** 2 + (y - prev[1]) ** 2) ** 0.5 / SCALE_SVG_TO_EMB
+                    tight = tight + 1 if dist <= 0.7 else 0
+                    if tight == 2:
+                        runs += 1
+                else:
+                    tight = 0
+                prev = (x, y) if cmd == pyembroidery.STITCH else None
+            return runs
+
+        # 2 blocos × (tie-in + tie-off) = pelo menos 4 travas
+        self.assertGreaterEqual(lock_runs(pattern.stitches), 4)
+
+
 class TestSatinTatamiHoleParity(unittest.TestCase):
     """
-    O worker hoje não tem um algoritmo de coluna dedicado pro cetim
-    (contour_fill) — cai no mesmo preenchimento par-ímpar do tatami (STI-2) —
-    então os dois devem respeitar buracos igualmente. Cobre o relato do
-    usuário de que o cetim "não deixava o espaço vazado das letras".
+    Cetim (zigue-zague borda-a-borda) e tatami (preenchimento par-ímpar)
+    devem respeitar buracos igualmente. Cobre o relato do usuário de que o
+    cetim "não deixava o espaço vazado das letras".
     """
 
     RING_D = "M0 0 H8 V8 H0 Z M2.5 2.5 H5.5 V5.5 H2.5 Z"  # anel 8x8 com miolo 3x3

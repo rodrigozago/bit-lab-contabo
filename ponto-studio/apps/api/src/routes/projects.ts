@@ -91,4 +91,36 @@ export async function projectsRoutes(app: FastifyInstance) {
       return { ok: true, data: null };
     }
   );
+
+  // GET /api/projects/:id/versions — histórico (DATA-4)
+  app.get<{ Params: { id: string } }>(
+    "/:id/versions",
+    async (req, reply): Promise<ApiResponse<projectsRepo.ProjectVersionMeta[]>> => {
+      const existing = await projectsRepo.get(req.params.id);
+      if (!existing || existing.ownerId !== ownerId(req)) {
+        reply.status(404);
+        return { ok: false, error: "Project not found" };
+      }
+      const versions = await projectsRepo.listVersions(req.params.id);
+      return { ok: true, data: versions };
+    }
+  );
+
+  // POST /api/projects/:id/versions/:versionId/restore — restaura uma versão antiga
+  app.post<{ Params: { id: string; versionId: string } }>(
+    "/:id/versions/:versionId/restore",
+    async (req, reply): Promise<ApiResponse<EmbroideryProject>> => {
+      const existing = await projectsRepo.get(req.params.id);
+      if (!existing || existing.ownerId !== ownerId(req)) {
+        reply.status(404);
+        return { ok: false, error: "Project not found" };
+      }
+      const restored = await projectsRepo.restoreVersion(req.params.id, req.params.versionId);
+      if (!restored) {
+        reply.status(404);
+        return { ok: false, error: "Version not found" };
+      }
+      return { ok: true, data: restored };
+    }
+  );
 }

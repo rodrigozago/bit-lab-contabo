@@ -16,6 +16,7 @@ export function useProjectStore(
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
+  const [lastError, setLastError] = useState<string | null>(null);
 
   const selectedElement = project.elements.find((e) => e.id === selectedElementId) ?? null;
 
@@ -30,8 +31,10 @@ export function useProjectStore(
       await onSyncRef.current?.(p);
       setSaveStatus("saved");
       setLastSavedAt(new Date().toISOString());
-    } catch {
+      setLastError(null);
+    } catch (err) {
       setSaveStatus("error");
+      setLastError(err instanceof Error ? err.message : "erro desconhecido");
     }
   }, []);
 
@@ -72,6 +75,21 @@ export function useProjectStore(
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // STI-4: a posição no array É a ordem de costura na máquina (export/preview
+  // iteram na ordem) — mover pra cima = costurar antes.
+  const moveElement = useCallback((id: string, direction: "up" | "down") => {
+    setProject((p) => {
+      const idx = p.elements.findIndex((e) => e.id === id);
+      const target = direction === "up" ? idx - 1 : idx + 1;
+      if (idx === -1 || target < 0 || target >= p.elements.length) return p;
+      const elements = [...p.elements];
+      [elements[idx], elements[target]] = [elements[target]!, elements[idx]!];
+      const next = { ...p, elements, updatedAt: new Date().toISOString() };
+      scheduleSync(next);
+      return next;
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const removeElement = useCallback((id: string) => {
     setProject((p) => {
       const next = {
@@ -93,9 +111,11 @@ export function useProjectStore(
     setSelectedElementId,
     addElement,
     updateElement,
+    moveElement,
     removeElement,
     saveStatus,
     lastSavedAt,
+    lastError,
     retrySync,
   };
 }

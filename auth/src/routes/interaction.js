@@ -7,6 +7,7 @@ const accessRequests = require('../models/accessRequests')
 const session = require('../session')
 const { checkLimit } = require('../rateLimit')
 const { renderLogin } = require('../views/login')
+const { notifyAccessRequest } = require('../notify')
 
 const router = express.Router()
 
@@ -23,10 +24,17 @@ function loginPage(uid, extra = {}) {
 
 // Registra a solicitação pendente (idempotente) pra aparecer na fila do
 // admin sem o usuário precisar fazer mais nada além de tentar logar.
+// Notifica o admin (ADMIN-5) só quando a linha é REALMENTE nova — sem isso,
+// cada retry de login sem acesso disparava o webhook de novo.
 async function ensureAccessRequest(userId, appSlug) {
   try {
     const app = await apps.findBySlug(appSlug)
-    if (app) await accessRequests.ensurePending(userId, app.id)
+    if (!app) return
+    const inserted = await accessRequests.ensurePending(userId, app.id)
+    if (inserted) {
+      const user = await users.findById(userId)
+      if (user) await notifyAccessRequest({ email: user.email, appName: app.name })
+    }
   } catch (err) {
     console.error('[interaction] falha ao registrar solicitação pendente:', err)
   }

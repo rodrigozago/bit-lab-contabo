@@ -54,6 +54,8 @@ FORMAT_MAP: dict[str, str] = {
 STITCH_SPACING_MM = 0.4       # distância entre linhas de preenchimento
 RUNNING_STITCH_LEN_MM = 2.5   # comprimento de ponto corrido
 SCALE_SVG_TO_EMB = 10         # 1 mm SVG → 10 unidades pyembroidery
+UNDERLAY_SPACING_MM = 2.0     # espaçamento da passada de base (esparsa de propósito)
+LOCK_OFFSET_MM = 0.3          # amplitude dos micro-pontos de trava (tie-in/tie-off)
 
 
 # ── Conversão SVG → bordado ───────────────────────────────────────────────────
@@ -82,10 +84,122 @@ def path_to_polyline(
     return points
 
 
+def path_to_running_stitches(
+    path: svgpathtools.Path, stitch_len_mm: float = RUNNING_STITCH_LEN_MM
+) -> list[tuple[float, float, bool]]:
+    """
+    Ponto corrido de verdade (STI-2): amostra cada SUBPATH contínuo por
+    comprimento de arco, um ponto a cada `stitch_len_mm` — o comprimento do
+    ponto é constante e configurável (antes eram 128 amostras fixas: ponto
+    gigante em forma grande, minúsculo em forma pequena, e o
+    running_stitch_length da API era ignorado).
+
+    Subpaths desconectados (buracos de letra, formas separadas no mesmo "d")
+    começam com jump_before=True — sem isso a agulha costura uma ponte reta
+    entre eles.
+    """
+    stitch_len = max(stitch_len_mm, 0.1)
+    stitches: list[tuple[float, float, bool]] = []
+
+    try:
+        subpaths = path.continuous_subpaths()
+    except Exception:
+        subpaths = [path]
+
+    for sub in subpaths:
+        length = sub.length()
+        if length == 0:
+            continue
+        n = max(int(length / stitch_len), 1)
+        for i in range(n + 1):
+            # ilength converte comprimento de arco → parâmetro t (amostragem
+            # uniforme no espaço, não no parâmetro — curvas não distorcem)
+            try:
+                t = sub.ilength(min(i * stitch_len, length))
+            except Exception:
+                t = i / n
+            pt = sub.point(t)
+            stitches.append((pt.real, pt.imag, i == 0))
+
+    return stitches
+
+
+def satin_path_with_stitches(
+    path: svgpathtools.Path,
+    spacing_mm: float = STITCH_SPACING_MM,
+    angle_deg: float = 45.0,
+    pull_comp_mm: float = 0.0,
+) -> list[tuple[float, float, bool]]:
+    """
+    Cetim (STI-2): zigue-zague lado-a-lado atravessando a forma — em cada
+    linha de varredura, em vez de preencher o interior com pontos (tatami),
+    a agulha vai de uma BORDA à outra; linhas consecutivas alternam a
+    direção, formando a coluna de cetim clássica (brilho contínuo, sem
+    "textura" de preenchimento).
+
+    Reusa a mesma varredura par-ímpar do tatami, então buracos e formas
+    separadas continuam respeitados (cada par vira uma coluna própria, com
+    jump entre elas).
+    """
+    xmin, xmax, ymin, ymax = path.bbox()
+    if xmax == xmin or ymax == ymin:
+        return [(x, y, i == 0) for i, (x, y) in enumerate(path_to_polyline(path))]
+
+    spacing = max(spacing_mm, 1e-3)
+    rad = math.radians(angle_deg)
+    dx, dy = math.cos(rad), math.sin(rad)
+    px, py = -dy, dx
+
+    center_x, center_y = (xmin + xmax) / 2, (ymin + ymax) / 2
+    c_dir = center_x * dx + center_y * dy
+    half_len = math.hypot(xmax - xmin, ymax - ymin)
+
+    corners = [(xmin, ymin), (xmax, ymin), (xmax, ymax), (xmin, ymax)]
+    perp_projs = [cx * px + cy * py for cx, cy in corners]
+    t_min, t_max = min(perp_projs), max(perp_projs)
+
+    stitches: list[tuple[float, float, bool]] = []
+    n_rows = int((t_max - t_min) / spacing) + 1
+    for row in range(n_rows + 1):
+        t = t_min + row * spacing
+        bx = t * px + c_dir * dx
+        by = t * py + c_dir * dy
+        scan = Line(
+            complex(bx - dx * half_len, by - dy * half_len),
+            complex(bx + dx * half_len, by + dy * half_len),
+        )
+
+        crossings: list[float] = []
+        try:
+            for _self_hit, (T_scan, _seg, _t) in path.intersect(scan):
+                pt = scan.point(T_scan)
+                crossings.append((pt.real - bx) * dx + (pt.imag - by) * dy)
+        except Exception:
+            continue
+
+        crossings.sort()
+        pairs = list(zip(crossings[0::2], crossings[1::2]))
+
+        for pair_idx, (lo, hi) in enumerate(pairs):
+            # STI-3: pull compensation — estica o zigue-zague nas duas bordas
+            lo -= pull_comp_mm
+            hi += pull_comp_mm
+            # zigue-zague: alterna a ordem borda→borda a cada linha
+            ends = (lo, hi) if row % 2 == 0 else (hi, lo)
+            for k, s in enumerate(ends):
+                jump_before = pair_idx > 0 and k == 0
+                stitches.append((bx + s * dx, by + s * dy, jump_before))
+
+    if stitches:
+        return stitches
+    return [(x, y, i == 0) for i, (x, y) in enumerate(path_to_polyline(path))]
+
+
 def fill_path_with_stitches(
     path: svgpathtools.Path,
     spacing_mm: float = STITCH_SPACING_MM,
     angle_deg: float = 45.0,
+    pull_comp_mm: float = 0.0,
 ) -> list[tuple[float, float, bool]]:
     """
     Preenchimento por varredura de linhas paralelas ao ângulo dado, com regra
@@ -149,6 +263,10 @@ def fill_path_with_stitches(
 
         for pair_idx, (s_a, s_b) in enumerate(pairs):
             lo, hi = min(s_a, s_b), max(s_a, s_b)
+            # STI-3: pull compensation — o fio traciona o tecido pra dentro na
+            # direção da costura; esticar cada linha nas pontas compensa isso
+            lo -= pull_comp_mm
+            hi += pull_comp_mm
             seq = [lo + k * spacing for k in range(int((hi - lo) / spacing) + 1)]
             if s_a > s_b:
                 seq.reverse()
@@ -160,6 +278,17 @@ def fill_path_with_stitches(
     if stitches:
         return stitches
     return [(x, y, i == 0) for i, (x, y) in enumerate(path_to_polyline(path))]
+
+
+def _add_lock_stitches(pattern: pyembroidery.EmbPattern, x: float, y: float) -> None:
+    """
+    Trava (tie-in/tie-off, STI-3): 3 micro-pontos em volta de (x, y) — prende
+    o fio no início/fim de cada bloco de cor pra não desfiar quando a linha é
+    cortada. Coordenadas em unidades SVG (mm).
+    """
+    scale = SCALE_SVG_TO_EMB
+    for dx in (LOCK_OFFSET_MM, -LOCK_OFFSET_MM, 0.0):
+        pattern.add_stitch_absolute(pyembroidery.STITCH, (x + dx) * scale, y * scale)
 
 
 def svg_to_embroidery(svg_path: Path, format_ext: str) -> pyembroidery.EmbPattern:
@@ -181,6 +310,8 @@ def svg_to_embroidery(svg_path: Path, format_ext: str) -> pyembroidery.EmbPatter
     # quando o fill muda de fato, senão cada região vira uma parada de troca
     # de linha na máquina para a MESMA cor (ex.: 17 "cores" pra 1 única linha).
     last_color: str | None = None
+    # último ponto costurado — onde a trava de fim de bloco (tie-off) é feita
+    last_stitch_pos: tuple[float, float] | None = None
 
     for path, attrs in zip(paths, attributes):
         if not path:
@@ -195,6 +326,9 @@ def svg_to_embroidery(svg_path: Path, format_ext: str) -> pyembroidery.EmbPatter
         stitch_type_raw = attrs.get("inkstitch:stroke_method", "")
         angle_raw = attrs.get("inkstitch:angle", "45")
         density_raw = attrs.get("inkstitch:line_distance", str(STITCH_SPACING_MM))
+        run_len_raw = attrs.get("inkstitch:running_stitch_length", str(RUNNING_STITCH_LEN_MM))
+        pull_comp_raw = attrs.get("inkstitch:pull_compensation_mm", "0")
+        wants_underlay = attrs.get("inkstitch:underlay", "") == "true"
 
         try:
             angle = float(angle_raw)
@@ -206,14 +340,42 @@ def svg_to_embroidery(svg_path: Path, format_ext: str) -> pyembroidery.EmbPatter
         except ValueError:
             spacing = STITCH_SPACING_MM
 
-        # Determina estratégia
+        try:
+            run_len = float(str(run_len_raw).replace("mm", ""))
+        except ValueError:
+            run_len = RUNNING_STITCH_LEN_MM
+
+        try:
+            pull_comp = max(0.0, min(0.5, float(str(pull_comp_raw).replace("mm", ""))))
+        except ValueError:
+            pull_comp = 0.0
+
+        # Estratégia por tipo (STI-2): running = contorno com comprimento de
+        # ponto configurável; contour_fill (cetim na UI) = zigue-zague
+        # borda-a-borda; tatami_fill = preenchimento por varredura.
         is_running = stitch_type_raw == "running_stitch" or stitch_method == "running_stitch"
+        is_satin = stitch_method == "contour_fill"
 
         try:
             if is_running:
-                points = [(x, y, i == 0) for i, (x, y) in enumerate(path_to_polyline(path, samples=128))]
+                points = path_to_running_stitches(path, stitch_len_mm=run_len)
+            elif is_satin:
+                points = satin_path_with_stitches(path, spacing_mm=spacing, angle_deg=angle, pull_comp_mm=pull_comp)
             else:
-                points = fill_path_with_stitches(path, spacing_mm=spacing, angle_deg=angle)
+                points = fill_path_with_stitches(path, spacing_mm=spacing, angle_deg=angle, pull_comp_mm=pull_comp)
+
+            # STI-3: underlay — passada de base esparsa e PERPENDICULAR antes
+            # do preenchimento (estabiliza o tecido; a passada principal cobre
+            # ela por completo). Mesma cor, sem troca de linha; o primeiro
+            # ponto do preenchimento principal vira JUMP pra não costurar uma
+            # ponte do fim do underlay até o início do preenchimento.
+            if wants_underlay and not is_running:
+                underlay = fill_path_with_stitches(
+                    path, spacing_mm=UNDERLAY_SPACING_MM, angle_deg=angle + 90.0
+                )
+                if underlay and points:
+                    x0, y0, _ = points[0]
+                    points = underlay + [(x0, y0, True)] + points[1:]
         except Exception as exc:
             log.warning("Erro ao gerar pontos para path: %s — usando polyline", exc)
             points = [(x, y, i == 0) for i, (x, y) in enumerate(path_to_polyline(path))]
@@ -222,8 +384,12 @@ def svg_to_embroidery(svg_path: Path, format_ext: str) -> pyembroidery.EmbPatter
             continue
 
         # Cor do fio — só troca de thread/linha quando a cor muda de verdade
-        if fill_color != last_color:
+        new_block = fill_color != last_color
+        if new_block:
             if last_color is not None:
+                # trava de FIM do bloco anterior (tie-off) antes do corte de linha
+                if last_stitch_pos is not None:
+                    _add_lock_stitches(pattern, *last_stitch_pos)
                 pattern.add_stitch_absolute(pyembroidery.COLOR_BREAK, 0, 0)
             try:
                 r, g, b = hex_to_rgb(fill_color)
@@ -243,8 +409,15 @@ def svg_to_embroidery(svg_path: Path, format_ext: str) -> pyembroidery.EmbPatter
         for x, y, jump_before in points:
             cmd = pyembroidery.JUMP if (first or jump_before) else pyembroidery.STITCH
             pattern.add_stitch_absolute(cmd, x * scale, y * scale)
+            if new_block and first:
+                # trava de INÍCIO do bloco de cor (tie-in) no primeiro ponto
+                _add_lock_stitches(pattern, x, y)
             first = False
+            last_stitch_pos = (x, y)
 
+    # trava do último bloco antes do END (a máquina corta a linha aqui)
+    if last_stitch_pos is not None:
+        _add_lock_stitches(pattern, *last_stitch_pos)
     pattern.add_stitch_absolute(pyembroidery.END, 0, 0)
     return pattern
 
@@ -424,6 +597,7 @@ def process_analyze_job(r: redis.Redis, job_data: dict[str, Any]) -> None:
             detail=int(raw_params.get("detail", 2)),
             color_tolerance=float(raw_params.get("colorTolerance", DEFAULT_MERGE_DELTA_E)),
             max_areas=int(raw_params.get("maxAreas", AnalyzeParams().max_areas)),
+            exclude_background=bool(raw_params.get("excludeBackground", True)),
         )
         svg = analyze_image(str(image_path), params)
 

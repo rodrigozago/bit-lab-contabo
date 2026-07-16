@@ -1,14 +1,21 @@
 const { pool } = require('../db')
 const appAccess = require('./appAccess')
 
-/** Cria uma solicitação pendente se ainda não existir uma pro par usuário+app. */
+/**
+ * Cria uma solicitação pendente se ainda não existir uma pro par usuário+app.
+ * Retorna a row inserida, ou null se já havia uma pendente (ON CONFLICT) —
+ * o retorno permite ao chamador notificar o admin só em inserção REAL
+ * (ADMIN-5), sem spam a cada retry de login sem acesso.
+ */
 async function ensurePending(userId, appId) {
-  await pool.query(
+  const { rows } = await pool.query(
     `INSERT INTO access_requests (user_id, app_id, status)
      VALUES ($1, $2, 'pending')
-     ON CONFLICT (user_id, app_id) WHERE status = 'pending' DO NOTHING`,
+     ON CONFLICT (user_id, app_id) WHERE status = 'pending' DO NOTHING
+     RETURNING id`,
     [userId, appId]
   )
+  return rows[0] || null
 }
 
 /** Lista solicitações pendentes, com e-mail e slug já resolvidos (pro painel admin). */

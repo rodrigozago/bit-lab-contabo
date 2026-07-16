@@ -41,6 +41,7 @@ services:
       FACE_LAB_OIDC_SECRET: "${FACE_LAB_OIDC_SECRET}"
       PONTO_STUDIO_OIDC_SECRET: "${PONTO_STUDIO_OIDC_SECRET}"
       ALLOW_SELF_SIGNUP: "${ALLOW_SELF_SIGNUP:-false}"
+      ADMIN_NOTIFY_WEBHOOK_URL: "${ADMIN_NOTIFY_WEBHOOK_URL:-}"
       JWKS_PATH: "/app/data/jwks.json"
       NODE_ENV: production
       PORT: "4000"

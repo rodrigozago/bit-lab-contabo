@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { EmbroideryElement, StitchType } from "@ponto-studio/shared";
 
 const STITCH_OPTIONS: Array<{ value: StitchType; label: string; desc: string }> = [
@@ -14,6 +15,8 @@ interface Props {
 
 export function PropertiesPanel({ element, onChange, onDelete }: Props) {
   const { stitch, color } = element;
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const pullComp = stitch.pullCompensationMm ?? 0;
 
   return (
     <div style={styles.panel}>
@@ -81,6 +84,52 @@ export function PropertiesPanel({ element, onChange, onDelete }: Props) {
       </div>
       <div style={styles.sliderValue}>{stitch.angle}°</div>
 
+      <label style={styles.advancedToggle}>
+        <input
+          type="checkbox"
+          checked={advancedOpen}
+          onChange={(e) => setAdvancedOpen(e.target.checked)}
+        />
+        Avançado
+      </label>
+
+      {advancedOpen && stitch.type !== "running" && (
+        <>
+          <label style={styles.advancedRow}>
+            <input
+              type="checkbox"
+              checked={stitch.underlay ?? false}
+              onChange={(e) => onChange({ stitch: { ...stitch, underlay: e.target.checked } })}
+            />
+            <span>
+              Underlay (base)
+              <span style={styles.advancedHint}>Passada de estabilização antes do preenchimento</span>
+            </span>
+          </label>
+
+          <h3 style={styles.sectionTitle}>Compensação de puxão</h3>
+          <div style={styles.sliderRow}>
+            <span style={styles.sliderLabel}>0</span>
+            <input
+              type="range"
+              min={0}
+              max={0.5}
+              step={0.05}
+              value={pullComp}
+              onChange={(e) =>
+                onChange({ stitch: { ...stitch, pullCompensationMm: Number(e.target.value) } })
+              }
+              style={styles.slider}
+            />
+            <span style={styles.sliderLabel}>0.5mm</span>
+          </div>
+          <div style={styles.sliderValue}>{pullComp.toFixed(2)} mm</div>
+        </>
+      )}
+      {advancedOpen && stitch.type === "running" && (
+        <p style={styles.advancedHint}>Underlay e compensação só se aplicam a preenchimentos (cetim/tatami).</p>
+      )}
+
       <button style={styles.deleteBtn} onClick={onDelete}>
         Remover área
       </button>
@@ -131,6 +180,30 @@ const styles: Record<string, React.CSSProperties> = {
   sliderLabel: { fontSize: 11, color: "#6b6b6b", width: 40, flexShrink: 0 },
   slider: { flex: 1, accentColor: "#7c5cbf" },
   sliderValue: { fontSize: 13, color: "#7c5cbf", fontWeight: 600, textAlign: "center" },
+  advancedToggle: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    fontSize: 12,
+    fontWeight: 600,
+    color: "#6b6b6b",
+    cursor: "pointer",
+    marginTop: 8,
+  },
+  advancedRow: {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: 8,
+    fontSize: 13,
+    color: "#1a1a1a",
+    cursor: "pointer",
+  },
+  advancedHint: {
+    display: "block",
+    fontSize: 11,
+    color: "#6b6b6b",
+    marginTop: 2,
+  },
   deleteBtn: {
     marginTop: 12,
     padding: "10px",

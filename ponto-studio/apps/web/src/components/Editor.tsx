@@ -24,6 +24,8 @@ import { PropertiesPanel } from "./PropertiesPanel.tsx";
 import { ExportModal } from "./ExportModal.tsx";
 import { ImportModal } from "./ImportModal.tsx";
 import { UserMenu } from "./UserMenu.tsx";
+import { useToast } from "./Toast.tsx";
+import { HistoryModal } from "./HistoryModal.tsx";
 import type { ImportConfirmPayload } from "./ImportModal.tsx";
 
 // ── Layer System ──────────────────────────────────────────────────────────────
@@ -89,10 +91,12 @@ function formatSavedAgo(iso: string): string {
 function SaveStatusIndicator({
   status,
   lastSavedAt,
+  lastError,
   onRetry,
 }: {
   status: SaveStatus;
   lastSavedAt: string | null;
+  lastError?: string | null;
   onRetry: () => void;
 }) {
   // Reforça o texto periodicamente (ex.: "agora" → "1min" → "2min"...) mesmo
@@ -111,7 +115,7 @@ function SaveStatusIndicator({
       <button
         style={{ ...styles.saveStatus, ...styles.saveStatusError }}
         onClick={onRetry}
-        title="Clique para tentar salvar de novo"
+        title={`${lastError ? `${lastError} — ` : ""}Clique para tentar salvar de novo`}
       >
         ⚠ Erro ao salvar — tentar de novo
       </button>
@@ -155,21 +159,26 @@ interface Props {
 
 export function Editor({ project, onProjectChange, onBackToHome }: Props) {
   const navigate = useNavigate();
+  const toast = useToast();
   const [deleting, setDeleting] = useState(false);
+  const [importing, setImporting] = useState(false);
   const {
     project: localProject,
     selectedElement,
     setSelectedElementId,
     addElement,
     updateElement,
+    moveElement,
     removeElement,
     saveStatus,
     lastSavedAt,
+    lastError,
     retrySync,
   } = useProjectStore(project, onProjectChange);
 
   const [showExport, setShowExport] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const [tldrawEditor, setTldrawEditor] = useState<TldrawEditor | null>(null);
   const [layers, setLayers] = useState<LayerState>({ reference: true, embroidery: true });
   const initialSvgLoaded = useRef(false);
@@ -246,9 +255,13 @@ export function Editor({ project, onProjectChange, onBackToHome }: Props) {
           meta: { layer: 'embroidery', elementId: initialElement.id },
         } as Parameters<typeof editor.createShape>[0]);
       };
-      loadInitialSvg();
+      loadInitialSvg().catch((err) => {
+        toast.error(
+          `Erro ao carregar o desenho do projeto: ${err instanceof Error ? err.message : "erro desconhecido"}`
+        );
+      });
     }
-  }, [setSelectedElementId, localProject, removeElement, updateElement]);
+  }, [setSelectedElementId, localProject, removeElement, updateElement, toast]);
 
   // Alterna visibilidade de uma camada: oculta (opacity 0) e bloqueia os shapes
   // para que não possam ser selecionados enquanto invisíveis.
@@ -286,10 +299,13 @@ export function Editor({ project, onProjectChange, onBackToHome }: Props) {
   const handleImportConfirm = useCallback(async ({ file, result, previewDataUrl }: ImportConfirmPayload) => {
     if (!tldrawEditor) return;
     setShowImport(false);
+    setImporting(true);
 
-    const dims = await new Promise<{ w: number; h: number }>((resolve) => {
+    try {
+    const dims = await new Promise<{ w: number; h: number }>((resolve, reject) => {
       const img = new Image();
       img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
+      img.onerror = () => reject(new Error("A imagem de referência não pôde ser carregada"));
       img.src = previewDataUrl;
     });
 
@@ -350,7 +366,14 @@ export function Editor({ project, onProjectChange, onBackToHome }: Props) {
     }
 
     tldrawEditor.zoomToFit();
-  }, [tldrawEditor, addElement]);
+    } catch (err) {
+      toast.error(
+        `Erro ao adicionar a imagem ao bordado: ${err instanceof Error ? err.message : "erro desconhecido"}`
+      );
+    } finally {
+      setImporting(false);
+    }
+  }, [tldrawEditor, addElement, toast]);
 
   // Seleciona o elemento no painel e o shape correspondente no canvas
   function handleSelectElement(elementId: string) {
@@ -380,26 +403,33 @@ export function Editor({ project, onProjectChange, onBackToHome }: Props) {
     updateElement(elementId, patch);
     if (!patch.color || !tldrawEditor) return;
 
-    const el = localProject.elements.find((e) => e.id === elementId);
-    if (!el?.svgContent) return;
+    try {
+      const el = localProject.elements.find((e) => e.id === elementId);
+      if (!el?.svgContent) return;
 
-    const recolored = recolorSvg(el.svgContent, patch.color);
-    const dataUrl = await svgToDataUrl(recolored);
-    const shape = tldrawEditor
-      .getCurrentPageShapes()
-      .find((s: TLShape) => s.meta?.["elementId"] === elementId);
-    if (!shape) return;
+      const recolored = recolorSvg(el.svgContent, patch.color);
+      const dataUrl = await svgToDataUrl(recolored);
+      const shape = tldrawEditor
+        .getCurrentPageShapes()
+        .find((s: TLShape) => s.meta?.["elementId"] === elementId);
+      if (!shape) return;
 
-    const assetId = (shape.props as { assetId: string }).assetId;
-    // updateAssets NÃO faz merge profundo de `props` — passar só { src }
-    // sobrescreve o objeto inteiro e derruba w/h/mimeType (ValidationError:
-    // props.w esperado number, veio undefined). Busca o asset atual e
-    // mescla manualmente antes de atualizar.
-    const currentAsset = tldrawEditor.getAsset(assetId as Parameters<typeof tldrawEditor.getAsset>[0]);
-    if (!currentAsset) return;
-    tldrawEditor.updateAssets([
-      { id: assetId, type: "image", props: { ...currentAsset.props, src: dataUrl } },
-    ] as Parameters<typeof tldrawEditor.updateAssets>[0]);
+      const assetId = (shape.props as { assetId: string }).assetId;
+      // updateAssets NÃO faz merge profundo de `props` — passar só { src }
+      // sobrescreve o objeto inteiro e derruba w/h/mimeType (ValidationError:
+      // props.w esperado number, veio undefined). Busca o asset atual e
+      // mescla manualmente antes de atualizar.
+      const currentAsset = tldrawEditor.getAsset(assetId as Parameters<typeof tldrawEditor.getAsset>[0]);
+      if (!currentAsset) return;
+      tldrawEditor.updateAssets([
+        { id: assetId, type: "image", props: { ...currentAsset.props, src: dataUrl } },
+      ] as Parameters<typeof tldrawEditor.updateAssets>[0]);
+    } catch (err) {
+      // o dado já foi salvo (updateElement); só o redesenho no canvas falhou
+      toast.error(
+        `Erro ao atualizar a cor no canvas: ${err instanceof Error ? err.message : "erro desconhecido"}`
+      );
+    }
   }
 
   async function handleDeleteProject() {
@@ -409,7 +439,9 @@ export function Editor({ project, onProjectChange, onBackToHome }: Props) {
       await api.projects.delete(project.id);
       navigate("/");
     } catch (err) {
-      alert("Erro ao deletar projeto");
+      toast.error(
+        `Erro ao deletar projeto: ${err instanceof Error ? err.message : "erro desconhecido"}`
+      );
       setDeleting(false);
     }
   }
@@ -421,7 +453,7 @@ export function Editor({ project, onProjectChange, onBackToHome }: Props) {
         <div style={styles.topbarLeft}>
           <span style={styles.logoMark}>🪡</span>
           <span style={styles.projectName}>{localProject.name}</span>
-          <SaveStatusIndicator status={saveStatus} lastSavedAt={lastSavedAt} onRetry={retrySync} />
+          <SaveStatusIndicator status={saveStatus} lastSavedAt={lastSavedAt} lastError={lastError} onRetry={retrySync} />
         </div>
         <div style={styles.topbarRight}>
           <button style={styles.newBtn} onClick={onBackToHome} title="Voltar para meus projetos">
@@ -432,6 +464,9 @@ export function Editor({ project, onProjectChange, onBackToHome }: Props) {
           </button>
           <button style={styles.exportBtn} onClick={() => setShowExport(true)}>
             ✦ Exportar bordado
+          </button>
+          <button style={styles.historyBtn} onClick={() => setShowHistory(true)} title="Histórico do projeto">
+            🕘 Histórico
           </button>
           <button
             style={{ ...styles.deleteProjectBtn, opacity: deleting ? 0.5 : 1 }}
@@ -483,15 +518,38 @@ export function Editor({ project, onProjectChange, onBackToHome }: Props) {
                 Importe uma imagem e analise com IA — a área do bordado é criada automaticamente.
               </p>
             )}
-            {localProject.elements.map((el) => (
-              <button
+            {localProject.elements.length > 1 && (
+              <p style={styles.emptyHint}>Ordem de costura na máquina — use ▲/▼ pra reordenar.</p>
+            )}
+            {localProject.elements.map((el, idx) => (
+              <div
                 key={el.id}
                 style={{ ...styles.elementItem, ...(el.id === selectedElement?.id ? styles.elementItemActive : {}) }}
-                onClick={() => handleSelectElement(el.id)}
               >
-                <span style={{ ...styles.elementDot, background: el.color }} />
-                <span style={styles.elementLabel}>{el.stitch.type} — {el.color}</span>
-              </button>
+                <button style={styles.elementMain} onClick={() => handleSelectElement(el.id)}>
+                  <span style={styles.elementSeq}>{idx + 1}º</span>
+                  <span style={{ ...styles.elementDot, background: el.color }} />
+                  <span style={styles.elementLabel}>{el.stitch.type} — {el.color}</span>
+                </button>
+                <span style={styles.elementOrderBtns}>
+                  <button
+                    style={{ ...styles.orderBtn, opacity: idx === 0 ? 0.25 : 1 }}
+                    disabled={idx === 0}
+                    title="Costurar antes"
+                    onClick={() => moveElement(el.id, "up")}
+                  >
+                    ▲
+                  </button>
+                  <button
+                    style={{ ...styles.orderBtn, opacity: idx === localProject.elements.length - 1 ? 0.25 : 1 }}
+                    disabled={idx === localProject.elements.length - 1}
+                    title="Costurar depois"
+                    onClick={() => moveElement(el.id, "down")}
+                  >
+                    ▼
+                  </button>
+                </span>
+              </div>
             ))}
           </div>
         </aside>
@@ -502,6 +560,21 @@ export function Editor({ project, onProjectChange, onBackToHome }: Props) {
       )}
       {showImport && (
         <ImportModal onClose={() => setShowImport(false)} onConfirm={handleImportConfirm} />
+      )}
+      {showHistory && (
+        <HistoryModal
+          projectId={localProject.id}
+          onClose={() => setShowHistory(false)}
+          onRestored={() => navigate(0)}
+        />
+      )}
+      {importing && (
+        <div style={styles.importingOverlay}>
+          <div style={styles.importingCard}>
+            <div style={styles.importingSpinner} />
+            <span>Adicionando ao bordado…</span>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -549,6 +622,12 @@ const styles: Record<string, React.CSSProperties> = {
     background: "#7c5cbf", color: "#fff",
     fontSize: 13, fontWeight: 700, cursor: "pointer",
   },
+  historyBtn: {
+    padding: "8px 12px", borderRadius: 8,
+    background: "#f0f0f0", color: "#666",
+    fontSize: 13, fontWeight: 600, cursor: "pointer", border: "none",
+    transition: "background 0.15s",
+  },
   deleteProjectBtn: {
     padding: "8px 12px", borderRadius: 8,
     background: "#f0f0f0", color: "#666",
@@ -572,12 +651,40 @@ const styles: Record<string, React.CSSProperties> = {
   elementList: { borderTop: "1px solid #e2e0db", flexShrink: 0, maxHeight: 200, overflowY: "auto" },
   emptyHint: { fontSize: 12, color: "#9b9b9b", padding: "10px 16px" },
   elementItem: {
-    display: "flex", alignItems: "center", gap: 8,
-    padding: "9px 16px", width: "100%",
-    border: "none", background: "transparent", cursor: "pointer",
-    borderBottom: "1px solid #f0ede8", textAlign: "left",
+    display: "flex", alignItems: "center", gap: 4,
+    padding: "4px 8px 4px 0", width: "100%",
+    borderBottom: "1px solid #f0ede8",
   },
   elementItemActive: { background: "#f5f0ff" },
+  elementMain: {
+    display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0,
+    padding: "5px 0 5px 16px", border: "none", background: "transparent",
+    cursor: "pointer", textAlign: "left",
+  },
+  elementSeq: { fontSize: 11, color: "#9b9b9b", fontWeight: 700, width: 20, flexShrink: 0 },
   elementDot: { width: 12, height: 12, borderRadius: "50%", flexShrink: 0 },
-  elementLabel: { fontSize: 12, color: "#1a1a1a", textTransform: "capitalize" },
+  elementLabel: {
+    fontSize: 12, color: "#1a1a1a", textTransform: "capitalize",
+    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+  },
+  elementOrderBtns: { display: "flex", flexDirection: "column", gap: 0, flexShrink: 0 },
+  importingOverlay: {
+    position: "fixed", inset: 0, background: "rgba(255,255,255,0.55)",
+    display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2000,
+  },
+  importingCard: {
+    display: "flex", alignItems: "center", gap: 12,
+    background: "#fff", border: "1.5px solid #e2e0db", borderRadius: 12,
+    padding: "16px 22px", fontSize: 14, fontWeight: 600, color: "#1a1a1a",
+    boxShadow: "0 12px 32px rgba(0,0,0,0.12)",
+  },
+  importingSpinner: {
+    width: 20, height: 20, border: "3px solid #e2e0db",
+    borderTop: "3px solid #7c5cbf", borderRadius: "50%",
+    animation: "spin 0.8s linear infinite",
+  },
+  orderBtn: {
+    border: "none", background: "transparent", cursor: "pointer",
+    fontSize: 9, color: "#6b6b6b", padding: "1px 6px", lineHeight: 1.4,
+  },
 };

@@ -18,7 +18,7 @@ from worker import (
 
 def point_in_hole(stitches, cx, cy, radius):
     """True se algum ponto cair dentro do círculo (buraco) de centro (cx,cy)."""
-    return any((x - cx) ** 2 + (y - cy) ** 2 < radius**2 for x, y in stitches)
+    return any((x - cx) ** 2 + (y - cy) ** 2 < radius**2 for x, y, _jump in stitches)
 
 
 class TestHoleAwareFill(unittest.TestCase):

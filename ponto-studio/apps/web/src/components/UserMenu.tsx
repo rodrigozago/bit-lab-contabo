@@ -7,8 +7,14 @@ export function UserMenu() {
 
   async function handleLogout() {
     try {
-      await fetch("/api/auth/logout", { method: "POST" });
-      window.location.href = "/";
+      const res = await fetch("/api/auth/logout", { method: "POST" });
+      const data = await res.json();
+      // Redireciona pro SSO logout, que depois volta pro app
+      if (data.data?.ssoLogoutUrl) {
+        window.location.href = data.data.ssoLogoutUrl;
+      } else {
+        window.location.href = "/";
+      }
     } catch (err) {
       alert("Erro ao fazer logout");
     }

@@ -145,11 +145,12 @@ class TestLineArt(unittest.TestCase):
             return analyze_image(path, AnalyzeParams(colors=colors))
 
     def test_halos_de_antialiasing_nao_viram_camadas(self):
-        # pedindo 4 cores numa line-art de 2 cores: os clusters intermediários
-        # (anti-aliasing das bordas) devem ser dissolvidos → só 2 camadas
+        # pedindo 4 cores numa line-art de 1 cor sobre fundo branco: os
+        # clusters intermediários (anti-aliasing das bordas) devem ser
+        # dissolvidos e o fundo removido → só 1 camada (o traço azul)
         svg = self._analyze(colors=4)
         groups = svg_color_groups(svg)
-        self.assertEqual(len(groups), 2, f"halos viraram camadas: {groups}")
+        self.assertEqual(len(groups), 1, f"halos/fundo viraram camadas: {groups}")
 
     def test_tracos_separados_continuam_separados(self):
         # os 3 traços + pingo são regiões desconectadas da MESMA cor →
@@ -205,13 +206,26 @@ class TestBakeTranslate(unittest.TestCase):
 
 
 class TestAnalyzeImageEndToEnd(unittest.TestCase):
-    def test_tres_cores_viram_tres_camadas(self):
+    def test_cores_do_desenho_viram_camadas_sem_o_fundo(self):
+        # IMP-5: colors = cores DO DESENHO. Imagem tem fundo branco + vermelho
+        # + azul → colors=2 dá exatamente 2 camadas (fundo não vira bordado
+        # nem "gasta" um cluster fundindo vermelho com azul).
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "img.png")
             make_test_image(path)
-            svg = analyze_image(path, AnalyzeParams(colors=3))
+            svg = analyze_image(path, AnalyzeParams(colors=2))
             groups = svg_color_groups(svg)
-            self.assertEqual(len(groups), 3)
+            self.assertEqual(len(groups), 2, f"esperava vermelho+azul sem fundo: {groups}")
+            whites = [c for c in groups if all(int(c[i:i+2], 16) > 240 for i in (1, 3, 5))]
+            self.assertEqual(whites, [], f"fundo branco virou camada de bordado: {groups}")
+
+    def test_exclude_background_false_mantem_o_fundo(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "img.png")
+            make_test_image(path)
+            svg = analyze_image(path, AnalyzeParams(colors=3, exclude_background=False))
+            groups = svg_color_groups(svg)
+            self.assertEqual(len(groups), 3, f"esperava fundo+vermelho+azul: {groups}")
 
     def test_regioes_desconectadas_mesma_cor_no_mesmo_grupo(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -308,17 +322,19 @@ class TestColorTolerance(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "img.png")
             make_near_red_image(path)
-            svg = analyze_image(path, AnalyzeParams(colors=3, color_tolerance=0))
+            svg = analyze_image(path, AnalyzeParams(colors=2, color_tolerance=0))
             groups = svg_color_groups(svg)
-            self.assertEqual(len(groups), 3, f"esperava 3 grupos com tolerância 0: {groups}")
+            # fundo excluído → sobram os 2 vermelhos, separados
+            self.assertEqual(len(groups), 2, f"esperava 2 grupos com tolerância 0: {groups}")
 
     def test_tolerancia_alta_funde_tons_proximos(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "img.png")
             make_near_red_image(path)
-            svg = analyze_image(path, AnalyzeParams(colors=3, color_tolerance=25))
+            svg = analyze_image(path, AnalyzeParams(colors=2, color_tolerance=25))
             groups = svg_color_groups(svg)
-            self.assertEqual(len(groups), 2, f"esperava 2 grupos (vermelhos fundidos) com tolerância alta: {groups}")
+            # fundo excluído + vermelhos fundidos → 1 única camada
+            self.assertEqual(len(groups), 1, f"esperava 1 grupo (vermelhos fundidos) com tolerância alta: {groups}")
 
 
 def make_near_white_shape_image(path: str) -> None:

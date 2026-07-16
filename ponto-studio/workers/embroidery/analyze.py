@@ -30,12 +30,16 @@ DEFAULT_MERGE_DELTA_E = 10.0
 
 @dataclass
 class AnalyzeParams:
-    colors: int = 4          # nº de cores/linhas alvo (1–8). 1 = só o primeiro plano, fundo excluído
+    colors: int = 4          # nº de cores/linhas alvo (1–8) — cores DO DESENHO (fundo à parte)
     min_region_pct: float = 0.0   # regiões menores que isso (% da área) são absorvidas
     detail: int = 2          # 1 = mais liso, 3 = mais detalhe (corner threshold do vtracer)
     color_tolerance: float = DEFAULT_MERGE_DELTA_E  # ΔE em Lab — funde clusters de cor próxima
     max_areas: int = 8       # teto duro de camadas no SVG final (1–8) — funde as cores mais
                               # próximas até caber no limite, não importa de onde veio a fragmentação
+    exclude_background: bool = True  # detecta o fundo (cluster que mais toca a borda) e o
+                              # remove do SVG — sem isso, logo em fundo branco vira uma camada
+                              # que bordaria o fundo INTEIRO, e o fundo "gasta" um dos clusters
+                              # (IMP-5: logo 2 cores com colors=2 fundia as 2 cores do desenho)
 
     def clamped(self) -> "AnalyzeParams":
         return AnalyzeParams(
@@ -44,6 +48,7 @@ class AnalyzeParams:
             detail=max(1, min(3, int(self.detail))),
             color_tolerance=max(0.0, min(40.0, float(self.color_tolerance))),
             max_areas=max(1, min(8, int(self.max_areas))),
+            exclude_background=bool(self.exclude_background),
         )
 
 
@@ -480,21 +485,26 @@ def analyze_image(image_path: str, params: AnalyzeParams | None = None) -> str:
     """
     Pipeline completo: imagem → SVG agrupado por cor.
 
-    `colors == 1` é tratado como "só o primeiro plano": internamente sempre
-    segmenta em 2 clusters (fundo + primeiro plano) — k=1 no k-means não faz
-    sentido (colapsaria a imagem inteira numa única cor média) — detecta qual
-    dos dois é o fundo (cluster que mais toca a borda da imagem) e remove essa
-    camada do SVG final, sobrando só o desenho.
+    Com `exclude_background` (default), `colors` significa cores DO DESENHO:
+    internamente segmenta em `colors + 1` clusters (desenho + fundo), detecta
+    qual é o fundo (cluster que mais toca a borda da imagem) e remove essa
+    camada do SVG final. Sem isso, um logo em fundo branco virava uma camada
+    que bordaria o fundo inteiro — e o fundo "gastava" um dos clusters
+    pedidos, fundindo cores do desenho (IMP-5).
+
+    `colors == 1` continua sendo "só o primeiro plano" (2 clusters, fundo
+    removido) mesmo com exclude_background=False — k=1 no k-means não faz
+    sentido (colapsaria a imagem inteira numa única cor média).
     """
     p = (params or AnalyzeParams()).clamped()
-    exclude_background = p.colors == 1
-    n_colors = 2 if exclude_background else p.colors
-    # No modo "só o primeiro plano", a tolerância de cor do usuário NÃO pode
+    exclude_background = p.exclude_background or p.colors == 1
+    n_colors = p.colors + 1 if exclude_background else p.colors
+    # Quando o fundo vai ser removido, a tolerância de cor do usuário NÃO pode
     # se aplicar ao split fundo/desenho: se fundo e desenho forem tons
-    # próximos (ex. bege sobre branco), a fusão colapsaria os 2 clusters num
-    # só ANTES de sabermos qual é o fundo — palette ficaria com 1 cor e o
-    # fundo nunca seria removido. A tolerância só faz sentido entre cores do
-    # desenho em si (colors > 1).
+    # próximos (ex. bege sobre branco), a fusão colapsaria os clusters ANTES
+    # de sabermos qual é o fundo — o fundo nunca seria removido. A tolerância
+    # entre cores do desenho é aplicada depois, no SVG final
+    # (merge_similar_svg_colors), onde o fundo já saiu.
     cluster_tolerance = 0.0 if exclude_background else p.color_tolerance
 
     img = load_and_downscale(image_path)

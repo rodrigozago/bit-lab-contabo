@@ -1,4 +1,6 @@
 import { useState, useRef, useCallback } from "react";
+import ReactCrop, { type Crop, type PixelCrop } from "react-image-crop";
+import "react-image-crop/dist/ReactCrop.css";
 import { saveAnalysis, listAnalyses, removeAnalysis } from "../store/analysisCache.ts";
 import type { CachedAnalysis } from "../store/analysisCache.ts";
 import { api, pollAnalysisUntilDone } from "../api/client.ts";
@@ -22,6 +24,7 @@ interface Props {
 type Screen =
   | "pick"      // escolhe: cache ou nova análise
   | "upload"    // dropzone + botão analisar
+  | "crop"      // recorte opcional da imagem antes da análise (IMP-6)
   | "process"   // spinner enquanto o worker processa a imagem
   | "preview";  // mostra resultado lado a lado
 
@@ -43,15 +46,27 @@ export function ImportModal({ onClose, onConfirm }: Props) {
   const [colors, setColors] = useState(4);
   const [maxAreas, setMaxAreas] = useState(6);
   const [colorTolerance, setColorTolerance] = useState(10);
+  const [excludeBackground, setExcludeBackground] = useState(true);
   const [minRegionPct, setMinRegionPct] = useState(0);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+
+  // Recorte (IMP-6) — opcional, só para PNG/JPG (SVG não é re-analisado)
+  const [crop, setCrop] = useState<Crop | undefined>(undefined);
+  const [completedCrop, setCompletedCrop] = useState<PixelCrop | null>(null);
+  const cropImgRef = useRef<HTMLImageElement>(null);
 
   // ── helpers ──────────────────────────────────────────────────────────────────
 
   function loadFile(f: File) {
     setFile(f);
+    setError("");
     const reader = new FileReader();
     reader.onload = () => setPreviewUrl(reader.result as string);
+    reader.onerror = () => {
+      setFile(null);
+      setPreviewUrl("");
+      setError(`Não foi possível ler o arquivo "${f.name}" — ele pode estar corrompido.`);
+    };
     reader.readAsDataURL(f);
   }
 
@@ -110,7 +125,9 @@ export function ImportModal({ onClose, onConfirm }: Props) {
     if (f.type === "image/svg+xml") {
       throw new Error("SVG já é vetorial — o processamento local aceita PNG ou JPG.");
     }
-    const { jobId } = await api.analyze.local(f, { colors, minRegionPct, detail: 2, colorTolerance, maxAreas });
+    const { jobId } = await api.analyze.local(f, {
+      colors, minRegionPct, detail: 2, colorTolerance, maxAreas, excludeBackground,
+    });
     return pollAnalysisUntilDone(jobId);
   }
 
@@ -119,10 +136,56 @@ export function ImportModal({ onClose, onConfirm }: Props) {
     onConfirm({ file, result, previewDataUrl: previewUrl });
   }, [file, result, previewUrl, onConfirm]);
 
+  // ── Recorte (IMP-6): desenha a seleção num canvas e substitui file/preview ───
+  async function applyCrop() {
+    const img = cropImgRef.current;
+    if (!img || !file || !completedCrop || completedCrop.width < 5 || completedCrop.height < 5) return;
+
+    // a seleção vem em px do elemento renderizado — reescala pro tamanho real
+    const scaleX = img.naturalWidth / img.width;
+    const scaleY = img.naturalHeight / img.height;
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(completedCrop.width * scaleX);
+    canvas.height = Math.round(completedCrop.height * scaleY);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.drawImage(
+      img,
+      completedCrop.x * scaleX,
+      completedCrop.y * scaleY,
+      canvas.width,
+      canvas.height,
+      0,
+      0,
+      canvas.width,
+      canvas.height
+    );
+
+    const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/png"));
+    if (!blob) {
+      setError("Não foi possível recortar a imagem");
+      return;
+    }
+    // o backend e o Editor esperam um File com nome — o recorte vira PNG
+    const croppedName = file.name.replace(/\.(jpe?g|png)$/i, "") + "-recorte.png";
+    setFile(new File([blob], croppedName, { type: "image/png" }));
+    setPreviewUrl(canvas.toDataURL("image/png"));
+    setCrop(undefined);
+    setCompletedCrop(null);
+    setScreen("upload");
+  }
+
+  function openCrop() {
+    setCrop(undefined);
+    setCompletedCrop(null);
+    setScreen("crop");
+  }
+
   // ── títulos por tela ──────────────────────────────────────────────────────────
   const titles: Record<Screen, string> = {
     pick: "Importar imagem",
     upload: "Nova análise",
+    crop: "Recortar imagem",
     process: "Analisando…",
     preview: "Resultado",
   };
@@ -137,7 +200,9 @@ export function ImportModal({ onClose, onConfirm }: Props) {
             {screen !== "pick" && (
               <button
                 style={s.backBtn}
-                onClick={() => setScreen(cachedList.length > 0 ? "pick" : "upload")}
+                onClick={() =>
+                  setScreen(screen === "crop" ? "upload" : cachedList.length > 0 ? "pick" : "upload")
+                }
               >
                 ←
               </button>
@@ -231,6 +296,12 @@ export function ImportModal({ onClose, onConfirm }: Props) {
                 />
               </div>
 
+              {file && file.type !== "image/svg+xml" && (
+                <button style={s.cropBtn} onClick={openCrop}>
+                  ✂ Recortar imagem (opcional)
+                </button>
+              )}
+
               <div style={s.paramsBox}>
                 <div style={s.paramsGrid}>
                   <label style={s.paramLabel}>
@@ -250,11 +321,19 @@ export function ImportModal({ onClose, onConfirm }: Props) {
                     />
                   </label>
                 </div>
-                {colors === 1 && (
-                  <p style={s.paramHint}>1 cor exclui o fundo automaticamente — sobra só o desenho.</p>
-                )}
                 <p style={s.paramHint}>
                   Limita o total de camadas de bordado — cores parecidas demais são agrupadas até caber no limite.
+                </p>
+
+                <label style={s.advancedToggle}>
+                  <input
+                    type="checkbox" checked={excludeBackground}
+                    onChange={(e) => setExcludeBackground(e.target.checked)}
+                  />
+                  Remover fundo automaticamente
+                </label>
+                <p style={s.paramHint}>
+                  Detecta a cor de fundo (a que encosta nas bordas da imagem) e não a transforma em bordado.
                 </p>
 
                 <label style={s.advancedToggle}>
@@ -297,6 +376,35 @@ export function ImportModal({ onClose, onConfirm }: Props) {
                   disabled={!file}
                 >
                   Processar imagem →
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* ═══ CROP (IMP-6) ═══ */}
+          {screen === "crop" && (
+            <>
+              <p style={s.cropHint}>
+                Arraste pra selecionar a região que vai virar bordado — o resto da imagem é descartado.
+              </p>
+              <div style={s.cropBox}>
+                <ReactCrop crop={crop} onChange={setCrop} onComplete={setCompletedCrop}>
+                  <img ref={cropImgRef} src={previewUrl} alt="recortar" style={s.cropImg} />
+                </ReactCrop>
+              </div>
+              <div style={s.actions}>
+                <button style={s.btnSecondary} onClick={() => setScreen("upload")}>
+                  Cancelar
+                </button>
+                <button
+                  style={{
+                    ...s.btnPrimary,
+                    ...(completedCrop && completedCrop.width >= 5 ? {} : s.btnDisabled),
+                  }}
+                  disabled={!completedCrop || completedCrop.width < 5}
+                  onClick={() => void applyCrop()}
+                >
+                  Aplicar recorte ✂
                 </button>
               </div>
             </>
@@ -452,6 +560,19 @@ const s: Record<string, React.CSSProperties> = {
   thumbName: { fontSize: 14, fontWeight: 600, color: "#1a1a1a" },
   thumbChange: { fontSize: 12, color: "#7c5cbf" },
   errorMsg: { color: "#c0392b", fontSize: 13, marginTop: 8 },
+  cropBtn: {
+    marginTop: 10, padding: "9px 14px", borderRadius: 8,
+    border: "1.5px dashed #c9c2e8", background: "#faf8ff",
+    color: "#7c5cbf", fontSize: 13, fontWeight: 600, cursor: "pointer",
+    alignSelf: "flex-start",
+  },
+  cropHint: { fontSize: 13, color: "#6b6b6b", margin: "0 0 12px" },
+  cropBox: {
+    display: "flex", justifyContent: "center",
+    background: "#fafaf9", border: "1px solid #e2e0db", borderRadius: 10,
+    padding: 12, maxHeight: "55vh", overflow: "auto",
+  },
+  cropImg: { maxWidth: "100%", maxHeight: "50vh", display: "block" },
   actions: { display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 20 },
   btnPrimary: {
     background: "#7c5cbf", color: "#fff", border: "none",

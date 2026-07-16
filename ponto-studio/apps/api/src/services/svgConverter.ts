@@ -164,20 +164,26 @@ function elementToSvgPath(el: EmbroideryElement): string {
  * assim o worker tem um espaçamento sensato no espaço de coordenadas original.
  */
 function buildStitchAttributes(el: EmbroideryElement, lineDistanceOverride?: number): string {
-  const { type, angle } = el.stitch;
+  const { type, angle, underlay, pullCompensationMm } = el.stitch;
   const isPreview = lineDistanceOverride !== undefined;
   const lineDistance = lineDistanceOverride ?? densityToMm(el.stitch.density);
   const suffix = isPreview ? "" : "mm";
-  const base = `inkstitch:angle="${angle}"`;
+  let base = `inkstitch:angle="${angle}"`;
+
+  // STI-3: underlay e pull compensation só fazem sentido em preenchimentos
+  // (satin/tatami); running é uma linha de contorno, sem tração lateral.
+  if (type !== "running") {
+    if (underlay) base += ` inkstitch:underlay="true"`;
+    if (pullCompensationMm && pullCompensationMm > 0) {
+      base += ` inkstitch:pull_compensation_mm="${pullCompensationMm}"`;
+    }
+  }
 
   switch (type) {
     case "satin":
-      // O worker hoje não tem um algoritmo de coluna dedicado pro contour_fill
-      // (STI-2) — cai no mesmo preenchimento par-ímpar do tatami — mas density
-      // tem que valer igual, senão o slider fica sem nenhum efeito no cetim.
-      return isPreview
-        ? `${base} inkstitch:fill_method="tatami_fill" inkstitch:line_distance="${lineDistance}"`
-        : `${base} inkstitch:fill_method="contour_fill" inkstitch:contour_strategy="inner_to_outer" inkstitch:line_distance="${lineDistance}${suffix}"`;
+      // contour_fill → zigue-zague borda-a-borda no worker (STI-2); preview e
+      // export usam o mesmo método pro que se vê bater com o que se borda.
+      return `${base} inkstitch:fill_method="contour_fill" inkstitch:line_distance="${lineDistance}${suffix}"`;
     case "tatami":
       return `${base} inkstitch:fill_method="tatami_fill" inkstitch:line_distance="${lineDistance}${suffix}"`;
     case "running":

@@ -126,19 +126,28 @@ describe("composeThumbnail", () => {
     ];
     const result = composeThumbnail(elements);
     expect(result).not.toBeNull();
-    expect(result).toContain('viewBox="0 0 100 100"');
+    // viewBox é recalculado a partir do bbox real dos paths (0,0)-(15,15) com
+    // 5% de padding — não o viewBox original do SVG (que pode não bater com
+    // as coordenadas reais dos paths, causa da miniatura mal posicionada)
+    expect(result).toContain('viewBox="-0.5 -0.5 11 11"');
     expect((result!.match(/<path/g) ?? []).length).toBe(2);
     expect(result).toContain('fill="#00ff00"');
     expect(result).toContain('fill="#0000ff"');
     expect(result).not.toContain('fill="#ff0000"');
   });
 
-  it("usa o viewBox do primeiro elemento com svgContent", () => {
+  it("ajusta o viewBox ao bounding box real dos paths, não ao viewBox original do SVG", () => {
     const elements = [
-      makeElement({ id: "el-1", svgContent: `<svg ${NS} viewBox="0 0 40 40"><path d="M0 0Z" fill="#000"/></svg>` }),
+      makeElement({
+        id: "el-1",
+        svgContent: `<svg ${NS} viewBox="0 0 40 40"><path d="M5 5 L15 5 L15 15 L5 15 Z" fill="#000"/></svg>`,
+      }),
     ];
     const result = composeThumbnail(elements);
-    expect(result).toContain('viewBox="0 0 40 40"');
+    // bbox do path é (5,5)-(15,15); o viewBox original "0 0 40 40" seria
+    // enganoso (o path não ocupa a imagem inteira) — por isso reescalamos
+    expect(result).not.toContain('viewBox="0 0 40 40"');
+    expect(result).toContain('viewBox="4.5 4.5 11 11"');
   });
 
   it("ignora elementos sem svgContent mas usa os que têm", () => {

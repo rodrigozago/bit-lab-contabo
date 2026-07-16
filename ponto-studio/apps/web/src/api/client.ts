@@ -10,7 +10,15 @@ import type {
   EmbroideryElement,
   CanvasSize,
   StitchPreviewJobStatus,
+  Hoop,
 } from "@ponto-studio/shared";
+
+export interface ProjectVersionMeta {
+  id: string;
+  name: string;
+  elementCount: number;
+  createdAt: string;
+}
 import type { Me } from "../lib/auth.ts";
 
 const BASE = "/api";
@@ -35,6 +43,15 @@ export const api = {
       request<EmbroideryProject>(`/projects/${id}`, { method: "PUT", body: JSON.stringify(body) }),
     delete: (id: string) =>
       request<null>(`/projects/${id}`, { method: "DELETE" }),
+    versions: (id: string) => request<ProjectVersionMeta[]>(`/projects/${id}/versions`),
+    restoreVersion: (id: string, versionId: string) =>
+      request<EmbroideryProject>(`/projects/${id}/versions/${versionId}/restore`, { method: "POST" }),
+  },
+  hoops: {
+    list: () => request<{ custom: Hoop[]; defaults: Hoop[] }>("/hoops"),
+    create: (body: { name: string; widthMm: number; heightMm: number }) =>
+      request<Hoop>("/hoops", { method: "POST", body: JSON.stringify(body) }),
+    delete: (id: string) => request<null>(`/hoops/${id}`, { method: "DELETE" }),
   },
   export: {
     create: (body: ExportRequest) =>
@@ -51,6 +68,7 @@ export const api = {
       fd.append("detail", String(params.detail));
       fd.append("colorTolerance", String(params.colorTolerance));
       fd.append("maxAreas", String(params.maxAreas));
+      fd.append("excludeBackground", String(params.excludeBackground));
       const res = await fetch(`${BASE}/analyze/local`, { method: "POST", body: fd });
       const json = (await res.json()) as ApiResponse<{ jobId: string }>;
       if (!json.ok) throw new Error(json.error);

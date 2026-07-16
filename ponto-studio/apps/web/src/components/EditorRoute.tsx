@@ -43,7 +43,10 @@ export function EditorRoute() {
   if (!project) {
     return (
       <div style={styles.page}>
-        <span style={{ fontSize: 32 }}>🪡</span>
+        <div style={styles.loadingBox}>
+          <div style={styles.spinner} />
+          <span style={styles.loadingText}>Carregando projeto…</span>
+        </div>
       </div>
     );
   }
@@ -72,4 +75,11 @@ const styles: Record<string, React.CSSProperties> = {
   },
   body: { fontSize: 14, color: "#6b6b6b", margin: 0 },
   link: { fontSize: 14, fontWeight: 600, color: "#7c5cbf" },
+  loadingBox: { display: "flex", flexDirection: "column", alignItems: "center", gap: 12 },
+  loadingText: { fontSize: 14, color: "#6b6b6b" },
+  spinner: {
+    width: 36, height: 36, border: "4px solid #e2e0db",
+    borderTop: "4px solid #7c5cbf", borderRadius: "50%",
+    animation: "spin 0.8s linear infinite",
+  },
 };

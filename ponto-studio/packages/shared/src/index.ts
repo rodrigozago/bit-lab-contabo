@@ -8,6 +8,10 @@ export interface StitchParams {
   density: number;
   /** ângulo em graus, 0–180 */
   angle: number;
+  /** passada de base (perpendicular, esparsa) antes do preenchimento — estabiliza o tecido */
+  underlay?: boolean;
+  /** compensação de puxão em mm (0–0.5) — estica cada linha nas pontas pra compensar a tração do fio */
+  pullCompensationMm?: number;
 }
 
 export interface EmbroideryElement {
@@ -25,6 +29,36 @@ export interface CanvasSize {
   widthMm: number;
   heightMm: number;
 }
+
+// ─── Bastidores (hoops) ───────────────────────────────────────────────────────
+
+export interface Hoop {
+  id: string;
+  /** ex: 'Brother PE800 (5"×7")' */
+  name: string;
+  widthMm: number;
+  heightMm: number;
+  /** sub (OIDC) do dono — presente só nos bastidores customizados */
+  ownerId?: string;
+}
+
+/**
+ * Bastidores das máquinas domésticas/semi-industriais mais populares —
+ * lista padrão, igual pra todos os usuários (customizados vêm do banco).
+ * Medidas = área útil de bordado do bastidor que acompanha a máquina.
+ */
+export const DEFAULT_HOOPS: Hoop[] = [
+  { id: "default-brother-4x4", name: 'Brother PE535 / SE600 (4"×4")', widthMm: 100, heightMm: 100 },
+  { id: "default-brother-5x7", name: 'Brother PE800 / PE900 (5"×7")', widthMm: 130, heightMm: 180 },
+  { id: "default-brother-6x10", name: 'Brother Innov-is NQ1700E (6"×10")', widthMm: 160, heightMm: 260 },
+  { id: "default-brother-8x12", name: 'Brother PR680W (8"×12")', widthMm: 200, heightMm: 300 },
+  { id: "default-janome-sq14", name: "Janome 230E / MC400E (SQ14)", widthMm: 140, heightMm: 140 },
+  { id: "default-janome-sq20", name: "Janome MC500E (SQ20)", widthMm: 200, heightMm: 200 },
+  { id: "default-janome-re28", name: "Janome MC500E (RE28)", widthMm: 200, heightMm: 280 },
+  { id: "default-singer-xl580", name: "Singer Futura XL-580", widthMm: 160, heightMm: 260 },
+  { id: "default-elna-830", name: "Elna eXpressive 830", widthMm: 140, heightMm: 200 },
+  { id: "default-industrial-12x14", name: 'Tajima / industrial (12"×14")', widthMm: 300, heightMm: 350 },
+];
 
 export interface EmbroideryProject {
   id: string;
@@ -106,7 +140,7 @@ export interface WorkerJobResult {
 // ─── Análise local (processamento digital, sem IA) ───────────────────────────
 
 export interface LocalAnalyzeParams {
-  /** Nº de cores/linhas de bordado (1–8). 1 = só o primeiro plano, fundo excluído automaticamente */
+  /** Nº de cores/linhas de bordado (1–8) — cores DO DESENHO (fundo tratado à parte) */
   colors: number;
   /** Regiões menores que isso (% da área da imagem) são absorvidas */
   minRegionPct: number;
@@ -116,6 +150,8 @@ export interface LocalAnalyzeParams {
   colorTolerance: number;
   /** Teto duro de camadas no SVG final (1–8) — funde as cores mais próximas até caber no limite */
   maxAreas: number;
+  /** Detecta e remove o fundo automaticamente (default true) — sem isso o fundo vira camada de bordado */
+  excludeBackground: boolean;
 }
 
 export interface AnalyzeJobStatus {

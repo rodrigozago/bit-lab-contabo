@@ -50,6 +50,8 @@ services:
       OIDC_ISSUER: "https://auth.bit-lab.tech"
       OIDC_CLIENT_ID: "ponto-studio"
       OIDC_CLIENT_SECRET: "${PONTO_STUDIO_OIDC_SECRET}"
+      EXPORTS_TTL_HOURS: "${EXPORTS_TTL_HOURS:-24}"
+      UPLOADS_TTL_HOURS: "${UPLOADS_TTL_HOURS:-24}"
     volumes:
       - exports:/app/apps/api/exports
       - uploads:/app/apps/api/uploads

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { CanvasSize, StitchPattern } from "@ponto-studio/shared";
+import { stitchBounds, exceedsHoop } from "./EstimateSummary.tsx";
 
 // Re-implementar as funções aqui para teste (já que estão no componente)
 function calculateColorChanges(pattern: StitchPattern | null): number {
@@ -81,6 +82,44 @@ describe("EstimateSummary utilities", () => {
     it("handles large dimensions", () => {
       const canvas: CanvasSize = { widthMm: 300, heightMm: 400 };
       expect(formatDimensions(canvas)).toBe("300 × 400 mm");
+    });
+  });
+
+  describe("stitchBounds / exceedsHoop (EXP-5)", () => {
+    const patternWith = (stitches: StitchPattern["stitches"]): StitchPattern => ({
+      viewBox: "0 0 100 100",
+      threads: ["#000000"],
+      stitches,
+      stats: { totalStitches: stitches.length, colorCount: 1 },
+    });
+
+    it("calcula o bbox só dos pontos de costura", () => {
+      const pattern = patternWith([
+        [10, 20, 0],
+        [50, 80, 0],
+        [30, 40, 1], // JUMP também conta (a agulha passa por lá)
+        [0, 0, 2],   // COLOR_BREAK em (0,0) NÃO pode distorcer o bbox
+        [0, 0, 4],   // END idem
+      ]);
+      expect(stitchBounds(pattern)).toEqual({ widthMm: 40, heightMm: 60 });
+    });
+
+    it("retorna null para pattern vazio ou null", () => {
+      expect(stitchBounds(null)).toBeNull();
+      expect(stitchBounds(patternWith([]))).toBeNull();
+    });
+
+    it("detecta extrapolação do bastidor", () => {
+      const canvas: CanvasSize = { widthMm: 100, heightMm: 100 };
+      expect(exceedsHoop({ widthMm: 120, heightMm: 50 }, canvas)).toBe(true);
+      expect(exceedsHoop({ widthMm: 50, heightMm: 130 }, canvas)).toBe(true);
+    });
+
+    it("nao avisa quando cabe (com tolerancia de 1mm)", () => {
+      const canvas: CanvasSize = { widthMm: 100, heightMm: 100 };
+      expect(exceedsHoop({ widthMm: 100, heightMm: 100 }, canvas)).toBe(false);
+      expect(exceedsHoop({ widthMm: 100.9, heightMm: 100 }, canvas)).toBe(false);
+      expect(exceedsHoop(null, canvas)).toBe(false);
     });
   });
 });
