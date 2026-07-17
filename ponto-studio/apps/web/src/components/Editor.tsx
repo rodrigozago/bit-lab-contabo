@@ -13,6 +13,7 @@ import {
   type Editor as TldrawEditor,
   type TLComponents,
   type TLShape,
+  type TLShapeId,
 } from "@tldraw/tldraw";
 import "@tldraw/tldraw/tldraw.css";
 import { HOOP_PX_PER_MM, type CanvasSize, type EmbroideryElement, type EmbroideryProject } from "@ponto-studio/shared";
@@ -21,8 +22,11 @@ import { api } from "../api/client.ts";
 import { rectToSvgPath } from "../utils/geometry.ts";
 import { splitSvgByColor, recolorSvg } from "../utils/svgLayers.ts";
 import { PropertiesPanel } from "./PropertiesPanel.tsx";
+import { ShapeActionsPanel } from "./ShapeActionsPanel.tsx";
+import { LayersPanel } from "./LayersPanel.tsx";
 import { ExportModal } from "./ExportModal.tsx";
 import { ImportModal } from "./ImportModal.tsx";
+import { TextToolModal } from "./TextToolModal.tsx";
 import { UserMenu } from "./UserMenu.tsx";
 import { useToast } from "./Toast.tsx";
 import { HistoryModal } from "./HistoryModal.tsx";
@@ -61,52 +65,6 @@ function HoopOverlay({ canvas }: { canvas: CanvasSize }) {
     />
   );
 }
-
-// ── Layer System ──────────────────────────────────────────────────────────────
-
-interface LayerState {
-  reference: boolean;
-  embroidery: boolean;
-}
-
-function LayersPanel({ layers, onChange }: { layers: LayerState; onChange: (l: LayerState) => void }) {
-  const handleToggle = (layer: keyof LayerState) => {
-    onChange({ ...layers, [layer]: !layers[layer] });
-  };
-  return (
-    <div style={layerPanelStyles.root}>
-      <div style={layerPanelStyles.header}>
-        <span style={layerPanelStyles.title}>Camadas</span>
-      </div>
-      <div style={layerPanelStyles.list}>
-        <label style={layerPanelStyles.item}>
-          <input type="checkbox" checked={layers.reference} onChange={() => handleToggle("reference")} />
-          <span style={layerPanelStyles.label}>🖼️ Imagem de Referência</span>
-        </label>
-        <label style={layerPanelStyles.item}>
-          <input type="checkbox" checked={layers.embroidery} onChange={() => handleToggle("embroidery")} />
-          <span style={layerPanelStyles.label}>🪡 Bordado</span>
-        </label>
-      </div>
-    </div>
-  );
-}
-
-const layerPanelStyles: Record<string, React.CSSProperties> = {
-  root: { borderTop: "1px solid #e2e0db" },
-  header: { padding: "12px 16px", borderBottom: "1px solid #e2e0db" },
-  title: {
-    fontSize: 12, fontWeight: 700, textTransform: "uppercase",
-    letterSpacing: "0.08em", color: "#6b6b6b",
-  },
-  list: { display: "flex", flexDirection: "column", padding: "8px 0" },
-  item: {
-    display: "flex", alignItems: "center", gap: 8, padding: "8px 16px",
-    cursor: "pointer", fontSize: 13,
-  },
-  label: { color: "#1a1a1a", userSelect: "none" }
-};
-
 
 // ── Indicador de autosave (modelo Canva: sem botão "Salvar", só status) ────────
 
@@ -214,9 +172,10 @@ export function Editor({ project, onProjectChange, onBackToHome }: Props) {
 
   const [showExport, setShowExport] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [showTextTool, setShowTextTool] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [tldrawEditor, setTldrawEditor] = useState<TldrawEditor | null>(null);
-  const [layers, setLayers] = useState<LayerState>({ reference: true, embroidery: true });
+  const [selectedShapeIds, setSelectedShapeIds] = useState<TLShapeId[]>([]);
   const initialSvgLoaded = useRef(false);
   // Evita reentrância no listener abaixo quando ELE MESMO chama updateShapes
   // pra propagar um resize entre os shapes de um mesmo grupo de import.
@@ -237,8 +196,10 @@ export function Editor({ project, onProjectChange, onBackToHome }: Props) {
     editor.getInitialMetaForShape = () => ({ layer: "embroidery" });
 
     // Seleção no canvas → seleciona o elemento de bordado vinculado (meta.elementId)
+    // e mantém a lista bruta de shapes selecionados (pro ShapeActionsPanel).
     editor.store.listen(() => {
       const selectedIds = editor.getSelectedShapeIds();
+      setSelectedShapeIds(selectedIds);
       if (selectedIds.length === 1 && selectedIds[0]) {
         const shape = editor.getShape(selectedIds[0]);
         setSelectedElementId((shape?.meta?.["elementId"] as string) ?? null);
@@ -334,7 +295,13 @@ export function Editor({ project, onProjectChange, onBackToHome }: Props) {
           type: "image",
           x: vp.x + (vp.w - 100) / 2, y: vp.y + (vp.h - 100) / 2,
           props: { assetId: svgAssetId, w: 100, h: 100 },
-          meta: { layer: 'embroidery', elementId: initialElement.id },
+          // sem referência associada (elemento legado recarregado) — ainda
+          // assim ganha um importGroupId próprio pra aparecer como grupo
+          // no painel de camadas, só com a sub-camada "Bordado".
+          meta: {
+            layer: 'embroidery', elementId: initialElement.id,
+            importGroupId: crypto.randomUUID(), importGroupName: "Bordado",
+          },
         } as Parameters<typeof editor.createShape>[0]);
       };
       loadInitialSvg().catch((err) => {
@@ -344,39 +311,6 @@ export function Editor({ project, onProjectChange, onBackToHome }: Props) {
       });
     }
   }, [setSelectedElementId, localProject, removeElement, updateElement, toast]);
-
-  // Alterna visibilidade de uma camada: oculta (opacity 0) e bloqueia os shapes
-  // para que não possam ser selecionados enquanto invisíveis.
-  const handleLayersChange = useCallback((next: LayerState) => {
-    if (tldrawEditor) {
-      for (const key of Object.keys(next) as (keyof LayerState)[]) {
-        if (next[key] === layers[key]) continue;
-        const shapes = tldrawEditor
-          .getCurrentPageShapes()
-          .filter((s: TLShape) => s.meta?.["layer"] === key);
-        if (shapes.length === 0) continue;
-
-        if (next[key]) {
-          tldrawEditor.updateShapes(shapes.map((s) => ({
-            id: s.id, type: s.type,
-            isLocked: false,
-            opacity: (s.meta?.["prevOpacity"] as number | undefined) ?? 1,
-          })));
-        } else {
-          tldrawEditor.setSelectedShapes(
-            tldrawEditor.getSelectedShapeIds().filter((id) => !shapes.some((s) => s.id === id))
-          );
-          tldrawEditor.updateShapes(shapes.map((s) => ({
-            id: s.id, type: s.type,
-            isLocked: true,
-            opacity: 0,
-            meta: { ...s.meta, prevOpacity: s.opacity },
-          })));
-        }
-      }
-    }
-    setLayers(next);
-  }, [tldrawEditor, layers]);
 
   const handleImportConfirm = useCallback(async ({ file, result, previewDataUrl }: ImportConfirmPayload) => {
     if (!tldrawEditor) return;
@@ -402,8 +336,15 @@ export function Editor({ project, onProjectChange, onBackToHome }: Props) {
     const imgY = hoop.y + (hoop.h - canvasH) / 2;
 
     // Liga referência + todas as cores do bordado num grupo: redimensionar
-    // qualquer uma delas redimensiona as outras junto (mantém alinhadas).
+    // qualquer uma delas redimensiona as outras junto (mantém alinhadas), e
+    // é a mesma chave que o painel de camadas (estilo Photoshop) usa pra
+    // agrupar "Imagem de referência" + "Bordado" numa árvore por importação.
     const importGroupId = crypto.randomUUID();
+    const existingGroupIds = new Set(
+      tldrawEditor.getCurrentPageShapes().map((s) => s.meta?.["importGroupId"]).filter(Boolean)
+    );
+    const baseName = file.name.replace(/\.[^./]+$/, "").trim();
+    const importGroupName = baseName || `Bordado ${existingGroupIds.size + 1}`;
 
     // ── Camada 1: imagem de referência ──
     const imageAssetId = AssetRecordType.createId();
@@ -415,7 +356,7 @@ export function Editor({ project, onProjectChange, onBackToHome }: Props) {
     tldrawEditor.createShape({
       type: "image", x: imgX, y: imgY, opacity: 0.4,
       props: { assetId: imageAssetId, w: canvasW, h: canvasH },
-      meta: { layer: 'reference', importGroupId },
+      meta: { layer: 'reference', importGroupId, importGroupName },
     } as Parameters<typeof tldrawEditor.createShape>[0]);
 
     // ── Camada 2: áreas do bordado, UMA POR COR ──
@@ -448,7 +389,7 @@ export function Editor({ project, onProjectChange, onBackToHome }: Props) {
       tldrawEditor.createShape({
         type: "image", x: imgX, y: imgY,
         props: { assetId: svgAssetId, w: canvasW, h: canvasH },
-        meta: { layer: 'embroidery', elementId, importGroupId },
+        meta: { layer: 'embroidery', elementId, importGroupId, importGroupName },
       } as Parameters<typeof tldrawEditor.createShape>[0]);
     }
 
@@ -554,6 +495,9 @@ export function Editor({ project, onProjectChange, onBackToHome }: Props) {
           <button style={styles.importBtn} onClick={() => setShowImport(true)}>
             📷 Importar imagem
           </button>
+          <button style={styles.importBtn} onClick={() => setShowTextTool(true)}>
+            🔤 Adicionar texto
+          </button>
           <button style={styles.exportBtn} onClick={() => setShowExport(true)}>
             ✦ Exportar bordado
           </button>
@@ -579,7 +523,8 @@ export function Editor({ project, onProjectChange, onBackToHome }: Props) {
         </div>
 
         <aside style={styles.sidebar}>
-          <LayersPanel layers={layers} onChange={handleLayersChange} />
+          <LayersPanel editor={tldrawEditor} />
+          <ShapeActionsPanel editor={tldrawEditor} selectedShapeIds={selectedShapeIds} />
 
           {selectedElement ? (
             <>
@@ -652,6 +597,15 @@ export function Editor({ project, onProjectChange, onBackToHome }: Props) {
       )}
       {showImport && (
         <ImportModal onClose={() => setShowImport(false)} onConfirm={handleImportConfirm} />
+      )}
+      {showTextTool && (
+        <TextToolModal
+          onClose={() => setShowTextTool(false)}
+          onConfirm={(payload) => {
+            setShowTextTool(false);
+            void handleImportConfirm(payload);
+          }}
+        />
       )}
       {showHistory && (
         <HistoryModal
