@@ -1,9 +1,10 @@
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 import { resolve } from "path";
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   test: {
     environment: "happy-dom",
     // node-linker=hoisted duplica react na raiz e no app; os testes precisam
@@ -16,6 +17,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "@ponto-studio/shared": resolve(__dirname, "../../packages/shared/src/index.ts"),
+      "@": resolve(__dirname, "src"),
     },
   },
   server: {

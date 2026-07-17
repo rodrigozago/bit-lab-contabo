@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { api, type ProjectVersionMeta } from "../api/client.ts";
 import { useToast } from "./Toast.tsx";
+import { Button } from "@/components/ui/button.tsx";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog.tsx";
 
 interface Props {
   projectId: string;
@@ -59,70 +61,46 @@ export function HistoryModal({ projectId, onClose, onRestored }: Props) {
   }
 
   return (
-    <div style={styles.overlay} onClick={onClose}>
-      <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
-        <h2 style={styles.title}>🕘 Histórico do projeto</h2>
-        <p style={styles.subtitle}>
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="flex max-h-[80vh] flex-col gap-3.5 overflow-y-auto sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>🕘 Histórico do projeto</DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground">
           Versões salvas automaticamente enquanto você edita (no máximo uma a cada 10 minutos).
         </p>
 
-        {versions === null && <p style={styles.hint}>Carregando…</p>}
+        {versions === null && <p className="text-sm text-muted-foreground">Carregando…</p>}
         {versions?.length === 0 && (
-          <p style={styles.hint}>Ainda não há versões salvas — elas aparecem conforme você edita o projeto.</p>
+          <p className="text-sm text-muted-foreground">
+            Ainda não há versões salvas — elas aparecem conforme você edita o projeto.
+          </p>
         )}
 
-        <div style={styles.list}>
+        <div className="flex flex-col gap-2">
           {versions?.map((v) => (
-            <div key={v.id} style={styles.item}>
-              <div style={styles.itemInfo}>
-                <span style={styles.itemTime}>{formatAgo(v.createdAt)}</span>
-                <span style={styles.itemMeta}>{v.elementCount} área{v.elementCount === 1 ? "" : "s"}</span>
+            <div key={v.id} className="flex items-center justify-between rounded-md border px-3.5 py-2.5">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-sm font-semibold">{formatAgo(v.createdAt)}</span>
+                <span className="text-xs text-muted-foreground">
+                  {v.elementCount} área{v.elementCount === 1 ? "" : "s"}
+                </span>
               </div>
-              <button
-                style={styles.restoreBtn}
+              <Button
+                size="sm"
                 disabled={restoringId !== null}
                 onClick={() => void handleRestore(v)}
               >
                 {restoringId === v.id ? "Restaurando…" : "Restaurar"}
-              </button>
+              </Button>
             </div>
           ))}
         </div>
 
-        <div style={styles.actions}>
-          <button style={styles.closeBtn} onClick={onClose}>Fechar</button>
-        </div>
-      </div>
-    </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Fechar</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  overlay: {
-    position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)",
-    display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000,
-  },
-  modal: {
-    background: "#fff", borderRadius: 16, padding: "28px 32px",
-    width: 460, maxWidth: "92vw", maxHeight: "80vh", overflowY: "auto",
-    boxShadow: "0 16px 48px rgba(0,0,0,0.18)",
-    display: "flex", flexDirection: "column", gap: 14,
-  },
-  title: { fontSize: 20, fontWeight: 700, margin: 0 },
-  subtitle: { fontSize: 13, color: "#6b6b6b", margin: 0 },
-  hint: { fontSize: 13, color: "#6b6b6b" },
-  list: { display: "flex", flexDirection: "column", gap: 8 },
-  item: {
-    display: "flex", alignItems: "center", justifyContent: "space-between",
-    padding: "10px 14px", borderRadius: 10, border: "1.5px solid #e2e0db",
-  },
-  itemInfo: { display: "flex", flexDirection: "column", gap: 2 },
-  itemTime: { fontSize: 14, fontWeight: 600, color: "#1a1a1a" },
-  itemMeta: { fontSize: 12, color: "#6b6b6b" },
-  restoreBtn: {
-    padding: "7px 14px", borderRadius: 8, border: "none",
-    background: "#7c5cbf", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer",
-  },
-  actions: { display: "flex", justifyContent: "flex-end" },
-  closeBtn: { padding: "9px 16px", borderRadius: 8, border: "1.5px solid #e2e0db", background: "#fff", fontSize: 13, cursor: "pointer" },
-};

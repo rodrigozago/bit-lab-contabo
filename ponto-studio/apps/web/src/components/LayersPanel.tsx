@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
+import { ChevronRight, Folder, Image as ImageIcon, PenLine } from "lucide-react";
 import type { Editor as TldrawEditor, TLShape, TLShapeId } from "@tldraw/tldraw";
+import { cn } from "@/lib/utils.ts";
+import { Checkbox } from "@/components/ui/checkbox.tsx";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible.tsx";
+import { SidebarGroup, SidebarGroupContent, SidebarGroupLabel } from "@/components/ui/sidebar.tsx";
 
 interface Props {
   editor: TldrawEditor | null;
@@ -113,13 +118,13 @@ export function LayersPanel({ editor }: Props) {
   if (!editor) return null;
 
   return (
-    <div style={styles.root}>
-      <div style={styles.header}>
-        <span style={styles.title}>Camadas</span>
-      </div>
-      <div style={styles.list}>
+    <SidebarGroup>
+      <SidebarGroupLabel>Camadas</SidebarGroupLabel>
+      <SidebarGroupContent className="flex max-h-56 flex-col gap-0.5 overflow-y-auto">
         {groups.length === 0 && looseShapeIds.length === 0 && (
-          <p style={styles.empty}>Importe uma imagem ou adicione texto pra ver as camadas aqui.</p>
+          <p className="px-2 py-1.5 text-xs text-muted-foreground">
+            Importe uma imagem ou adicione texto pra ver as camadas aqui.
+          </p>
         )}
 
         {groups.map((group) => {
@@ -127,80 +132,45 @@ export function LayersPanel({ editor }: Props) {
           const refHidden = group.referenceShapeId ? isHidden(editor, [group.referenceShapeId]) : false;
           const embHidden = isHidden(editor, group.embroideryShapeIds);
           return (
-            <div key={group.groupId} style={styles.group}>
-              <button style={styles.groupHeader} onClick={() => toggleGroupCollapse(group.groupId)}>
-                <span style={styles.chevron}>{isCollapsed ? "▸" : "▾"}</span>
-                <span style={styles.groupIcon}>🗂️</span>
-                <span style={styles.groupName}>{group.name}</span>
-              </button>
-              {!isCollapsed && (
-                <div style={styles.subList}>
-                  {group.referenceShapeId && (
-                    <label style={styles.subItem}>
-                      <input
-                        type="checkbox"
-                        checked={!refHidden}
-                        onChange={() => toggle([group.referenceShapeId!])}
-                      />
-                      <span style={styles.subLabel}>📷 Imagem de referência</span>
-                    </label>
-                  )}
-                  <label style={styles.subItem}>
-                    <input
-                      type="checkbox"
-                      checked={!embHidden}
-                      onChange={() => toggle(group.embroideryShapeIds)}
+            <Collapsible
+              key={group.groupId}
+              open={!isCollapsed}
+              onOpenChange={() => toggleGroupCollapse(group.groupId)}
+            >
+              <CollapsibleTrigger className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs font-semibold hover:bg-sidebar-accent">
+                <ChevronRight className={cn("h-3 w-3 shrink-0 transition-transform", !isCollapsed && "rotate-90")} />
+                <Folder className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">{group.name}</span>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="flex flex-col gap-0.5 pb-1 pl-6">
+                {group.referenceShapeId && (
+                  <label className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-xs">
+                    <Checkbox
+                      checked={!refHidden}
+                      onCheckedChange={() => toggle([group.referenceShapeId!])}
                     />
-                    <span style={styles.subLabel}>🪡 Bordado</span>
+                    <ImageIcon className="h-3.5 w-3.5 shrink-0" />
+                    Imagem de referência
                   </label>
-                </div>
-              )}
-            </div>
+                )}
+                <label className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-xs">
+                  <Checkbox checked={!embHidden} onCheckedChange={() => toggle(group.embroideryShapeIds)} />
+                  <span>🪡</span>
+                  Bordado
+                </label>
+              </CollapsibleContent>
+            </Collapsible>
           );
         })}
 
         {looseShapeIds.length > 0 && (
-          <label style={styles.item}>
-            <input
-              type="checkbox"
-              checked={!isHidden(editor, looseShapeIds)}
-              onChange={() => toggle(looseShapeIds)}
-            />
-            <span style={styles.label}>✏️ Formas soltas</span>
+          <label className="mt-1 flex cursor-pointer items-center gap-2 border-t px-2 py-1.5 pt-2 text-xs">
+            <Checkbox checked={!isHidden(editor, looseShapeIds)} onCheckedChange={() => toggle(looseShapeIds)} />
+            <PenLine className="h-3.5 w-3.5 shrink-0" />
+            Formas soltas
           </label>
         )}
-      </div>
-    </div>
+      </SidebarGroupContent>
+    </SidebarGroup>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  root: { borderTop: "1px solid #e2e0db" },
-  header: { padding: "12px 16px", borderBottom: "1px solid #e2e0db" },
-  title: {
-    fontSize: 12, fontWeight: 700, textTransform: "uppercase",
-    letterSpacing: "0.08em", color: "#6b6b6b",
-  },
-  list: { display: "flex", flexDirection: "column", padding: "6px 0", maxHeight: 220, overflowY: "auto" },
-  empty: { fontSize: 12, color: "#9b9b9b", padding: "8px 16px", margin: 0 },
-  group: { display: "flex", flexDirection: "column" },
-  groupHeader: {
-    display: "flex", alignItems: "center", gap: 6, padding: "6px 16px",
-    border: "none", background: "transparent", cursor: "pointer", textAlign: "left",
-    fontSize: 12.5, fontWeight: 600, color: "#1a1a1a",
-  },
-  chevron: { fontSize: 10, color: "#9b9b9b", width: 10, flexShrink: 0 },
-  groupIcon: { fontSize: 13 },
-  groupName: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-  subList: { display: "flex", flexDirection: "column", paddingLeft: 8 },
-  subItem: {
-    display: "flex", alignItems: "center", gap: 8, padding: "6px 16px 6px 26px",
-    cursor: "pointer", fontSize: 12.5,
-  },
-  subLabel: { color: "#1a1a1a", userSelect: "none" },
-  item: {
-    display: "flex", alignItems: "center", gap: 8, padding: "8px 16px",
-    cursor: "pointer", fontSize: 13, marginTop: 4, borderTop: "1px solid #f0ede8",
-  },
-  label: { color: "#1a1a1a", userSelect: "none" },
-};

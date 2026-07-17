@@ -1,8 +1,12 @@
 import { useEffect, useState } from "react";
+import { CheckCircle2, XCircle } from "lucide-react";
 import type { CanvasSize, ExportFormat, ExportJob, StitchPattern } from "@ponto-studio/shared";
 import { api, pollStitchDataUntilDone, pollUntilDone } from "../api/client.ts";
 import { StitchPlayer } from "./StitchPlayer.tsx";
 import { EstimateSummary, stitchBounds, exceedsHoop } from "./EstimateSummary.tsx";
+import { cn } from "@/lib/utils.ts";
+import { Button } from "@/components/ui/button.tsx";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog.tsx";
 
 type ModalFormat = ExportFormat | "SVG";
 type ExportStep = "preview" | "format" | "processing" | "done" | "error";
@@ -108,20 +112,37 @@ export function ExportModal({ projectId, canvas, onClose }: Props) {
   }
 
   return (
-    <div style={styles.overlay} onClick={onClose}>
-      <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
-        <h2 style={styles.title}>Exportar Bordado</h2>
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="flex max-h-[90vh] flex-col gap-5 overflow-y-auto sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Exportar Bordado</DialogTitle>
+        </DialogHeader>
 
         {/* Stepper indicator */}
-        <div style={styles.stepperIndicator}>
-          <div style={{ ...styles.step, ...(step === "preview" || step === "format" || step === "processing" || step === "done" || step === "error" ? styles.stepActive : {}) }}>
-            <div style={styles.stepNumber}>1</div>
-            <div style={styles.stepLabel}>Pré-visualização</div>
+        <div className="flex items-center justify-center gap-4 py-1">
+          <div
+            className={cn(
+              "flex flex-col items-center gap-1.5 opacity-50 transition-opacity",
+              (step === "preview" || step === "format" || step === "processing" || step === "done" || step === "error") &&
+                "opacity-100"
+            )}
+          >
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-secondary text-sm font-bold text-muted-foreground">
+              1
+            </div>
+            <div className="text-center text-[11px] font-semibold text-muted-foreground">Pré-visualização</div>
           </div>
-          <div style={styles.stepLine} />
-          <div style={{ ...styles.step, ...(step === "format" || step === "processing" || step === "done" || step === "error" ? styles.stepActive : {}) }}>
-            <div style={styles.stepNumber}>2</div>
-            <div style={styles.stepLabel}>Formato</div>
+          <div className="h-0.5 w-5 bg-border" />
+          <div
+            className={cn(
+              "flex flex-col items-center gap-1.5 opacity-50 transition-opacity",
+              (step === "format" || step === "processing" || step === "done" || step === "error") && "opacity-100"
+            )}
+          >
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-secondary text-sm font-bold text-muted-foreground">
+              2
+            </div>
+            <div className="text-center text-[11px] font-semibold text-muted-foreground">Formato</div>
           </div>
         </div>
 
@@ -129,8 +150,8 @@ export function ExportModal({ projectId, canvas, onClose }: Props) {
         {step === "preview" && (
           <>
             {previewPhase === "loading" && (
-              <div style={styles.previewLoading}>
-                <div style={styles.spinnerSmall} />
+              <div className="flex items-center gap-2.5 py-2 text-sm text-muted-foreground">
+                <div className="h-[18px] w-[18px] shrink-0 animate-spin rounded-full border-[3px] border-border border-t-primary" />
                 <span>Gerando pré-visualização dos pontos…</span>
               </div>
             )}
@@ -141,23 +162,19 @@ export function ExportModal({ projectId, canvas, onClose }: Props) {
               </>
             )}
             {previewPhase === "error" && (
-              <div style={styles.previewErrorBox}>
-                <p style={styles.errorText}>Erro ao gerar pré-visualização: {previewError}</p>
-                <button style={styles.retryBtn} onClick={() => setPreviewAttempt((n) => n + 1)}>
+              <div className="flex flex-col items-center gap-2">
+                <p className="py-3 text-center text-sm text-destructive">
+                  Erro ao gerar pré-visualização: {previewError}
+                </p>
+                <Button variant="outline" size="sm" onClick={() => setPreviewAttempt((n) => n + 1)}>
                   Tentar de novo
-                </button>
+                </Button>
               </div>
             )}
-            <div style={styles.actions}>
-              <button style={styles.cancelBtn} onClick={onClose}>Cancelar</button>
-              <button
-                style={styles.exportBtn}
-                onClick={handleFormatSelected}
-                disabled={previewPhase !== "ready"}
-              >
-                Próximo →
-              </button>
-            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={onClose}>Cancelar</Button>
+              <Button onClick={handleFormatSelected} disabled={previewPhase !== "ready"}>Próximo →</Button>
+            </DialogFooter>
           </>
         )}
 
@@ -165,141 +182,67 @@ export function ExportModal({ projectId, canvas, onClose }: Props) {
         {step === "format" && (
           <>
             {exceedsHoop(stitchBounds(pattern), canvas) && (
-              <p style={styles.overflowNote}>
+              <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
                 ⚠ O desenho extrapola o bastidor — exportar mesmo assim pode não caber na máquina.
               </p>
             )}
-            <p style={styles.subtitle}>Escolha o formato compatível com sua máquina:</p>
-            <div style={styles.formatList}>
+            <p className="text-sm text-muted-foreground">Escolha o formato compatível com sua máquina:</p>
+            <div className="flex flex-col gap-2">
               {FORMATS.map((f) => (
                 <button
                   key={f}
-                  style={{ ...styles.formatBtn, ...(format === f ? styles.formatBtnActive : {}) }}
+                  type="button"
+                  className={cn(
+                    "flex flex-col items-start gap-0.5 rounded-md border px-3.5 py-3 text-left transition-colors",
+                    format === f ? "border-primary bg-accent" : "border-input hover:bg-accent/50"
+                  )}
                   onClick={() => setFormat(f)}
                 >
-                  <span style={styles.formatName}>.{f}</span>
-                  <span style={styles.formatDesc}>{FORMAT_DESC[f]}</span>
+                  <span className="text-base font-bold">.{f}</span>
+                  <span className="text-xs text-muted-foreground">{FORMAT_DESC[f]}</span>
                 </button>
               ))}
             </div>
-            <div style={styles.actions}>
-              <button style={styles.cancelBtn} onClick={handleBackToPreview}>← Voltar</button>
-              <button style={styles.exportBtn} onClick={handleExport}>
-                Exportar .{format}
-              </button>
-            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={handleBackToPreview}>← Voltar</Button>
+              <Button onClick={handleExport}>Exportar .{format}</Button>
+            </DialogFooter>
           </>
         )}
 
         {/* Processing state */}
         {step === "processing" && (
-          <div style={styles.statusBox}>
-            <div style={styles.spinner} />
-            <p style={styles.statusText}>Gerando arquivo de bordado…</p>
-            <p style={styles.statusSub}>Isso pode levar alguns segundos.</p>
+          <div className="flex flex-col items-center gap-3 py-5">
+            <div className="h-10 w-10 animate-spin rounded-full border-4 border-border border-t-primary" />
+            <p className="text-lg font-bold">Gerando arquivo de bordado…</p>
+            <p className="text-sm text-muted-foreground">Isso pode levar alguns segundos.</p>
           </div>
         )}
 
         {/* Done state */}
         {step === "done" && job?.downloadUrl && (
-          <div style={styles.statusBox}>
-            <div style={styles.checkIcon}>✓</div>
-            <p style={styles.statusText}>Pronto!</p>
-            <a
-              href={job.downloadUrl}
-              download={downloadName ?? true}
-              style={styles.downloadBtn}
-            >
-              Baixar .{format}
-            </a>
-            <button style={styles.cancelBtn} onClick={onClose}>Fechar</button>
+          <div className="flex flex-col items-center gap-3 py-5">
+            <CheckCircle2 className="h-12 w-12 text-green-600" />
+            <p className="text-lg font-bold">Pronto!</p>
+            <Button asChild size="lg">
+              <a href={job.downloadUrl} download={downloadName ?? true}>
+                Baixar .{format}
+              </a>
+            </Button>
+            <Button variant="outline" onClick={onClose}>Fechar</Button>
           </div>
         )}
 
         {/* Error state */}
         {step === "error" && (
-          <div style={styles.statusBox}>
-            <div style={styles.errorIcon}>✕</div>
-            <p style={styles.statusText}>Erro na exportação</p>
-            <p style={styles.statusSub}>{errorMsg}</p>
-            <button style={styles.cancelBtn} onClick={onClose}>Fechar</button>
+          <div className="flex flex-col items-center gap-3 py-5">
+            <XCircle className="h-12 w-12 text-destructive" />
+            <p className="text-lg font-bold">Erro na exportação</p>
+            <p className="text-sm text-muted-foreground">{errorMsg}</p>
+            <Button variant="outline" onClick={onClose}>Fechar</Button>
           </div>
         )}
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  overlay: {
-    position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)",
-    display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000,
-  },
-  modal: {
-    background: "#fff", borderRadius: 16, padding: "32px 36px",
-    width: 520, maxWidth: "94vw", boxShadow: "0 16px 48px rgba(0,0,0,0.18)",
-    display: "flex", flexDirection: "column", gap: 20, maxHeight: "90vh", overflowY: "auto",
-  },
-  stepperIndicator: {
-    display: "flex", alignItems: "center", gap: 16, justifyContent: "center", padding: "8px 0",
-  },
-  step: {
-    display: "flex", flexDirection: "column", alignItems: "center", gap: 6, opacity: 0.5,
-    transition: "opacity 0.2s",
-  },
-  stepActive: { opacity: 1 },
-  stepNumber: {
-    width: 32, height: 32, borderRadius: "50%", background: "#e2e0db",
-    display: "flex", alignItems: "center", justifyContent: "center",
-    fontSize: 14, fontWeight: 700, color: "#6b6b6b",
-  },
-  stepLabel: { fontSize: 11, color: "#6b6b6b", fontWeight: 600, textAlign: "center" },
-  stepLine: { width: 20, height: 2, background: "#e2e0db" },
-  previewLoading: {
-    display: "flex", alignItems: "center", gap: 10,
-    fontSize: 13, color: "#6b6b6b", padding: "8px 0",
-  },
-  spinnerSmall: {
-    width: 18, height: 18, border: "3px solid #e2e0db",
-    borderTop: "3px solid #7c5cbf", borderRadius: "50%",
-    animation: "spin 0.8s linear infinite", flexShrink: 0,
-  },
-  title: { fontSize: 22, fontWeight: 700 },
-  subtitle: { fontSize: 14, color: "#6b6b6b" },
-  formatList: { display: "flex", flexDirection: "column", gap: 8 },
-  formatBtn: {
-    display: "flex", flexDirection: "column", alignItems: "flex-start",
-    padding: "12px 14px", borderRadius: 10,
-    border: "1.5px solid #e2e0db", background: "#fff", cursor: "pointer", textAlign: "left",
-  },
-  formatBtnActive: { borderColor: "#7c5cbf", background: "#f5f0ff" },
-  formatName: { fontSize: 16, fontWeight: 700, color: "#1a1a1a" },
-  formatDesc: { fontSize: 12, color: "#6b6b6b", marginTop: 2 },
-  actions: { display: "flex", gap: 10, justifyContent: "flex-end" },
-  cancelBtn: { padding: "10px 18px", borderRadius: 8, border: "1.5px solid #e2e0db", background: "#fff", fontSize: 14, cursor: "pointer" },
-  exportBtn: { padding: "10px 20px", borderRadius: 8, background: "#7c5cbf", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer" },
-  statusBox: { display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "20px 0" },
-  statusText: { fontSize: 18, fontWeight: 700 },
-  statusSub: { fontSize: 13, color: "#6b6b6b" },
-  spinner: {
-    width: 40, height: 40, border: "4px solid #e2e0db",
-    borderTop: "4px solid #7c5cbf", borderRadius: "50%",
-    animation: "spin 0.8s linear infinite",
-  },
-  checkIcon: { width: 48, height: 48, borderRadius: "50%", background: "#e6f9f0", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, color: "#22c55e" },
-  errorIcon: { width: 48, height: 48, borderRadius: "50%", background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, color: "#e05252" },
-  errorText: { fontSize: 13, color: "#e05252", textAlign: "center", padding: "12px 0" },
-  previewErrorBox: { display: "flex", flexDirection: "column", alignItems: "center", gap: 4 },
-  retryBtn: {
-    padding: "7px 14px", borderRadius: 8, border: "1.5px solid #e2e0db",
-    background: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer", color: "#7c5cbf",
-  },
-  overflowNote: {
-    fontSize: 12, color: "#c03030", background: "#fff0f0",
-    border: "1px solid #f0c0c0", borderRadius: 8, padding: "8px 12px",
-  },
-  downloadBtn: {
-    padding: "12px 24px", borderRadius: 10, background: "#7c5cbf",
-    color: "#fff", fontSize: 15, fontWeight: 700, textDecoration: "none",
-  },
-};

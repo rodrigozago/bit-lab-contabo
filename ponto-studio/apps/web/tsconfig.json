@@ -16,7 +16,8 @@
     "noEmit": true,
     "baseUrl": ".",
     "paths": {
-      "@ponto-studio/shared": ["../../packages/shared/src/index.ts"]
+      "@ponto-studio/shared": ["../../packages/shared/src/index.ts"],
+      "@/*": ["./src/*"]
     }
   },
   "include": ["src"],

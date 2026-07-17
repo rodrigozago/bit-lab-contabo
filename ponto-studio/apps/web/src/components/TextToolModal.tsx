@@ -1,6 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 import { api, pollAnalysisUntilDone } from "../api/client.ts";
 import type { ImportConfirmPayload } from "./ImportModal.tsx";
+import { Button } from "@/components/ui/button.tsx";
+import { Input } from "@/components/ui/input.tsx";
+import { Label } from "@/components/ui/label.tsx";
+import { Slider } from "@/components/ui/slider.tsx";
+import { Checkbox } from "@/components/ui/checkbox.tsx";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog.tsx";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select.tsx";
 
 interface Props {
   onClose: () => void;
@@ -93,112 +106,66 @@ export function TextToolModal({ onClose, onConfirm }: Props) {
   }
 
   return (
-    <div style={s.overlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div style={s.modal}>
-        <div style={s.header}>
-          <span style={s.title}>🔤 Adicionar texto</span>
-          <button style={s.closeBtn} onClick={onClose}>✕</button>
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="flex max-h-[90vh] flex-col gap-5 overflow-y-auto sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>🔤 Adicionar texto</DialogTitle>
+        </DialogHeader>
+
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="text-tool-text">Texto</Label>
+          <Input
+            id="text-tool-text"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="Digite o texto…"
+            maxLength={40}
+          />
         </div>
 
-        <div style={s.body}>
-          <label style={s.field}>
-            <span style={s.label}>Texto</span>
-            <input
-              style={s.input}
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              placeholder="Digite o texto…"
-              maxLength={40}
-            />
-          </label>
-
-          <label style={s.field}>
-            <span style={s.label}>Fonte</span>
-            <select style={s.input} value={font} onChange={(e) => setFont(e.target.value)}>
+        <div className="flex flex-col gap-2">
+          <Label>Fonte</Label>
+          <Select value={font} onValueChange={setFont}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
               {FONTS.map((f) => (
-                <option key={f.value} value={f.value}>{f.label}</option>
+                <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
               ))}
-            </select>
-          </label>
-
-          <div style={s.row}>
-            <label style={s.field}>
-              <span style={s.label}>Tamanho: {size}px</span>
-              <input
-                type="range" min={30} max={200} step={5} value={size}
-                onChange={(e) => setSize(Number(e.target.value))}
-                style={s.slider}
-              />
-            </label>
-            <label style={s.checkboxField}>
-              <input type="checkbox" checked={bold} onChange={(e) => setBold(e.target.checked)} />
-              Negrito
-            </label>
-          </div>
-
-          <div style={s.previewBox}>
-            <canvas ref={canvasRef} style={s.previewCanvas} />
-          </div>
-
-          {error && <p style={s.errorMsg}>⚠ {error}</p>}
-
-          <p style={s.hint}>
-            O texto é convertido em vetor pelo mesmo processo usado nas imagens importadas —
-            fontes grossas (Arial Black, Impact) digitalizam melhor que traços finos.
-          </p>
-
-          <div style={s.actions}>
-            <button style={s.btnSecondary} onClick={onClose}>Cancelar</button>
-            <button
-              style={{ ...s.btnPrimary, ...(loading || !text.trim() ? s.btnDisabled : {}) }}
-              onClick={() => void handleConfirm()}
-              disabled={loading || !text.trim()}
-            >
-              {loading ? "Convertendo…" : "Adicionar ao bordado →"}
-            </button>
-          </div>
+            </SelectContent>
+          </Select>
         </div>
-      </div>
-    </div>
+
+        <div className="flex items-end gap-4">
+          <div className="flex flex-1 flex-col gap-2">
+            <Label>Tamanho: {size}px</Label>
+            <Slider min={30} max={200} step={5} value={[size]} onValueChange={([v]) => setSize(v!)} />
+          </div>
+          <label className="flex items-center gap-2 pb-2 text-sm">
+            <Checkbox checked={bold} onCheckedChange={(c) => setBold(c === true)} />
+            Negrito
+          </label>
+        </div>
+
+        <div className="flex min-h-[140px] max-h-[220px] items-center justify-center overflow-hidden rounded-md border bg-muted/40 p-2">
+          <canvas ref={canvasRef} className="max-h-[200px] max-w-full object-contain" />
+        </div>
+
+        {error && <p className="text-sm text-destructive">⚠ {error}</p>}
+
+        <p className="text-xs text-primary">
+          O texto é convertido em vetor pelo mesmo processo usado nas imagens importadas —
+          fontes grossas (Arial Black, Impact) digitalizam melhor que traços finos.
+        </p>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancelar</Button>
+          <Button onClick={() => void handleConfirm()} disabled={loading || !text.trim()}>
+            {loading ? "Convertendo…" : "Adicionar ao bordado →"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
-
-const s: Record<string, React.CSSProperties> = {
-  overlay: {
-    position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)",
-    display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000,
-  },
-  modal: {
-    background: "#fff", borderRadius: 16, width: 480, maxWidth: "92vw",
-    maxHeight: "90vh", overflowY: "auto", display: "flex", flexDirection: "column",
-    boxShadow: "0 24px 64px rgba(0,0,0,0.22)",
-  },
-  header: {
-    display: "flex", alignItems: "center", justifyContent: "space-between",
-    padding: "16px 20px", borderBottom: "1px solid #e2e0db",
-  },
-  title: { fontSize: 16, fontWeight: 700 },
-  closeBtn: { border: "none", background: "none", fontSize: 16, cursor: "pointer", color: "#6b6b6b" },
-  body: { padding: 20, display: "flex", flexDirection: "column", gap: 14 },
-  field: { display: "flex", flexDirection: "column", gap: 6, flex: 1 },
-  label: { fontSize: 12, fontWeight: 600, color: "#6b6b6b" },
-  input: {
-    border: "1.5px solid #e2e0db", borderRadius: 8, padding: "9px 12px",
-    fontSize: 14, fontFamily: "inherit", outline: "none",
-  },
-  row: { display: "flex", gap: 16, alignItems: "flex-end" },
-  slider: { width: "100%" },
-  checkboxField: { display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#1a1a1a", paddingBottom: 9 },
-  previewBox: {
-    display: "flex", alignItems: "center", justifyContent: "center",
-    background: "#f5f4f0", border: "1px solid #e2e0db", borderRadius: 10,
-    minHeight: 140, maxHeight: 220, overflow: "hidden", padding: 8,
-  },
-  previewCanvas: { maxWidth: "100%", maxHeight: 200, objectFit: "contain" },
-  errorMsg: { color: "#c0392b", fontSize: 13 },
-  hint: { fontSize: 12, color: "#7c5cbf", margin: 0 },
-  actions: { display: "flex", justifyContent: "flex-end", gap: 10 },
-  btnSecondary: { padding: "10px 18px", borderRadius: 8, border: "1.5px solid #e2e0db", background: "#fff", fontSize: 14, cursor: "pointer" },
-  btnPrimary: { padding: "10px 20px", borderRadius: 8, background: "#7c5cbf", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", border: "none" },
-  btnDisabled: { opacity: 0.5, cursor: "not-allowed" },
-};

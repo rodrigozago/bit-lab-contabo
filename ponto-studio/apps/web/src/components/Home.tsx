@@ -1,11 +1,17 @@
 import { useState, useEffect, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { Plus, Trash2 } from "lucide-react";
 import type { EmbroideryProject } from "@ponto-studio/shared";
 import { api } from "../api/client.ts";
 import { composeThumbnail } from "../utils/svgLayers.ts";
 import { Welcome } from "./Welcome.tsx";
 import { UserMenu } from "./UserMenu.tsx";
 import { useToast } from "./Toast.tsx";
+import { AppSidebar } from "@/components/ui/app-sidebar.tsx";
+import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar.tsx";
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable.tsx";
+import { Button } from "@/components/ui/button.tsx";
+import { Card } from "@/components/ui/card.tsx";
 
 export function Home() {
   const navigate = useNavigate();
@@ -28,48 +34,49 @@ export function Home() {
     void load();
   }, [load]);
 
-  if (projects === null) {
-    return (
-      <div style={styles.page}>
-        <span style={{ fontSize: 32 }}>🪡</span>
-      </div>
-    );
-  }
-
-  if (creating) {
-    return (
-      <Welcome
-        onStart={(projectId) => navigate(`/projects/${projectId}`)}
-        onCancel={projects.length > 0 ? () => setCreating(false) : undefined}
-      />
-    );
-  }
-
   return (
-    <div style={styles.page}>
-      <div style={styles.container}>
-        <header style={styles.header}>
-          <div style={styles.headerLeft}>
-            <span style={styles.logo}>🪡</span>
-            <h1 style={styles.title}>Meus projetos</h1>
-          </div>
-          <div style={styles.headerRight}>
-            <button style={styles.newBtn} onClick={() => setCreating(true)}>
-              ＋ Novo projeto
-            </button>
-            <UserMenu />
-          </div>
-        </header>
+    <SidebarProvider>
+      <ResizablePanelGroup direction="horizontal" autoSaveId="ponto-studio-home-layout" className="min-h-svh">
+        <ResizablePanel defaultSize={18} minSize={14} maxSize={30}>
+          <AppSidebar />
+        </ResizablePanel>
+        <ResizableHandle withHandle />
+        <ResizablePanel defaultSize={82}>
+          <SidebarInset>
+            {projects === null ? (
+              <div className="flex flex-1 items-center justify-center">
+                <span className="text-3xl">🪡</span>
+              </div>
+            ) : creating ? (
+              <Welcome
+                onStart={(projectId) => navigate(`/projects/${projectId}`)}
+                onCancel={projects.length > 0 ? () => setCreating(false) : undefined}
+              />
+            ) : (
+              <div className="flex flex-1 flex-col gap-6 p-6 md:p-8">
+                <header className="flex items-center justify-between">
+                  <h1 className="text-2xl font-bold">Meus projetos</h1>
+                  <div className="flex items-center gap-3">
+                    <Button onClick={() => setCreating(true)}>
+                      <Plus /> Novo projeto
+                    </Button>
+                    <UserMenu />
+                  </div>
+                </header>
 
-        {error && <p style={styles.errorMsg}>{error}</p>}
+                {error && <p className="text-sm text-destructive">{error}</p>}
 
-        <div style={styles.grid}>
-          {projects.map((project) => (
-            <ProjectCard key={project.id} project={project} />
-          ))}
-        </div>
-      </div>
-    </div>
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-4">
+                  {projects.map((project) => (
+                    <ProjectCard key={project.id} project={project} />
+                  ))}
+                </div>
+              </div>
+            )}
+          </SidebarInset>
+        </ResizablePanel>
+      </ResizablePanelGroup>
+    </SidebarProvider>
   );
 }
 
@@ -95,101 +102,29 @@ function ProjectCard({ project }: { project: EmbroideryProject }) {
   }
 
   return (
-    <div style={{ ...styles.cardWrapper, position: "relative" }}>
-      <Link to={`/projects/${project.id}`} style={styles.card}>
-        <div style={styles.thumbBox}>
-          {thumbnail ? (
-            <div style={styles.thumbSvg} dangerouslySetInnerHTML={{ __html: thumbnail }} />
-          ) : (
-            <span style={styles.thumbPlaceholder}>🪡</span>
-          )}
-        </div>
-        <span style={styles.cardName}>{project.name}</span>
+    <div className="relative flex">
+      <Link to={`/projects/${project.id}`} className="flex-1">
+        <Card className="flex h-full flex-col gap-2.5 p-3 transition-colors hover:border-primary/50 hover:shadow-md">
+          <div className="flex h-[140px] items-center justify-center overflow-hidden rounded-md bg-muted">
+            {thumbnail ? (
+              <div className="h-4/5 w-4/5" dangerouslySetInnerHTML={{ __html: thumbnail }} />
+            ) : (
+              <span className="text-3xl opacity-40">🪡</span>
+            )}
+          </div>
+          <span className="truncate text-sm font-semibold">{project.name}</span>
+        </Card>
       </Link>
-      <button
-        style={styles.deleteBtn}
+      <Button
+        variant="secondary"
+        size="icon"
+        className="absolute right-2 top-2 h-8 w-8 bg-white/90 opacity-70 shadow-sm hover:opacity-100"
         onClick={handleDelete}
         disabled={deleting}
         title="Deletar projeto"
       >
-        🗑️
-      </button>
+        <Trash2 className="h-4 w-4" />
+      </Button>
     </div>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  page: {
-    minHeight: "100vh",
-    display: "flex",
-    justifyContent: "center",
-    background: "linear-gradient(135deg, #f5f0ff 0%, #f5f4f0 100%)",
-    padding: "48px 24px",
-  },
-  container: { width: "100%", maxWidth: 1000, display: "flex", flexDirection: "column", gap: 24 },
-  header: { display: "flex", alignItems: "center", justifyContent: "space-between" },
-  headerLeft: { display: "flex", alignItems: "center", gap: 12 },
-  headerRight: { display: "flex", alignItems: "center", gap: 12 },
-  logo: { fontSize: 28 },
-  title: { fontSize: 24, fontWeight: 700, color: "#1a1a1a", margin: 0 },
-  newBtn: {
-    background: "#7c5cbf",
-    color: "#fff",
-    border: "none",
-    borderRadius: 10,
-    padding: "12px 20px",
-    fontSize: 14,
-    fontWeight: 700,
-    cursor: "pointer",
-  },
-  errorMsg: { fontSize: 13, color: "#e05252" },
-  grid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
-    gap: 16,
-  },
-  cardWrapper: {
-    position: "relative",
-    display: "flex",
-    borderRadius: 12,
-  },
-  card: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 10,
-    padding: 12,
-    flex: 1,
-    borderRadius: 12,
-    border: "1.5px solid #e2e0db",
-    background: "#fff",
-    cursor: "pointer",
-    textDecoration: "none",
-    color: "inherit",
-    transition: "border-color 0.15s, box-shadow 0.15s",
-  },
-  thumbBox: {
-    height: 140,
-    borderRadius: 8,
-    background: "#fafaf9",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-  },
-  thumbSvg: { width: "80%", height: "80%" },
-  thumbPlaceholder: { fontSize: 32, opacity: 0.4 },
-  cardName: { fontSize: 14, fontWeight: 600, color: "#1a1a1a" },
-  deleteBtn: {
-    position: "absolute",
-    top: 8,
-    right: 8,
-    background: "rgba(255, 255, 255, 0.9)",
-    border: "none",
-    borderRadius: 6,
-    padding: "6px 8px",
-    fontSize: 14,
-    cursor: "pointer",
-    opacity: 0.7,
-    transition: "opacity 0.15s",
-  },
-};

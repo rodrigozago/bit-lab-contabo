@@ -16,6 +16,8 @@ import {
   type TLShapeId,
 } from "@tldraw/tldraw";
 import "@tldraw/tldraw/tldraw.css";
+import type { ImperativePanelHandle } from "react-resizable-panels";
+import { ImageUp, Type as TypeIcon, Download, History as HistoryIcon, Trash2, PanelLeft, PanelRight } from "lucide-react";
 import { HOOP_PX_PER_MM, type CanvasSize, type EmbroideryElement, type EmbroideryProject } from "@ponto-studio/shared";
 import { useProjectStore, type SaveStatus } from "../store/projectStore.ts";
 import { api } from "../api/client.ts";
@@ -31,6 +33,11 @@ import { UserMenu } from "./UserMenu.tsx";
 import { useToast } from "./Toast.tsx";
 import { HistoryModal } from "./HistoryModal.tsx";
 import type { ImportConfirmPayload } from "./ImportModal.tsx";
+import { cn } from "@/lib/utils.ts";
+import { AppSidebar } from "@/components/ui/app-sidebar.tsx";
+import { SidebarProvider, Sidebar, SidebarContent, SidebarGroup, SidebarGroupLabel, SidebarGroupContent } from "@/components/ui/sidebar.tsx";
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable.tsx";
+import { Button } from "@/components/ui/button.tsx";
 
 // ── Área do bastidor ───────────────────────────────────────────────────────────
 // Mapeamento fixo entre mm do bastidor e o page-space do tldraw: origem (0,0),
@@ -101,11 +108,11 @@ function SaveStatusIndicator({
   }, [status, lastSavedAt]);
 
   if (status === "idle") return null;
-  if (status === "saving") return <span style={styles.saveStatus}>Salvando…</span>;
+  if (status === "saving") return <span className="text-xs font-medium text-muted-foreground">Salvando…</span>;
   if (status === "error") {
     return (
       <button
-        style={{ ...styles.saveStatus, ...styles.saveStatusError }}
+        className="cursor-pointer border-none bg-transparent p-0 text-xs font-medium text-destructive underline"
         onClick={onRetry}
         title={`${lastError ? `${lastError} — ` : ""}Clique para tentar salvar de novo`}
       >
@@ -113,7 +120,11 @@ function SaveStatusIndicator({
       </button>
     );
   }
-  return <span style={styles.saveStatus}>{lastSavedAt ? formatSavedAgo(lastSavedAt) : "Salvo"}</span>;
+  return (
+    <span className="text-xs font-medium text-muted-foreground">
+      {lastSavedAt ? formatSavedAgo(lastSavedAt) : "Salvo"}
+    </span>
+  );
 }
 
 // ── UI do tldraw enxuta (EDIT-2) ────────────────────────────────────────────────
@@ -180,6 +191,22 @@ export function Editor({ project, onProjectChange, onBackToHome }: Props) {
   // Evita reentrância no listener abaixo quando ELE MESMO chama updateShapes
   // pra propagar um resize entre os shapes de um mesmo grupo de import.
   const suppressGroupSync = useRef(false);
+  const leftPanelRef = useRef<ImperativePanelHandle>(null);
+  const rightPanelRef = useRef<ImperativePanelHandle>(null);
+
+  function toggleLeftPanel() {
+    const panel = leftPanelRef.current;
+    if (!panel) return;
+    if (panel.isCollapsed()) panel.expand();
+    else panel.collapse();
+  }
+
+  function toggleRightPanel() {
+    const panel = rightPanelRef.current;
+    if (!panel) return;
+    if (panel.isCollapsed()) panel.expand();
+    else panel.collapse();
+  }
 
   const tldrawComponents: TLComponents = useMemo(
     () => ({
@@ -353,10 +380,14 @@ export function Editor({ project, onProjectChange, onBackToHome }: Props) {
       props: { name: file.name, src: previewDataUrl, w: dims.w, h: dims.h, mimeType: "image/png", isAnimated: false },
       meta: {},
     }]);
+    // Referência nasce OCULTA por padrão (mesmo truque de isLocked+opacity:0
+    // usado no toggle do LayersPanel — prevOpacity guarda o valor de volta
+    // quando o usuário reativar a camada pelo painel) — o usuário normalmente
+    // só quer ver o bordado, não a foto original por baixo.
     tldrawEditor.createShape({
-      type: "image", x: imgX, y: imgY, opacity: 0.4,
+      type: "image", x: imgX, y: imgY, opacity: 0, isLocked: true,
       props: { assetId: imageAssetId, w: canvasW, h: canvasH },
-      meta: { layer: 'reference', importGroupId, importGroupName },
+      meta: { layer: 'reference', importGroupId, importGroupName, prevOpacity: 0.4 },
     } as Parameters<typeof tldrawEditor.createShape>[0]);
 
     // ── Camada 2: áreas do bordado, UMA POR COR ──
@@ -480,117 +511,148 @@ export function Editor({ project, onProjectChange, onBackToHome }: Props) {
   }
 
   return (
-    <div style={styles.root}>
+    <div className="flex h-screen flex-col overflow-hidden">
       {/* ── Topbar ── */}
-      <header style={styles.topbar}>
-        <div style={styles.topbarLeft}>
-          <span style={styles.logoMark}>🪡</span>
-          <span style={styles.projectName}>{localProject.name}</span>
+      <header className="z-10 flex h-14 shrink-0 items-center justify-between border-b bg-background px-4">
+        <div className="flex items-center gap-2.5">
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={toggleLeftPanel} title="Mostrar/ocultar navegação">
+            <PanelLeft />
+          </Button>
+          <span className="text-xl leading-none">🪡</span>
+          <span className="text-base font-bold">{localProject.name}</span>
           <SaveStatusIndicator status={saveStatus} lastSavedAt={lastSavedAt} lastError={lastError} onRetry={retrySync} />
         </div>
-        <div style={styles.topbarRight}>
-          <button style={styles.newBtn} onClick={onBackToHome} title="Voltar para meus projetos">
-            ← Meus projetos
-          </button>
-          <button style={styles.importBtn} onClick={() => setShowImport(true)}>
-            📷 Importar imagem
-          </button>
-          <button style={styles.importBtn} onClick={() => setShowTextTool(true)}>
-            🔤 Adicionar texto
-          </button>
-          <button style={styles.exportBtn} onClick={() => setShowExport(true)}>
-            ✦ Exportar bordado
-          </button>
-          <button style={styles.historyBtn} onClick={() => setShowHistory(true)} title="Histórico do projeto">
-            🕘 Histórico
-          </button>
-          <button
-            style={{ ...styles.deleteProjectBtn, opacity: deleting ? 0.5 : 1 }}
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => setShowImport(true)}>
+            <ImageUp /> Importar imagem
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setShowTextTool(true)}>
+            <TypeIcon /> Adicionar texto
+          </Button>
+          <Button size="sm" onClick={() => setShowExport(true)}>
+            <Download /> Exportar bordado
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => setShowHistory(true)} title="Histórico do projeto">
+            <HistoryIcon /> Histórico
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="text-destructive hover:text-destructive"
             onClick={handleDeleteProject}
             disabled={deleting}
             title="Deletar projeto"
           >
-            🗑️ Deletar
-          </button>
+            <Trash2 /> Deletar
+          </Button>
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={toggleRightPanel} title="Mostrar/ocultar painel direito">
+            <PanelRight />
+          </Button>
           <UserMenu />
         </div>
       </header>
 
       {/* ── Main layout ── */}
-      <div style={styles.body}>
-        <div style={styles.canvas}>
-          <Tldraw onMount={handleMount} components={tldrawComponents} />
-        </div>
-
-        <aside style={styles.sidebar}>
-          <LayersPanel editor={tldrawEditor} />
-          <ShapeActionsPanel editor={tldrawEditor} selectedShapeIds={selectedShapeIds} />
-
-          {selectedElement ? (
-            <>
-              <div style={styles.sidebarHeader}>
-                <span style={styles.sidebarTitle}>Propriedades</span>
-              </div>
-              <PropertiesPanel
-                element={selectedElement}
-                onChange={(patch) => { void handlePropertiesChange(selectedElement.id, patch); }}
-                onDelete={() => handleDeleteElement(selectedElement.id)}
-              />
-            </>
-          ) : (
-            <div style={styles.sidebarEmpty}>
-              <span style={styles.sidebarEmptyIcon}>👆</span>
-              <p style={styles.sidebarEmptyText}>
-                Selecione uma área no canvas para configurar o bordado
-              </p>
+      <SidebarProvider className="min-h-0 flex-1">
+        <ResizablePanelGroup direction="horizontal" autoSaveId="ponto-studio-editor-layout" className="flex-1">
+          <ResizablePanel ref={leftPanelRef} defaultSize={16} minSize={12} maxSize={26} collapsible collapsedSize={4}>
+            <AppSidebar
+              projectContext={{ name: localProject.name, canvas: localProject.canvas }}
+              onNavigateHome={onBackToHome}
+            />
+          </ResizablePanel>
+          <ResizableHandle withHandle />
+          <ResizablePanel defaultSize={60} minSize={30}>
+            <div className="relative h-full">
+              <Tldraw onMount={handleMount} components={tldrawComponents} />
             </div>
-          )}
+          </ResizablePanel>
+          <ResizableHandle withHandle />
+          <ResizablePanel ref={rightPanelRef} defaultSize={24} minSize={16} maxSize={34} collapsible collapsedSize={4}>
+            <Sidebar collapsible="none" className="h-full w-full border-l">
+              <SidebarContent className="gap-0">
+                <LayersPanel editor={tldrawEditor} />
+                <ShapeActionsPanel editor={tldrawEditor} selectedShapeIds={selectedShapeIds} />
 
-          <div style={styles.elementList}>
-            <div style={styles.sidebarHeader}>
-              <span style={styles.sidebarTitle}>Áreas ({localProject.elements.length})</span>
-            </div>
-            {localProject.elements.length === 0 && (
-              <p style={styles.emptyHint}>
-                Importe uma imagem e analise com IA — a área do bordado é criada automaticamente.
-              </p>
-            )}
-            {localProject.elements.length > 1 && (
-              <p style={styles.emptyHint}>Ordem de costura na máquina — use ▲/▼ pra reordenar.</p>
-            )}
-            {localProject.elements.map((el, idx) => (
-              <div
-                key={el.id}
-                style={{ ...styles.elementItem, ...(el.id === selectedElement?.id ? styles.elementItemActive : {}) }}
-              >
-                <button style={styles.elementMain} onClick={() => handleSelectElement(el.id)}>
-                  <span style={styles.elementSeq}>{idx + 1}º</span>
-                  <span style={{ ...styles.elementDot, background: el.color }} />
-                  <span style={styles.elementLabel}>{el.stitch.type} — {el.color}</span>
-                </button>
-                <span style={styles.elementOrderBtns}>
-                  <button
-                    style={{ ...styles.orderBtn, opacity: idx === 0 ? 0.25 : 1 }}
-                    disabled={idx === 0}
-                    title="Costurar antes"
-                    onClick={() => moveElement(el.id, "up")}
-                  >
-                    ▲
-                  </button>
-                  <button
-                    style={{ ...styles.orderBtn, opacity: idx === localProject.elements.length - 1 ? 0.25 : 1 }}
-                    disabled={idx === localProject.elements.length - 1}
-                    title="Costurar depois"
-                    onClick={() => moveElement(el.id, "down")}
-                  >
-                    ▼
-                  </button>
-                </span>
-              </div>
-            ))}
-          </div>
-        </aside>
-      </div>
+                {selectedElement ? (
+                  <PropertiesPanel
+                    element={selectedElement}
+                    onChange={(patch) => { void handlePropertiesChange(selectedElement.id, patch); }}
+                    onDelete={() => handleDeleteElement(selectedElement.id)}
+                  />
+                ) : (
+                  <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
+                    <span className="text-3xl">👆</span>
+                    <p className="text-sm leading-relaxed text-muted-foreground">
+                      Selecione uma área no canvas para configurar o bordado
+                    </p>
+                  </div>
+                )}
+
+                <SidebarGroup className="border-t">
+                  <SidebarGroupLabel>Áreas ({localProject.elements.length})</SidebarGroupLabel>
+                  <SidebarGroupContent className="flex max-h-52 flex-col overflow-y-auto">
+                    {localProject.elements.length === 0 && (
+                      <p className="px-2 py-1.5 text-xs text-muted-foreground">
+                        Importe uma imagem e analise com IA — a área do bordado é criada automaticamente.
+                      </p>
+                    )}
+                    {localProject.elements.length > 1 && (
+                      <p className="px-2 py-1.5 text-xs text-muted-foreground">
+                        Ordem de costura na máquina — use ▲/▼ pra reordenar.
+                      </p>
+                    )}
+                    {localProject.elements.map((el, idx) => (
+                      <div
+                        key={el.id}
+                        className={cn(
+                          "flex items-center gap-1 border-b py-1 pr-2",
+                          el.id === selectedElement?.id && "bg-accent"
+                        )}
+                      >
+                        <button
+                          className="flex min-w-0 flex-1 items-center gap-2 py-1 pl-2 text-left"
+                          onClick={() => handleSelectElement(el.id)}
+                        >
+                          <span className="w-5 shrink-0 text-xs font-bold text-muted-foreground">{idx + 1}º</span>
+                          <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: el.color }} />
+                          <span className="truncate text-xs capitalize">
+                            {el.stitch.type} — {el.color}
+                          </span>
+                        </button>
+                        <span className="flex shrink-0 flex-col">
+                          <button
+                            className={cn(
+                              "px-1.5 text-[9px] leading-tight text-muted-foreground",
+                              idx === 0 && "opacity-25"
+                            )}
+                            disabled={idx === 0}
+                            title="Costurar antes"
+                            onClick={() => moveElement(el.id, "up")}
+                          >
+                            ▲
+                          </button>
+                          <button
+                            className={cn(
+                              "px-1.5 text-[9px] leading-tight text-muted-foreground",
+                              idx === localProject.elements.length - 1 && "opacity-25"
+                            )}
+                            disabled={idx === localProject.elements.length - 1}
+                            title="Costurar depois"
+                            onClick={() => moveElement(el.id, "down")}
+                          >
+                            ▼
+                          </button>
+                        </span>
+                      </div>
+                    ))}
+                  </SidebarGroupContent>
+                </SidebarGroup>
+              </SidebarContent>
+            </Sidebar>
+          </ResizablePanel>
+        </ResizablePanelGroup>
+      </SidebarProvider>
 
       {showExport && (
         <ExportModal projectId={localProject.id} canvas={localProject.canvas} onClose={() => setShowExport(false)} />
@@ -615,9 +677,9 @@ export function Editor({ project, onProjectChange, onBackToHome }: Props) {
         />
       )}
       {importing && (
-        <div style={styles.importingOverlay}>
-          <div style={styles.importingCard}>
-            <div style={styles.importingSpinner} />
+        <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-background/55">
+          <div className="flex items-center gap-3 rounded-xl border bg-card px-5 py-4 text-sm font-semibold shadow-lg">
+            <div className="h-5 w-5 animate-spin rounded-full border-[3px] border-border border-t-primary" />
             <span>Adicionando ao bordado…</span>
           </div>
         </div>
@@ -636,101 +698,3 @@ function svgToDataUrl(svg: string): Promise<string> {
     reader.readAsDataURL(blob);
   });
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  root: { display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden" },
-  topbar: {
-    height: 56, background: "#fff", borderBottom: "1px solid #e2e0db",
-    display: "flex", alignItems: "center", justifyContent: "space-between",
-    padding: "0 16px", flexShrink: 0, zIndex: 10,
-  },
-  topbarLeft: { display: "flex", alignItems: "center", gap: 10 },
-  logoMark: { fontSize: 22 },
-  projectName: { fontSize: 16, fontWeight: 700 },
-  saveStatus: {
-    fontSize: 12, color: "#9b9b9b", fontWeight: 500,
-    border: "none", background: "transparent", padding: 0, fontFamily: "inherit",
-  },
-  saveStatusError: { color: "#e05252", cursor: "pointer", textDecoration: "underline" },
-  topbarRight: { display: "flex", alignItems: "center", gap: 8 },
-  newBtn: {
-    padding: "8px 14px", borderRadius: 8,
-    border: "1.5px solid #e2e0db", background: "#fff",
-    fontSize: 13, cursor: "pointer", fontFamily: "inherit", color: "#6b6b6b",
-  },
-  importBtn: {
-    padding: "8px 14px", borderRadius: 8,
-    border: "1.5px solid #e2e0db", background: "#fff",
-    fontSize: 13, cursor: "pointer", fontFamily: "inherit",
-  },
-  exportBtn: {
-    padding: "8px 16px", borderRadius: 8,
-    background: "#7c5cbf", color: "#fff",
-    fontSize: 13, fontWeight: 700, cursor: "pointer",
-  },
-  historyBtn: {
-    padding: "8px 12px", borderRadius: 8,
-    background: "#f0f0f0", color: "#666",
-    fontSize: 13, fontWeight: 600, cursor: "pointer", border: "none",
-    transition: "background 0.15s",
-  },
-  deleteProjectBtn: {
-    padding: "8px 12px", borderRadius: 8,
-    background: "#f0f0f0", color: "#666",
-    fontSize: 13, fontWeight: 600, cursor: "pointer", border: "none",
-    transition: "background 0.15s",
-  },
-  body: { display: "flex", flex: 1, overflow: "hidden" },
-  canvas: { flex: 1, position: "relative" },
-  sidebar: {
-    width: 260, background: "#fff", borderLeft: "1px solid #e2e0db",
-    display: "flex", flexDirection: "column", overflow: "hidden", flexShrink: 0,
-  },
-  sidebarHeader: { padding: "12px 16px", borderBottom: "1px solid #e2e0db", flexShrink: 0 },
-  sidebarTitle: { fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#6b6b6b" },
-  sidebarEmpty: {
-    display: "flex", flexDirection: "column", alignItems: "center",
-    justifyContent: "center", gap: 12, flex: 1, padding: 24, textAlign: "center",
-  },
-  sidebarEmptyIcon: { fontSize: 32 },
-  sidebarEmptyText: { fontSize: 13, color: "#6b6b6b", lineHeight: 1.5 },
-  elementList: { borderTop: "1px solid #e2e0db", flexShrink: 0, maxHeight: 200, overflowY: "auto" },
-  emptyHint: { fontSize: 12, color: "#9b9b9b", padding: "10px 16px" },
-  elementItem: {
-    display: "flex", alignItems: "center", gap: 4,
-    padding: "4px 8px 4px 0", width: "100%",
-    borderBottom: "1px solid #f0ede8",
-  },
-  elementItemActive: { background: "#f5f0ff" },
-  elementMain: {
-    display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0,
-    padding: "5px 0 5px 16px", border: "none", background: "transparent",
-    cursor: "pointer", textAlign: "left",
-  },
-  elementSeq: { fontSize: 11, color: "#9b9b9b", fontWeight: 700, width: 20, flexShrink: 0 },
-  elementDot: { width: 12, height: 12, borderRadius: "50%", flexShrink: 0 },
-  elementLabel: {
-    fontSize: 12, color: "#1a1a1a", textTransform: "capitalize",
-    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-  },
-  elementOrderBtns: { display: "flex", flexDirection: "column", gap: 0, flexShrink: 0 },
-  importingOverlay: {
-    position: "fixed", inset: 0, background: "rgba(255,255,255,0.55)",
-    display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2000,
-  },
-  importingCard: {
-    display: "flex", alignItems: "center", gap: 12,
-    background: "#fff", border: "1.5px solid #e2e0db", borderRadius: 12,
-    padding: "16px 22px", fontSize: 14, fontWeight: 600, color: "#1a1a1a",
-    boxShadow: "0 12px 32px rgba(0,0,0,0.12)",
-  },
-  importingSpinner: {
-    width: 20, height: 20, border: "3px solid #e2e0db",
-    borderTop: "3px solid #7c5cbf", borderRadius: "50%",
-    animation: "spin 0.8s linear infinite",
-  },
-  orderBtn: {
-    border: "none", background: "transparent", cursor: "pointer",
-    fontSize: 9, color: "#6b6b6b", padding: "1px 6px", lineHeight: 1.4,
-  },
-};

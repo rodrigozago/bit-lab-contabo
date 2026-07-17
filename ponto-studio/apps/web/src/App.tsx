@@ -5,6 +5,9 @@ import { EditorRoute } from "./components/EditorRoute.tsx";
 import { api } from "./api/client.ts";
 import { AuthContext, useAuth, loginUrl, type Me } from "./lib/auth.ts";
 import { ToastProvider } from "./components/Toast.tsx";
+import { Button } from "@/components/ui/button.tsx";
+import { Card, CardContent } from "@/components/ui/card.tsx";
+import { Toaster } from "@/components/ui/sonner.tsx";
 
 export default function App() {
   const [me, setMe] = useState<Me | null>(null);
@@ -27,6 +30,7 @@ export default function App() {
   return (
     <AuthContext.Provider value={{ me, loading: authLoading, refresh }}>
       <ToastProvider>
+        <Toaster />
         <AuthGate />
       </ToastProvider>
     </AuthContext.Provider>
@@ -38,8 +42,8 @@ function AuthGate() {
 
   if (loading) {
     return (
-      <div style={styles.page}>
-        <span style={{ fontSize: 32 }}>🪡</span>
+      <div className="flex min-h-svh items-center justify-center bg-muted">
+        <span className="text-4xl">🪡</span>
       </div>
     );
   }
@@ -47,26 +51,38 @@ function AuthGate() {
   if (!me) {
     const pending = new URLSearchParams(window.location.search).get("authStatus") === "pending";
     return (
-      <div style={styles.page}>
-        <div style={styles.card}>
-          <div style={styles.logo}>🪡</div>
-          <h1 style={styles.title}>Ponto Studio</h1>
-          {pending ? (
-            <>
-              <p style={styles.subtitle}>Conta em análise</p>
-              <p style={styles.body}>
-                Sua conta foi criada, mas ainda não tem acesso ao Ponto Studio — um admin precisa aprovar sua
-                solicitação antes que você possa entrar.
-              </p>
-            </>
-          ) : (
-            <>
-              <p style={styles.subtitle}>Digitalize seus bordados</p>
-              <button style={styles.cta} onClick={() => (window.location.href = loginUrl())}>
-                Entrar →
-              </button>
-            </>
-          )}
+      <div className="flex min-h-svh flex-col items-center justify-center gap-6 bg-muted p-6 md:p-10">
+        <div className="w-full max-w-sm md:max-w-3xl">
+          <Card className="overflow-hidden">
+            <CardContent className="grid p-0 md:grid-cols-2">
+              <div className="flex flex-col items-center justify-center gap-4 p-8 text-center md:p-10">
+                <span className="text-4xl">🪡</span>
+                <h1 className="text-2xl font-bold">Ponto Studio</h1>
+                {pending ? (
+                  <>
+                    <p className="text-sm font-semibold text-primary">Conta em análise</p>
+                    <p className="text-sm text-muted-foreground">
+                      Sua conta foi criada, mas ainda não tem acesso ao Ponto Studio — um admin precisa
+                      aprovar sua solicitação antes que você possa entrar.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm font-semibold text-primary">Digitalize seus bordados</p>
+                    <Button size="lg" className="mt-2 w-full" onClick={() => (window.location.href = loginUrl())}>
+                      Entrar →
+                    </Button>
+                  </>
+                )}
+              </div>
+              <div
+                className="relative hidden md:flex md:items-center md:justify-center"
+                style={{ background: "linear-gradient(135deg, #f5f0ff 0%, #f5f4f0 100%)" }}
+              >
+                <span className="text-8xl opacity-80">🪡</span>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
     );
@@ -81,40 +97,3 @@ function AuthGate() {
     </BrowserRouter>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  page: {
-    height: "100vh",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    background: "linear-gradient(135deg, #f5f0ff 0%, #f5f4f0 100%)",
-  },
-  card: {
-    background: "#fff",
-    borderRadius: 16,
-    padding: "40px 48px",
-    width: 420,
-    boxShadow: "0 8px 32px rgba(124,92,191,0.12)",
-    display: "flex",
-    flexDirection: "column",
-    gap: 12,
-    textAlign: "center",
-  },
-  logo: { fontSize: 40 },
-  title: { fontSize: 28, fontWeight: 700, color: "#1a1a1a", margin: 0 },
-  subtitle: { fontSize: 14, color: "#7c5cbf", margin: 0, fontWeight: 600 },
-  body: { fontSize: 14, color: "#6b6b6b", lineHeight: 1.5, margin: 0 },
-  cta: {
-    background: "#7c5cbf",
-    color: "#fff",
-    border: "none",
-    borderRadius: 10,
-    padding: "14px",
-    fontSize: 16,
-    fontWeight: 700,
-    marginTop: 8,
-    cursor: "pointer",
-    transition: "background 0.15s",
-  },
-};

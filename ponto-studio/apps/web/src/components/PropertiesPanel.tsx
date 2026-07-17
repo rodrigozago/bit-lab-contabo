@@ -1,5 +1,12 @@
 import { useState } from "react";
+import { ChevronRight, Trash2 } from "lucide-react";
 import type { EmbroideryElement, StitchType } from "@ponto-studio/shared";
+import { cn } from "@/lib/utils.ts";
+import { Button } from "@/components/ui/button.tsx";
+import { Slider } from "@/components/ui/slider.tsx";
+import { Checkbox } from "@/components/ui/checkbox.tsx";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible.tsx";
+import { SidebarGroup, SidebarGroupContent, SidebarGroupLabel } from "@/components/ui/sidebar.tsx";
 
 const STITCH_OPTIONS: Array<{ value: StitchType; label: string; desc: string }> = [
   { value: "satin", label: "Cetim", desc: "Linhas paralelas. Ótimo para letras e formas simples." },
@@ -19,200 +26,127 @@ export function PropertiesPanel({ element, onChange, onDelete }: Props) {
   const pullComp = stitch.pullCompensationMm ?? 0;
 
   return (
-    <div style={styles.panel}>
-      <h3 style={styles.sectionTitle}>Tipo de ponto</h3>
-      <div style={styles.stitchList}>
-        {STITCH_OPTIONS.map((opt) => (
-          <button
-            key={opt.value}
-            style={{
-              ...styles.stitchBtn,
-              ...(stitch.type === opt.value ? styles.stitchBtnActive : {}),
-            }}
-            onClick={() => onChange({ stitch: { ...stitch, type: opt.value } })}
-          >
-            <span style={styles.stitchLabel}>{opt.label}</span>
-            <span style={styles.stitchDesc}>{opt.desc}</span>
-          </button>
-        ))}
-      </div>
-
-      <h3 style={styles.sectionTitle}>Cor do fio</h3>
-      <div style={styles.colorRow}>
-        <input
-          type="color"
-          value={color}
-          onChange={(e) => onChange({ color: e.target.value })}
-          style={styles.colorInput}
-        />
-        <span style={styles.colorHex}>{color.toUpperCase()}</span>
-      </div>
-
-      <h3 style={styles.sectionTitle}>Densidade</h3>
-      <div style={styles.sliderRow}>
-        <span style={styles.sliderLabel}>Esparso</span>
-        <input
-          type="range"
-          min={0}
-          max={1}
-          step={0.05}
-          value={stitch.density}
-          onChange={(e) =>
-            onChange({ stitch: { ...stitch, density: Number(e.target.value) } })
-          }
-          style={styles.slider}
-        />
-        <span style={styles.sliderLabel}>Denso</span>
-      </div>
-      <div style={styles.sliderValue}>{Math.round(stitch.density * 100)}%</div>
-
-      <h3 style={styles.sectionTitle}>Ângulo</h3>
-      <div style={styles.sliderRow}>
-        <span style={styles.sliderLabel}>0°</span>
-        <input
-          type="range"
-          min={0}
-          max={180}
-          step={5}
-          value={stitch.angle}
-          onChange={(e) =>
-            onChange({ stitch: { ...stitch, angle: Number(e.target.value) } })
-          }
-          style={styles.slider}
-        />
-        <span style={styles.sliderLabel}>180°</span>
-      </div>
-      <div style={styles.sliderValue}>{stitch.angle}°</div>
-
-      <label style={styles.advancedToggle}>
-        <input
-          type="checkbox"
-          checked={advancedOpen}
-          onChange={(e) => setAdvancedOpen(e.target.checked)}
-        />
-        Avançado
-      </label>
-
-      {advancedOpen && stitch.type !== "running" && (
-        <>
-          <label style={styles.advancedRow}>
-            <input
-              type="checkbox"
-              checked={stitch.underlay ?? false}
-              onChange={(e) => onChange({ stitch: { ...stitch, underlay: e.target.checked } })}
-            />
-            <span>
-              Underlay (base)
-              <span style={styles.advancedHint}>Passada de estabilização antes do preenchimento</span>
-            </span>
-          </label>
-
-          <h3 style={styles.sectionTitle}>Compensação de puxão</h3>
-          <div style={styles.sliderRow}>
-            <span style={styles.sliderLabel}>0</span>
-            <input
-              type="range"
-              min={0}
-              max={0.5}
-              step={0.05}
-              value={pullComp}
-              onChange={(e) =>
-                onChange({ stitch: { ...stitch, pullCompensationMm: Number(e.target.value) } })
-              }
-              style={styles.slider}
-            />
-            <span style={styles.sliderLabel}>0.5mm</span>
+    <SidebarGroup>
+      <SidebarGroupLabel>Propriedades</SidebarGroupLabel>
+      <SidebarGroupContent className="flex flex-col gap-3 px-2 pb-2">
+        <div className="flex flex-col gap-1.5">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Tipo de ponto</p>
+          <div className="flex flex-col gap-1.5">
+            {STITCH_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                className={cn(
+                  "flex flex-col items-start gap-0.5 rounded-md border px-3 py-2 text-left text-sm transition-colors",
+                  stitch.type === opt.value
+                    ? "border-primary bg-accent"
+                    : "border-input bg-background hover:bg-accent/50"
+                )}
+                onClick={() => onChange({ stitch: { ...stitch, type: opt.value } })}
+              >
+                <span className="font-semibold">{opt.label}</span>
+                <span className="text-xs text-muted-foreground">{opt.desc}</span>
+              </button>
+            ))}
           </div>
-          <div style={styles.sliderValue}>{pullComp.toFixed(2)} mm</div>
-        </>
-      )}
-      {advancedOpen && stitch.type === "running" && (
-        <p style={styles.advancedHint}>Underlay e compensação só se aplicam a preenchimentos (cetim/tatami).</p>
-      )}
+        </div>
 
-      <button style={styles.deleteBtn} onClick={onDelete}>
-        Remover área
-      </button>
-    </div>
+        <div className="flex flex-col gap-1.5">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Cor do fio</p>
+          <div className="flex items-center gap-2.5">
+            <input
+              type="color"
+              value={color}
+              onChange={(e) => onChange({ color: e.target.value })}
+              className="h-10 w-10 cursor-pointer rounded-md border-0 p-0"
+            />
+            <span className="tabular-nums text-sm text-muted-foreground">{color.toUpperCase()}</span>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Densidade</p>
+          <div className="flex items-center gap-2">
+            <span className="w-10 shrink-0 text-xs text-muted-foreground">Esparso</span>
+            <Slider
+              min={0}
+              max={1}
+              step={0.05}
+              value={[stitch.density]}
+              onValueChange={([v]) => onChange({ stitch: { ...stitch, density: v! } })}
+            />
+            <span className="w-10 shrink-0 text-xs text-muted-foreground">Denso</span>
+          </div>
+          <div className="text-center text-sm font-semibold text-primary">{Math.round(stitch.density * 100)}%</div>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Ângulo</p>
+          <div className="flex items-center gap-2">
+            <span className="w-10 shrink-0 text-xs text-muted-foreground">0°</span>
+            <Slider
+              min={0}
+              max={180}
+              step={5}
+              value={[stitch.angle]}
+              onValueChange={([v]) => onChange({ stitch: { ...stitch, angle: v! } })}
+            />
+            <span className="w-10 shrink-0 text-xs text-muted-foreground">180°</span>
+          </div>
+          <div className="text-center text-sm font-semibold text-primary">{stitch.angle}°</div>
+        </div>
+
+        <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
+          <CollapsibleTrigger className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
+            <ChevronRight className={cn("h-3.5 w-3.5 transition-transform", advancedOpen && "rotate-90")} />
+            Avançado
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mt-2 flex flex-col gap-3">
+            {stitch.type !== "running" ? (
+              <>
+                <label className="flex cursor-pointer items-start gap-2 text-sm">
+                  <Checkbox
+                    checked={stitch.underlay ?? false}
+                    onCheckedChange={(checked) => onChange({ stitch: { ...stitch, underlay: checked === true } })}
+                  />
+                  <span>
+                    Underlay (base)
+                    <span className="block text-xs text-muted-foreground">
+                      Passada de estabilização antes do preenchimento
+                    </span>
+                  </span>
+                </label>
+
+                <div className="flex flex-col gap-1.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Compensação de puxão
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <span className="w-10 shrink-0 text-xs text-muted-foreground">0</span>
+                    <Slider
+                      min={0}
+                      max={0.5}
+                      step={0.05}
+                      value={[pullComp]}
+                      onValueChange={([v]) => onChange({ stitch: { ...stitch, pullCompensationMm: v! } })}
+                    />
+                    <span className="w-10 shrink-0 text-xs text-muted-foreground">0.5mm</span>
+                  </div>
+                  <div className="text-center text-sm font-semibold text-primary">{pullComp.toFixed(2)} mm</div>
+                </div>
+              </>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Underlay e compensação só se aplicam a preenchimentos (cetim/tatami).
+              </p>
+            )}
+          </CollapsibleContent>
+        </Collapsible>
+
+        <Button variant="outline" className="text-destructive hover:text-destructive" onClick={onDelete}>
+          <Trash2 /> Remover área
+        </Button>
+      </SidebarGroupContent>
+    </SidebarGroup>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  panel: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 12,
-    padding: "16px",
-    overflowY: "auto",
-    flex: 1,
-  },
-  sectionTitle: {
-    fontSize: 11,
-    fontWeight: 700,
-    textTransform: "uppercase",
-    letterSpacing: "0.08em",
-    color: "#6b6b6b",
-    marginTop: 4,
-  },
-  stitchList: { display: "flex", flexDirection: "column", gap: 6 },
-  stitchBtn: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "flex-start",
-    padding: "10px 12px",
-    borderRadius: 8,
-    border: "1.5px solid #e2e0db",
-    background: "#fff",
-    cursor: "pointer",
-    textAlign: "left",
-    transition: "all 0.12s",
-  },
-  stitchBtnActive: {
-    borderColor: "#7c5cbf",
-    background: "#f5f0ff",
-  },
-  stitchLabel: { fontSize: 14, fontWeight: 600, color: "#1a1a1a" },
-  stitchDesc: { fontSize: 11, color: "#6b6b6b", marginTop: 2 },
-  colorRow: { display: "flex", alignItems: "center", gap: 10 },
-  colorInput: { width: 40, height: 40, borderRadius: 8, border: "none", cursor: "pointer", padding: 0 },
-  colorHex: { fontSize: 13, color: "#6b6b6b", fontVariantNumeric: "tabular-nums" },
-  sliderRow: { display: "flex", alignItems: "center", gap: 8 },
-  sliderLabel: { fontSize: 11, color: "#6b6b6b", width: 40, flexShrink: 0 },
-  slider: { flex: 1, accentColor: "#7c5cbf" },
-  sliderValue: { fontSize: 13, color: "#7c5cbf", fontWeight: 600, textAlign: "center" },
-  advancedToggle: {
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-    fontSize: 12,
-    fontWeight: 600,
-    color: "#6b6b6b",
-    cursor: "pointer",
-    marginTop: 8,
-  },
-  advancedRow: {
-    display: "flex",
-    alignItems: "flex-start",
-    gap: 8,
-    fontSize: 13,
-    color: "#1a1a1a",
-    cursor: "pointer",
-  },
-  advancedHint: {
-    display: "block",
-    fontSize: 11,
-    color: "#6b6b6b",
-    marginTop: 2,
-  },
-  deleteBtn: {
-    marginTop: 12,
-    padding: "10px",
-    borderRadius: 8,
-    border: "1.5px solid #e2e0db",
-    background: "#fff",
-    color: "#e05252",
-    fontSize: 13,
-    fontWeight: 600,
-    cursor: "pointer",
-  },
-};

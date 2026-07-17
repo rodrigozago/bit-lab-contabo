@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Pause, Play, SkipBack, SkipForward } from "lucide-react";
 import type { StitchPattern } from "@ponto-studio/shared";
+import { cn } from "@/lib/utils.ts";
+import { Button } from "@/components/ui/button.tsx";
+import { Slider } from "@/components/ui/slider.tsx";
 
 interface Props {
   pattern: StitchPattern;
@@ -154,85 +158,68 @@ export function StitchPlayer({ pattern }: Props) {
   }
 
   return (
-    <div style={s.wrap}>
+    <div className="flex flex-col gap-2.5">
       <canvas
         ref={canvasRef}
         width={Math.round(canvasSize.w * dpr)}
         height={Math.round(canvasSize.h * dpr)}
-        style={s.canvas}
+        className="h-[220px] w-full rounded-lg border bg-muted/40"
       />
 
-      <div style={s.stats}>
+      <div className="text-center text-xs text-muted-foreground">
         {Math.min(Math.floor(index), total)} / {total} pontos · {pattern.stats.colorCount} cores
       </div>
 
-      <input
-        type="range"
+      <Slider
         min={0}
         max={total}
         step={1}
-        value={Math.floor(index)}
-        onChange={(e) => {
+        value={[Math.floor(index)]}
+        onValueChange={([v]) => {
           setPlaying(false);
-          setIndex(Number(e.target.value));
+          setIndex(v!);
         }}
-        style={s.slider}
       />
 
-      <div style={s.controls}>
-        <button style={s.iconBtn} onClick={() => jumpToColor(-1)} title="Cor anterior">
-          ◀◀
-        </button>
-        <button
-          style={{ ...s.iconBtn, ...s.playBtn }}
+      <div className="flex flex-wrap items-center justify-center gap-2">
+        <Button variant="outline" size="sm" onClick={() => jumpToColor(-1)} title="Cor anterior">
+          <SkipBack />
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="min-w-[120px] border-primary text-primary"
           onClick={() => setPlaying((p) => !p)}
           disabled={total === 0}
         >
-          {playing ? "❚❚ Pausar" : "▶ Reproduzir"}
-        </button>
-        <button style={s.iconBtn} onClick={() => jumpToColor(1)} title="Próxima cor">
-          ▶▶
-        </button>
+          {playing ? (
+            <>
+              <Pause /> Pausar
+            </>
+          ) : (
+            <>
+              <Play /> Reproduzir
+            </>
+          )}
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => jumpToColor(1)} title="Próxima cor">
+          <SkipForward />
+        </Button>
 
-        <div style={s.speedGroup}>
+        <div className="ml-2 flex gap-1">
           {SPEEDS.map((sp) => (
-            <button
+            <Button
               key={sp}
-              style={{ ...s.speedBtn, ...(speed === sp ? s.speedBtnActive : {}) }}
+              variant="outline"
+              size="sm"
+              className={cn(speed === sp && "border-primary bg-accent text-primary")}
               onClick={() => setSpeed(sp)}
             >
               {sp}×
-            </button>
+            </Button>
           ))}
         </div>
       </div>
     </div>
   );
 }
-
-const s: Record<string, React.CSSProperties> = {
-  wrap: { display: "flex", flexDirection: "column", gap: 10 },
-  canvas: {
-    width: "100%", height: 220, borderRadius: 10,
-    border: "1px solid #e2e0db", background: "#fafaf9",
-  },
-  stats: { fontSize: 12, color: "#6b6b6b", textAlign: "center" },
-  slider: { width: "100%" },
-  controls: {
-    display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap",
-    justifyContent: "center",
-  },
-  iconBtn: {
-    padding: "8px 12px", borderRadius: 8, border: "1.5px solid #e2e0db",
-    background: "#fff", fontSize: 13, cursor: "pointer",
-  },
-  playBtn: {
-    borderColor: "#7c5cbf", color: "#7c5cbf", fontWeight: 700, minWidth: 120,
-  },
-  speedGroup: { display: "flex", gap: 4, marginLeft: 8 },
-  speedBtn: {
-    padding: "6px 9px", borderRadius: 6, border: "1.5px solid #e2e0db",
-    background: "#fff", fontSize: 12, cursor: "pointer", color: "#6b6b6b",
-  },
-  speedBtnActive: { borderColor: "#7c5cbf", color: "#7c5cbf", background: "#f5f0ff", fontWeight: 700 },
-};

@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
+import { Trash2 } from "lucide-react";
 import type { Hoop } from "@ponto-studio/shared";
 import { api } from "../api/client.ts";
+import { cn } from "@/lib/utils.ts";
+import { Button } from "@/components/ui/button.tsx";
+import { Card, CardContent } from "@/components/ui/card.tsx";
+import { Input } from "@/components/ui/input.tsx";
+import { Label } from "@/components/ui/label.tsx";
+import { Badge } from "@/components/ui/badge.tsx";
 
 interface Props {
   onStart: (projectId: string) => void;
@@ -91,284 +98,154 @@ export function Welcome({ onStart, onCancel }: Props) {
 
   function hoopOption(hoop: Hoop, isCustom: boolean) {
     return (
-      <div key={hoop.id} style={styles.hoopRow}>
+      <div key={hoop.id} className="flex items-stretch gap-1.5">
         <button
-          style={{
-            ...styles.hoopBtn,
-            ...(hoop.id === selectedHoopId ? styles.hoopBtnActive : {}),
-          }}
+          type="button"
+          className={cn(
+            "flex flex-1 items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-sm transition-colors",
+            hoop.id === selectedHoopId
+              ? "border-primary bg-accent font-semibold text-primary"
+              : "border-input bg-background hover:bg-accent/50"
+          )}
           onClick={() => setSelectedHoopId(hoop.id)}
         >
-          <span style={styles.hoopName}>
-            {isCustom && <span style={styles.customBadge}>meu</span>}
-            {hoop.name}
+          <span className="flex min-w-0 items-center gap-1.5">
+            {isCustom && (
+              <Badge className="shrink-0 bg-primary px-1.5 py-0 text-[9px] uppercase">meu</Badge>
+            )}
+            <span className="truncate">{hoop.name}</span>
           </span>
-          <span style={styles.hoopSize}>
+          <span className="shrink-0 tabular-nums text-xs text-muted-foreground">
             {Math.round(hoop.widthMm)} × {Math.round(hoop.heightMm)} mm
           </span>
         </button>
         {isCustom && (
-          <button
-            style={styles.hoopDeleteBtn}
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-auto w-9 shrink-0"
             title="Deletar bastidor"
             onClick={() => void handleDeleteHoop(hoop.id)}
           >
-            🗑
-          </button>
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
         )}
       </div>
     );
   }
 
   return (
-    <div style={styles.page}>
-      <div style={styles.card}>
-        {onCancel && (
-          <button style={styles.backLink} onClick={onCancel}>
-            ← Voltar
-          </button>
-        )}
-        <div style={styles.logo}>🪡</div>
-        <h1 style={styles.title}>Ponto Studio</h1>
-        <p style={styles.subtitle}>Digitalize seus bordados</p>
-
-        <div style={styles.field}>
-          <label style={styles.label}>Nome do projeto</label>
-          <input
-            style={styles.input}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Ex: Floral Primavera"
-          />
-        </div>
-
-        <div style={styles.field}>
-          <label style={styles.label}>Bastidor</label>
-          {hoopsLoading ? (
-            <p style={styles.hoopHint}>Carregando bastidores…</p>
-          ) : (
-            <div style={styles.hoopList}>
-              {customHoops.map((h) => hoopOption(h, true))}
-              {defaultHoops.map((h) => hoopOption(h, false))}
-            </div>
+    <div className="flex flex-1 items-center justify-center p-6 md:p-10">
+      <Card className="w-full max-w-lg">
+        <CardContent className="flex flex-col gap-5 p-6 md:p-8">
+          {onCancel && (
+            <Button
+              type="button"
+              variant="link"
+              className="h-auto self-start p-0 text-sm"
+              onClick={onCancel}
+            >
+              ← Voltar
+            </Button>
           )}
 
-          {!showHoopForm ? (
-            <button style={styles.addHoopBtn} onClick={() => setShowHoopForm(true)}>
-              ＋ Bastidor customizado
-            </button>
-          ) : (
-            <div style={styles.hoopForm}>
-              <input
-                style={styles.input}
-                value={hoopName}
-                onChange={(e) => setHoopName(e.target.value)}
-                placeholder="Nome (ex: Meu bastidor 15cm)"
-              />
-              <div style={styles.hoopFormRow}>
-                <input
-                  style={{ ...styles.input, flex: 1 }}
-                  type="number"
-                  min={10}
-                  max={600}
-                  value={hoopW}
-                  onChange={(e) => setHoopW(e.target.value)}
-                  placeholder="Largura mm"
-                />
-                <span style={styles.hoopX}>×</span>
-                <input
-                  style={{ ...styles.input, flex: 1 }}
-                  type="number"
-                  min={10}
-                  max={600}
-                  value={hoopH}
-                  onChange={(e) => setHoopH(e.target.value)}
-                  placeholder="Altura mm"
-                />
-                <span style={styles.hoopHint}>mm</span>
-              </div>
-              <div style={styles.hoopFormActions}>
-                <button style={styles.hoopFormCancel} onClick={() => setShowHoopForm(false)}>
-                  Cancelar
-                </button>
-                <button
-                  style={styles.hoopFormSave}
-                  onClick={() => void handleCreateHoop()}
-                  disabled={hoopSaving || !hoopName.trim()}
-                >
-                  {hoopSaving ? "Salvando…" : "Salvar bastidor"}
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
+          <div className="flex flex-col items-center gap-1 text-center">
+            <span className="text-3xl">🪡</span>
+            <h1 className="text-xl font-bold">Novo projeto</h1>
+            <p className="text-sm font-semibold text-primary">Digitalize seus bordados</p>
+          </div>
 
-        <button
-          style={styles.cta}
-          onClick={() => void handleCreate()}
-          disabled={!name.trim() || !selectedHoop || loading}
-        >
-          {loading ? "Criando…" : "Criar projeto →"}
-        </button>
-        {error && <p style={styles.errorMsg}>{error}</p>}
-      </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="project-name" className="uppercase tracking-wide text-muted-foreground">
+              Nome do projeto
+            </Label>
+            <Input
+              id="project-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Ex: Floral Primavera"
+            />
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <Label className="uppercase tracking-wide text-muted-foreground">Bastidor</Label>
+            {hoopsLoading ? (
+              <p className="text-sm text-muted-foreground">Carregando bastidores…</p>
+            ) : (
+              <div className="flex max-h-60 flex-col gap-1.5 overflow-y-auto pr-1">
+                {customHoops.map((h) => hoopOption(h, true))}
+                {defaultHoops.map((h) => hoopOption(h, false))}
+              </div>
+            )}
+
+            {!showHoopForm ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="mt-1 self-start border-dashed text-primary"
+                onClick={() => setShowHoopForm(true)}
+              >
+                ＋ Bastidor customizado
+              </Button>
+            ) : (
+              <Card className="mt-1 bg-muted/40">
+                <CardContent className="flex flex-col gap-2 p-3">
+                  <Input
+                    value={hoopName}
+                    onChange={(e) => setHoopName(e.target.value)}
+                    placeholder="Nome (ex: Meu bastidor 15cm)"
+                  />
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      className="flex-1"
+                      min={10}
+                      max={600}
+                      value={hoopW}
+                      onChange={(e) => setHoopW(e.target.value)}
+                      placeholder="Largura mm"
+                    />
+                    <span className="text-sm text-muted-foreground">×</span>
+                    <Input
+                      type="number"
+                      className="flex-1"
+                      min={10}
+                      max={600}
+                      value={hoopH}
+                      onChange={(e) => setHoopH(e.target.value)}
+                      placeholder="Altura mm"
+                    />
+                    <span className="shrink-0 text-xs text-muted-foreground">mm</span>
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button type="button" variant="outline" size="sm" onClick={() => setShowHoopForm(false)}>
+                      Cancelar
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => void handleCreateHoop()}
+                      disabled={hoopSaving || !hoopName.trim()}
+                    >
+                      {hoopSaving ? "Salvando…" : "Salvar bastidor"}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+
+          <Button
+            size="lg"
+            onClick={() => void handleCreate()}
+            disabled={!name.trim() || !selectedHoop || loading}
+          >
+            {loading ? "Criando…" : "Criar projeto →"}
+          </Button>
+          {error && <p className="text-center text-sm text-destructive">{error}</p>}
+        </CardContent>
+      </Card>
     </div>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  page: {
-    minHeight: "100vh",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    background: "linear-gradient(135deg, #f5f0ff 0%, #f5f4f0 100%)",
-    padding: "24px 0",
-  },
-  card: {
-    background: "#fff",
-    borderRadius: 16,
-    padding: "40px 48px",
-    width: 460,
-    boxShadow: "0 8px 32px rgba(124,92,191,0.12)",
-    display: "flex",
-    flexDirection: "column",
-    gap: 20,
-    maxHeight: "92vh",
-    overflowY: "auto",
-  },
-  backLink: {
-    alignSelf: "flex-start",
-    background: "none",
-    border: "none",
-    padding: 0,
-    fontSize: 13,
-    fontWeight: 600,
-    color: "#7c5cbf",
-    cursor: "pointer",
-  },
-  logo: { fontSize: 40, textAlign: "center" },
-  title: { fontSize: 28, fontWeight: 700, textAlign: "center", color: "#1a1a1a" },
-  subtitle: { fontSize: 14, textAlign: "center", color: "#7c5cbf", marginTop: -14 },
-  field: { display: "flex", flexDirection: "column", gap: 8 },
-  label: { fontSize: 13, fontWeight: 600, color: "#6b6b6b", textTransform: "uppercase", letterSpacing: "0.05em" },
-  input: {
-    border: "1.5px solid #e2e0db",
-    borderRadius: 8,
-    padding: "10px 14px",
-    fontSize: 15,
-    outline: "none",
-    transition: "border-color 0.15s",
-    fontFamily: "inherit",
-  },
-  hoopList: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 6,
-    maxHeight: 240,
-    overflowY: "auto",
-    paddingRight: 4,
-  },
-  hoopRow: { display: "flex", alignItems: "stretch", gap: 6 },
-  hoopBtn: {
-    flex: 1,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-    padding: "9px 12px",
-    borderRadius: 8,
-    border: "1.5px solid #e2e0db",
-    background: "#fff",
-    fontSize: 13,
-    cursor: "pointer",
-    transition: "all 0.15s",
-    color: "#1a1a1a",
-    textAlign: "left",
-  },
-  hoopBtnActive: {
-    borderColor: "#7c5cbf",
-    background: "#f5f0ff",
-    color: "#7c5cbf",
-    fontWeight: 600,
-  },
-  hoopName: { display: "flex", alignItems: "center", gap: 6, minWidth: 0 },
-  hoopSize: { fontSize: 12, color: "#6b6b6b", flexShrink: 0, fontVariantNumeric: "tabular-nums" },
-  customBadge: {
-    fontSize: 9,
-    fontWeight: 700,
-    textTransform: "uppercase",
-    color: "#fff",
-    background: "#7c5cbf",
-    borderRadius: 4,
-    padding: "1px 5px",
-    flexShrink: 0,
-  },
-  hoopDeleteBtn: {
-    border: "1.5px solid #e2e0db",
-    borderRadius: 8,
-    background: "#fff",
-    cursor: "pointer",
-    fontSize: 12,
-    padding: "0 8px",
-    opacity: 0.7,
-  },
-  addHoopBtn: {
-    marginTop: 4,
-    padding: "8px 12px",
-    borderRadius: 8,
-    border: "1.5px dashed #c9c2e8",
-    background: "#faf8ff",
-    color: "#7c5cbf",
-    fontSize: 13,
-    fontWeight: 600,
-    cursor: "pointer",
-  },
-  hoopForm: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 8,
-    padding: "12px",
-    borderRadius: 10,
-    border: "1.5px solid #e2e0db",
-    background: "#fafaf9",
-    marginTop: 4,
-  },
-  hoopFormRow: { display: "flex", alignItems: "center", gap: 8 },
-  hoopX: { fontSize: 14, color: "#6b6b6b" },
-  hoopHint: { fontSize: 12, color: "#6b6b6b" },
-  hoopFormActions: { display: "flex", justifyContent: "flex-end", gap: 8 },
-  hoopFormCancel: {
-    padding: "7px 12px",
-    borderRadius: 8,
-    border: "1.5px solid #e2e0db",
-    background: "#fff",
-    fontSize: 12,
-    cursor: "pointer",
-  },
-  hoopFormSave: {
-    padding: "7px 14px",
-    borderRadius: 8,
-    border: "none",
-    background: "#7c5cbf",
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: 700,
-    cursor: "pointer",
-  },
-  cta: {
-    background: "#7c5cbf",
-    color: "#fff",
-    borderRadius: 10,
-    padding: "14px",
-    fontSize: 16,
-    fontWeight: 700,
-    marginTop: 4,
-    transition: "background 0.15s",
-  },
-  errorMsg: {
-    fontSize: 13,
-    color: "#e05252",
-    textAlign: "center" as const,
-  },
-};

@@ -1,4 +1,6 @@
 import type { CanvasSize, StitchPattern } from "@ponto-studio/shared";
+import { cn } from "@/lib/utils.ts";
+import { Card, CardContent } from "@/components/ui/card.tsx";
 
 interface Props {
   pattern: StitchPattern | null;
@@ -49,9 +51,11 @@ export function exceedsHoop(
 export function EstimateSummary({ pattern, canvas }: Props) {
   if (!pattern) {
     return (
-      <div style={styles.container}>
-        <div style={styles.loading}>Carregando estimativas...</div>
-      </div>
+      <Card className="bg-muted/40">
+        <CardContent className="p-3.5 text-center text-sm text-muted-foreground">
+          Carregando estimativas...
+        </CardContent>
+      </Card>
     );
   }
 
@@ -64,97 +68,40 @@ export function EstimateSummary({ pattern, canvas }: Props) {
     : formatDimensions(canvas);
 
   return (
-    <div style={styles.container}>
-      <h3 style={styles.title}>🧵 Estimativas</h3>
-      <div style={styles.grid}>
-        <div style={styles.item}>
-          <div style={styles.icon}>🪡</div>
-          <div style={styles.value}>{totalStitches.toLocaleString("pt-BR")}</div>
-          <div style={styles.label}>pontos</div>
+    <Card className="bg-muted/40">
+      <CardContent className="flex flex-col gap-2.5 p-3.5">
+        <h3 className="text-xs font-bold uppercase tracking-wide">🧵 Estimativas</h3>
+        <div className="grid grid-cols-3 gap-3">
+          <div className="flex flex-col items-center gap-1 rounded-md border bg-background p-2">
+            <span className="text-lg leading-none">🪡</span>
+            <span className="text-[15px] font-bold">{totalStitches.toLocaleString("pt-BR")}</span>
+            <span className="text-center text-[11px] text-muted-foreground">pontos</span>
+          </div>
+          <div className="flex flex-col items-center gap-1 rounded-md border bg-background p-2">
+            <span className="text-lg leading-none">🔄</span>
+            <span className="text-[15px] font-bold">{colorChanges}</span>
+            <span className="text-center text-[11px] text-muted-foreground">trocas de cor</span>
+          </div>
+          <div
+            className={cn(
+              "flex flex-col items-center gap-1 rounded-md border bg-background p-2",
+              overflow && "border-destructive bg-destructive/5"
+            )}
+          >
+            <span className="text-lg leading-none">📐</span>
+            <span className="text-[15px] font-bold">{designSize}</span>
+            <span className="text-center text-[11px] text-muted-foreground">
+              desenho (bastidor {formatDimensions(canvas)})
+            </span>
+          </div>
         </div>
-        <div style={styles.item}>
-          <div style={styles.icon}>🔄</div>
-          <div style={styles.value}>{colorChanges}</div>
-          <div style={styles.label}>trocas de cor</div>
-        </div>
-        <div style={{ ...styles.item, ...(overflow ? styles.itemOverflow : {}) }}>
-          <div style={styles.icon}>📐</div>
-          <div style={styles.value}>{designSize}</div>
-          <div style={styles.label}>desenho (bastidor {formatDimensions(canvas)})</div>
-        </div>
-      </div>
-      {overflow && bounds && (
-        <div style={styles.overflowWarning}>
-          ⚠ O desenho ({Math.ceil(bounds.widthMm)} × {Math.ceil(bounds.heightMm)} mm) extrapola o
-          bastidor ({formatDimensions(canvas)}) — a máquina pode recusar ou cortar o bordado.
-        </div>
-      )}
-    </div>
+        {overflow && bounds && (
+          <div className="rounded-md border border-destructive/30 bg-destructive/10 p-2.5 text-xs leading-relaxed text-destructive">
+            ⚠ O desenho ({Math.ceil(bounds.widthMm)} × {Math.ceil(bounds.heightMm)} mm) extrapola o
+            bastidor ({formatDimensions(canvas)}) — a máquina pode recusar ou cortar o bordado.
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    background: "#f9f8f6",
-    borderRadius: 12,
-    padding: "14px 16px",
-    display: "flex",
-    flexDirection: "column",
-    gap: 10,
-  },
-  title: {
-    fontSize: 13,
-    fontWeight: 700,
-    color: "#1a1a1a",
-    margin: 0,
-    textTransform: "uppercase",
-    letterSpacing: "0.05em",
-  },
-  loading: {
-    fontSize: 13,
-    color: "#6b6b6b",
-    textAlign: "center",
-    padding: "8px 0",
-  },
-  grid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(3, 1fr)",
-    gap: 12,
-  },
-  item: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    gap: 4,
-    padding: "8px",
-    borderRadius: 8,
-    background: "#fff",
-    border: "1px solid #e2e0db",
-  },
-  itemOverflow: {
-    border: "1.5px solid #e05252",
-    background: "#fff5f5",
-  },
-  overflowWarning: {
-    fontSize: 12,
-    color: "#c03030",
-    background: "#fff0f0",
-    border: "1px solid #f0c0c0",
-    borderRadius: 8,
-    padding: "8px 12px",
-    lineHeight: 1.4,
-  },
-  icon: {
-    fontSize: 18,
-  },
-  value: {
-    fontSize: 15,
-    fontWeight: 700,
-    color: "#1a1a1a",
-  },
-  label: {
-    fontSize: 11,
-    color: "#6b6b6b",
-    textAlign: "center",
-  },
-};

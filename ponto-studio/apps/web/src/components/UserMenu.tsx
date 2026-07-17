@@ -1,9 +1,20 @@
-import { useState } from "react";
+import { LogOut, User } from "lucide-react";
 import { useAuth } from "../lib/auth.ts";
+import { useToast } from "./Toast.tsx";
+import { Button } from "@/components/ui/button.tsx";
+import { Badge } from "@/components/ui/badge.tsx";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu.tsx";
 
 export function UserMenu() {
   const { me } = useAuth();
-  const [isOpen, setIsOpen] = useState(false);
+  const toast = useToast();
 
   async function handleLogout() {
     try {
@@ -15,8 +26,8 @@ export function UserMenu() {
       } else {
         window.location.href = "/";
       }
-    } catch (err) {
-      alert("Erro ao fazer logout");
+    } catch {
+      toast.error("Erro ao fazer logout");
     }
   }
 
@@ -26,105 +37,24 @@ export function UserMenu() {
   const displayName = email.split("@")[0];
 
   return (
-    <div style={styles.container}>
-      <button
-        style={styles.userBtn}
-        onClick={() => setIsOpen(!isOpen)}
-        title={email}
-      >
-        👤 {displayName}
-      </button>
-      {isOpen && (
-        <>
-          <div style={styles.overlay} onClick={() => setIsOpen(false)} />
-          <div style={styles.dropdown}>
-            <div style={styles.dropdownHeader}>
-              <div style={styles.userInfo}>
-                <div style={styles.userEmail}>{email}</div>
-                {me.isAdmin && <div style={styles.adminBadge}>Admin</div>}
-              </div>
-            </div>
-            <button style={styles.logoutOption} onClick={handleLogout}>
-              🚪 Sair da conta
-            </button>
-          </div>
-        </>
-      )}
-    </div>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" className="gap-2 border-input bg-accent text-accent-foreground">
+          <User className="h-4 w-4" />
+          {displayName}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-[200px]">
+        <DropdownMenuLabel className="flex flex-col gap-1.5 font-normal">
+          <span className="break-words text-xs text-muted-foreground">{email}</span>
+          {me.isAdmin && <Badge className="w-fit bg-primary text-[10px] uppercase">Admin</Badge>}
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => void handleLogout()}>
+          <LogOut className="h-4 w-4" />
+          Sair da conta
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    position: "relative",
-  },
-  userBtn: {
-    background: "#f5f0ff",
-    color: "#7c5cbf",
-    border: "1.5px solid #e2e0db",
-    borderRadius: 10,
-    padding: "10px 16px",
-    fontSize: 13,
-    fontWeight: 600,
-    cursor: "pointer",
-    transition: "all 0.15s",
-  },
-  overlay: {
-    position: "fixed",
-    inset: 0,
-    zIndex: 99,
-  },
-  dropdown: {
-    position: "absolute",
-    top: "100%",
-    right: 0,
-    marginTop: 8,
-    background: "#fff",
-    borderRadius: 10,
-    border: "1.5px solid #e2e0db",
-    boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-    minWidth: 200,
-    zIndex: 100,
-    overflow: "hidden",
-  },
-  dropdownHeader: {
-    padding: "12px 14px",
-    borderBottom: "1px solid #e2e0db",
-    background: "#fafaf9",
-  },
-  userInfo: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 6,
-  },
-  userEmail: {
-    fontSize: 12,
-    color: "#6b6b6b",
-    wordBreak: "break-word",
-  },
-  adminBadge: {
-    display: "inline-block",
-    fontSize: 10,
-    fontWeight: 700,
-    color: "#fff",
-    background: "#7c5cbf",
-    padding: "2px 8px",
-    borderRadius: 4,
-    textTransform: "uppercase",
-    letterSpacing: "0.05em",
-    width: "fit-content",
-  },
-  logoutOption: {
-    display: "block",
-    width: "100%",
-    padding: "12px 14px",
-    background: "none",
-    border: "none",
-    fontSize: 13,
-    fontWeight: 600,
-    color: "#d97a7a",
-    cursor: "pointer",
-    textAlign: "left",
-    transition: "background 0.15s",
-  },
-};

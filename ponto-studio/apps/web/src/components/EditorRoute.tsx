@@ -3,6 +3,9 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import type { EmbroideryProject } from "@ponto-studio/shared";
 import { api } from "../api/client.ts";
 import { Editor } from "./Editor.tsx";
+import { Card, CardContent } from "@/components/ui/card.tsx";
+import { Skeleton } from "@/components/ui/skeleton.tsx";
+import { Button } from "@/components/ui/button.tsx";
 
 export function EditorRoute() {
   const { id } = useParams<{ id: string }>();
@@ -29,23 +32,25 @@ export function EditorRoute() {
 
   if (error) {
     return (
-      <div style={styles.page}>
-        <div style={styles.card}>
-          <p style={styles.body}>Projeto não encontrado.</p>
-          <Link to="/" style={styles.link}>
-            ← Meus projetos
-          </Link>
-        </div>
+      <div className="flex min-h-svh items-center justify-center bg-muted">
+        <Card>
+          <CardContent className="flex flex-col items-center gap-3 p-10 text-center">
+            <p className="text-sm text-muted-foreground">Projeto não encontrado.</p>
+            <Button variant="link" asChild className="h-auto p-0">
+              <Link to="/">← Meus projetos</Link>
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   if (!project) {
     return (
-      <div style={styles.page}>
-        <div style={styles.loadingBox}>
-          <div style={styles.spinner} />
-          <span style={styles.loadingText}>Carregando projeto…</span>
+      <div className="flex min-h-svh items-center justify-center bg-muted">
+        <div className="flex flex-col items-center gap-3">
+          <Skeleton className="h-9 w-9 rounded-full" />
+          <span className="text-sm text-muted-foreground">Carregando projeto…</span>
         </div>
       </div>
     );
@@ -55,31 +60,3 @@ export function EditorRoute() {
     <Editor project={project} onProjectChange={handleProjectChange} onBackToHome={() => navigate("/")} />
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  page: {
-    height: "100vh",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    background: "linear-gradient(135deg, #f5f0ff 0%, #f5f4f0 100%)",
-  },
-  card: {
-    background: "#fff",
-    borderRadius: 16,
-    padding: "40px 48px",
-    display: "flex",
-    flexDirection: "column",
-    gap: 12,
-    textAlign: "center",
-  },
-  body: { fontSize: 14, color: "#6b6b6b", margin: 0 },
-  link: { fontSize: 14, fontWeight: 600, color: "#7c5cbf" },
-  loadingBox: { display: "flex", flexDirection: "column", alignItems: "center", gap: 12 },
-  loadingText: { fontSize: 14, color: "#6b6b6b" },
-  spinner: {
-    width: 36, height: 36, border: "4px solid #e2e0db",
-    borderTop: "4px solid #7c5cbf", borderRadius: "50%",
-    animation: "spin 0.8s linear infinite",
-  },
-};
