@@ -5,13 +5,10 @@ import type { EmbroideryProject } from "@ponto-studio/shared";
 import { api } from "../api/client.ts";
 import { composeThumbnail } from "../utils/svgLayers.ts";
 import { Welcome } from "./Welcome.tsx";
-import { UserMenu } from "./UserMenu.tsx";
 import { useToast } from "./Toast.tsx";
-import { AppSidebar } from "@/components/ui/app-sidebar.tsx";
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar.tsx";
-import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable.tsx";
-import { Button } from "@/components/ui/button.tsx";
-import { Card } from "@/components/ui/card.tsx";
+import { BaseLayout } from "@/components/layouts/base-layout";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 export function Home() {
   const navigate = useNavigate();
@@ -34,49 +31,47 @@ export function Home() {
     void load();
   }, [load]);
 
+  if (projects === null) {
+    return (
+      <BaseLayout>
+        <div className="flex flex-1 items-center justify-center py-24">
+          <span className="text-3xl">🪡</span>
+        </div>
+      </BaseLayout>
+    );
+  }
+
+  if (creating) {
+    return (
+      <BaseLayout>
+        <Welcome
+          onStart={(projectId) => navigate(`/projects/${projectId}`)}
+          onCancel={projects.length > 0 ? () => setCreating(false) : undefined}
+        />
+      </BaseLayout>
+    );
+  }
+
   return (
-    <SidebarProvider>
-      <ResizablePanelGroup direction="horizontal" autoSaveId="ponto-studio-home-layout" className="min-h-svh">
-        <ResizablePanel defaultSize={18} minSize={14} maxSize={30}>
-          <AppSidebar />
-        </ResizablePanel>
-        <ResizableHandle withHandle />
-        <ResizablePanel defaultSize={82}>
-          <SidebarInset>
-            {projects === null ? (
-              <div className="flex flex-1 items-center justify-center">
-                <span className="text-3xl">🪡</span>
-              </div>
-            ) : creating ? (
-              <Welcome
-                onStart={(projectId) => navigate(`/projects/${projectId}`)}
-                onCancel={projects.length > 0 ? () => setCreating(false) : undefined}
-              />
-            ) : (
-              <div className="flex flex-1 flex-col gap-6 p-6 md:p-8">
-                <header className="flex items-center justify-between">
-                  <h1 className="text-2xl font-bold">Meus projetos</h1>
-                  <div className="flex items-center gap-3">
-                    <Button onClick={() => setCreating(true)}>
-                      <Plus /> Novo projeto
-                    </Button>
-                    <UserMenu />
-                  </div>
-                </header>
+    <BaseLayout
+      title="Meus projetos"
+      description="Seus bordados digitalizados, prontos pra editar e exportar."
+      headerActions={
+        <Button size="sm" onClick={() => setCreating(true)}>
+          <Plus /> Novo projeto
+        </Button>
+      }
+    >
+      <div className="flex flex-col gap-4 px-4 lg:px-6">
+        {error && <p className="text-sm text-destructive">{error}</p>}
 
-                {error && <p className="text-sm text-destructive">{error}</p>}
-
-                <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-4">
-                  {projects.map((project) => (
-                    <ProjectCard key={project.id} project={project} />
-                  ))}
-                </div>
-              </div>
-            )}
-          </SidebarInset>
-        </ResizablePanel>
-      </ResizablePanelGroup>
-    </SidebarProvider>
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-4">
+          {projects.map((project) => (
+            <ProjectCard key={project.id} project={project} />
+          ))}
+        </div>
+      </div>
+    </BaseLayout>
   );
 }
 
@@ -118,7 +113,7 @@ function ProjectCard({ project }: { project: EmbroideryProject }) {
       <Button
         variant="secondary"
         size="icon"
-        className="absolute right-2 top-2 h-8 w-8 bg-white/90 opacity-70 shadow-sm hover:opacity-100"
+        className="absolute right-2 top-2 h-8 w-8 opacity-70 shadow-sm hover:opacity-100"
         onClick={handleDelete}
         disabled={deleting}
         title="Deletar projeto"

@@ -222,7 +222,7 @@ export function ExportModal({ projectId, canvas, onClose }: Props) {
         {/* Done state */}
         {step === "done" && job?.downloadUrl && (
           <div className="flex flex-col items-center gap-3 py-5">
-            <CheckCircle2 className="h-12 w-12 text-green-600" />
+            <CheckCircle2 className="h-12 w-12 text-green-600 dark:text-green-500" />
             <p className="text-lg font-bold">Pronto!</p>
             <Button asChild size="lg">
               <a href={job.downloadUrl} download={downloadName ?? true}>

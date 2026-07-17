@@ -406,7 +406,7 @@ export function ImportModal({ onClose, onConfirm }: Props) {
           {screen === "preview" && result && (
             <>
               {fromCache && (
-                <div className="mb-4 rounded-md border border-green-200 bg-green-50 px-3.5 py-2 text-sm text-green-700">
+                <div className="mb-4 rounded-md border border-green-200 bg-green-50 px-3.5 py-2 text-sm text-green-700 dark:border-green-900 dark:bg-green-950 dark:text-green-400">
                   ⚡ Resultado do cache local — nenhuma chamada à IA foi feita
                 </div>
               )}

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect, useMemo } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo, type CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Tldraw,
@@ -17,7 +17,7 @@ import {
 } from "@tldraw/tldraw";
 import "@tldraw/tldraw/tldraw.css";
 import type { ImperativePanelHandle } from "react-resizable-panels";
-import { ImageUp, Type as TypeIcon, Download, History as HistoryIcon, Trash2, PanelLeft, PanelRight } from "lucide-react";
+import { ImageUp, Type as TypeIcon, Download, History as HistoryIcon, Trash2, PanelRight } from "lucide-react";
 import { HOOP_PX_PER_MM, type CanvasSize, type EmbroideryElement, type EmbroideryProject } from "@ponto-studio/shared";
 import { useProjectStore, type SaveStatus } from "../store/projectStore.ts";
 import { api } from "../api/client.ts";
@@ -29,13 +29,14 @@ import { LayersPanel } from "./LayersPanel.tsx";
 import { ExportModal } from "./ExportModal.tsx";
 import { ImportModal } from "./ImportModal.tsx";
 import { TextToolModal } from "./TextToolModal.tsx";
-import { UserMenu } from "./UserMenu.tsx";
 import { useToast } from "./Toast.tsx";
 import { HistoryModal } from "./HistoryModal.tsx";
 import type { ImportConfirmPayload } from "./ImportModal.tsx";
 import { cn } from "@/lib/utils.ts";
-import { AppSidebar } from "@/components/ui/app-sidebar.tsx";
-import { SidebarProvider, Sidebar, SidebarContent, SidebarGroup, SidebarGroupLabel, SidebarGroupContent } from "@/components/ui/sidebar.tsx";
+import { AppSidebar } from "@/components/app-sidebar";
+import { ModeToggle } from "@/components/mode-toggle";
+import { SidebarProvider, SidebarInset, SidebarTrigger, SidebarGroup, SidebarGroupLabel, SidebarGroupContent } from "@/components/ui/sidebar.tsx";
+import { Separator } from "@/components/ui/separator.tsx";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable.tsx";
 import { Button } from "@/components/ui/button.tsx";
 
@@ -159,10 +160,11 @@ const baseTldrawComponents: Omit<TLComponents, "OnTheCanvas"> = {
 interface Props {
   project: EmbroideryProject;
   onProjectChange: (p: EmbroideryProject) => Promise<void>;
-  onBackToHome: () => void;
+  /** Navegação de volta feita pela sidebar (link "Meus projetos") — prop mantida opcional por compat. */
+  onBackToHome?: () => void;
 }
 
-export function Editor({ project, onProjectChange, onBackToHome }: Props) {
+export function Editor({ project, onProjectChange }: Props) {
   const navigate = useNavigate();
   const toast = useToast();
   const [deleting, setDeleting] = useState(false);
@@ -191,15 +193,7 @@ export function Editor({ project, onProjectChange, onBackToHome }: Props) {
   // Evita reentrância no listener abaixo quando ELE MESMO chama updateShapes
   // pra propagar um resize entre os shapes de um mesmo grupo de import.
   const suppressGroupSync = useRef(false);
-  const leftPanelRef = useRef<ImperativePanelHandle>(null);
   const rightPanelRef = useRef<ImperativePanelHandle>(null);
-
-  function toggleLeftPanel() {
-    const panel = leftPanelRef.current;
-    if (!panel) return;
-    if (panel.isCollapsed()) panel.expand();
-    else panel.collapse();
-  }
 
   function toggleRightPanel() {
     const panel = rightPanelRef.current;
@@ -218,6 +212,18 @@ export function Editor({ project, onProjectChange, onBackToHome }: Props) {
 
   const handleMount = useCallback((editor: TldrawEditor) => {
     setTldrawEditor(editor);
+
+    // Centraliza a câmera no bastidor sempre que o editor monta. O painel do
+    // canvas vive num ResizablePanelGroup com autoSaveId — a largura salva no
+    // localStorage é restaurada um instante depois do primeiro paint, o que
+    // redimensiona o canvas DEPOIS do tldraw calcular a câmera inicial. Como a
+    // câmera é fixa em page-space, esse resize tardio faz o desenho "pular de
+    // lugar". Dois rAF garantem que o zoom rode após o layout assentar.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        editor.zoomToBounds(hoopPageBounds(localProject.canvas), { inset: 40 });
+      });
+    });
 
     // Shapes desenhados pelo usuário nascem na camada de bordado
     editor.getInitialMetaForShape = () => ({ layer: "embroidery" });
@@ -511,66 +517,66 @@ export function Editor({ project, onProjectChange, onBackToHome }: Props) {
   }
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden">
-      {/* ── Topbar ── */}
-      <header className="z-10 flex h-14 shrink-0 items-center justify-between border-b bg-background px-4">
-        <div className="flex items-center gap-2.5">
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={toggleLeftPanel} title="Mostrar/ocultar navegação">
-            <PanelLeft />
-          </Button>
-          <span className="text-xl leading-none">🪡</span>
-          <span className="text-base font-bold">{localProject.name}</span>
-          <SaveStatusIndicator status={saveStatus} lastSavedAt={lastSavedAt} lastError={lastError} onRetry={retrySync} />
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setShowImport(true)}>
-            <ImageUp /> Importar imagem
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setShowTextTool(true)}>
-            <TypeIcon /> Adicionar texto
-          </Button>
-          <Button size="sm" onClick={() => setShowExport(true)}>
-            <Download /> Exportar bordado
-          </Button>
-          <Button variant="secondary" size="sm" onClick={() => setShowHistory(true)} title="Histórico do projeto">
-            <HistoryIcon /> Histórico
-          </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            className="text-destructive hover:text-destructive"
-            onClick={handleDeleteProject}
-            disabled={deleting}
-            title="Deletar projeto"
-          >
-            <Trash2 /> Deletar
-          </Button>
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={toggleRightPanel} title="Mostrar/ocultar painel direito">
-            <PanelRight />
-          </Button>
-          <UserMenu />
-        </div>
-      </header>
+    <SidebarProvider
+      style={
+        {
+          "--sidebar-width": "16rem",
+          "--sidebar-width-icon": "3rem",
+          "--header-height": "calc(var(--spacing) * 14)",
+        } as CSSProperties
+      }
+      className="h-svh overflow-hidden"
+    >
+      <AppSidebar projectContext={{ name: localProject.name, canvas: localProject.canvas }} />
+      <SidebarInset className="overflow-hidden">
+        {/* ── Topbar ── */}
+        <header className="flex h-(--header-height) shrink-0 items-center gap-2 border-b">
+          <div className="flex w-full min-w-0 items-center gap-1 px-4 py-3 lg:gap-2">
+            <SidebarTrigger className="-ml-1" />
+            <Separator orientation="vertical" className="mx-2 data-[orientation=vertical]:h-4" />
+            <span className="truncate text-sm font-semibold">{localProject.name}</span>
+            <SaveStatusIndicator status={saveStatus} lastSavedAt={lastSavedAt} lastError={lastError} onRetry={retrySync} />
+            <div className="ml-auto flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => setShowImport(true)}>
+                <ImageUp /> Importar imagem
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setShowTextTool(true)}>
+                <TypeIcon /> Adicionar texto
+              </Button>
+              <Button size="sm" onClick={() => setShowExport(true)}>
+                <Download /> Exportar bordado
+              </Button>
+              <Button variant="secondary" size="sm" onClick={() => setShowHistory(true)} title="Histórico do projeto">
+                <HistoryIcon /> Histórico
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                className="text-destructive hover:text-destructive"
+                onClick={handleDeleteProject}
+                disabled={deleting}
+                title="Deletar projeto"
+              >
+                <Trash2 /> Deletar
+              </Button>
+              <Button variant="ghost" size="icon" className="size-7" onClick={toggleRightPanel} title="Mostrar/ocultar painel direito">
+                <PanelRight />
+              </Button>
+              <ModeToggle variant="ghost" />
+            </div>
+          </div>
+        </header>
 
-      {/* ── Main layout ── */}
-      <SidebarProvider className="min-h-0 flex-1">
-        <ResizablePanelGroup direction="horizontal" autoSaveId="ponto-studio-editor-layout" className="flex-1">
-          <ResizablePanel ref={leftPanelRef} defaultSize={16} minSize={12} maxSize={26} collapsible collapsedSize={4}>
-            <AppSidebar
-              projectContext={{ name: localProject.name, canvas: localProject.canvas }}
-              onNavigateHome={onBackToHome}
-            />
-          </ResizablePanel>
-          <ResizableHandle withHandle />
-          <ResizablePanel defaultSize={60} minSize={30}>
+        {/* ── Main layout: canvas | handle | painel de ferramentas ── */}
+        <ResizablePanelGroup direction="horizontal" autoSaveId="ponto-studio-editor-canvas-layout" className="min-h-0 flex-1">
+          <ResizablePanel defaultSize={76} minSize={40}>
             <div className="relative h-full">
               <Tldraw onMount={handleMount} components={tldrawComponents} />
             </div>
           </ResizablePanel>
           <ResizableHandle withHandle />
           <ResizablePanel ref={rightPanelRef} defaultSize={24} minSize={16} maxSize={34} collapsible collapsedSize={4}>
-            <Sidebar collapsible="none" className="h-full w-full border-l">
-              <SidebarContent className="gap-0">
+            <div className="flex h-full w-full flex-col overflow-y-auto border-l bg-sidebar text-sidebar-foreground">
                 <LayersPanel editor={tldrawEditor} />
                 <ShapeActionsPanel editor={tldrawEditor} selectedShapeIds={selectedShapeIds} />
 
@@ -648,43 +654,42 @@ export function Editor({ project, onProjectChange, onBackToHome }: Props) {
                     ))}
                   </SidebarGroupContent>
                 </SidebarGroup>
-              </SidebarContent>
-            </Sidebar>
+            </div>
           </ResizablePanel>
         </ResizablePanelGroup>
-      </SidebarProvider>
 
-      {showExport && (
-        <ExportModal projectId={localProject.id} canvas={localProject.canvas} onClose={() => setShowExport(false)} />
-      )}
-      {showImport && (
-        <ImportModal onClose={() => setShowImport(false)} onConfirm={handleImportConfirm} />
-      )}
-      {showTextTool && (
-        <TextToolModal
-          onClose={() => setShowTextTool(false)}
-          onConfirm={(payload) => {
-            setShowTextTool(false);
-            void handleImportConfirm(payload);
-          }}
-        />
-      )}
-      {showHistory && (
-        <HistoryModal
-          projectId={localProject.id}
-          onClose={() => setShowHistory(false)}
-          onRestored={() => navigate(0)}
-        />
-      )}
-      {importing && (
-        <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-background/55">
-          <div className="flex items-center gap-3 rounded-xl border bg-card px-5 py-4 text-sm font-semibold shadow-lg">
-            <div className="h-5 w-5 animate-spin rounded-full border-[3px] border-border border-t-primary" />
-            <span>Adicionando ao bordado…</span>
+        {showExport && (
+          <ExportModal projectId={localProject.id} canvas={localProject.canvas} onClose={() => setShowExport(false)} />
+        )}
+        {showImport && (
+          <ImportModal onClose={() => setShowImport(false)} onConfirm={handleImportConfirm} />
+        )}
+        {showTextTool && (
+          <TextToolModal
+            onClose={() => setShowTextTool(false)}
+            onConfirm={(payload) => {
+              setShowTextTool(false);
+              void handleImportConfirm(payload);
+            }}
+          />
+        )}
+        {showHistory && (
+          <HistoryModal
+            projectId={localProject.id}
+            onClose={() => setShowHistory(false)}
+            onRestored={() => navigate(0)}
+          />
+        )}
+        {importing && (
+          <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-background/55">
+            <div className="flex items-center gap-3 rounded-xl border bg-card px-5 py-4 text-sm font-semibold shadow-lg">
+              <div className="h-5 w-5 animate-spin rounded-full border-[3px] border-border border-t-primary" />
+              <span>Adicionando ao bordado…</span>
+            </div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </SidebarInset>
+    </SidebarProvider>
   );
 }
 

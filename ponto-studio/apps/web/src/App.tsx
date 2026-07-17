@@ -5,6 +5,7 @@ import { EditorRoute } from "./components/EditorRoute.tsx";
 import { api } from "./api/client.ts";
 import { AuthContext, useAuth, loginUrl, type Me } from "./lib/auth.ts";
 import { ToastProvider } from "./components/Toast.tsx";
+import { ThemeProvider } from "@/components/theme-provider";
 import { Button } from "@/components/ui/button.tsx";
 import { Card, CardContent } from "@/components/ui/card.tsx";
 import { Toaster } from "@/components/ui/sonner.tsx";
@@ -28,12 +29,14 @@ export default function App() {
   }, [refresh]);
 
   return (
-    <AuthContext.Provider value={{ me, loading: authLoading, refresh }}>
-      <ToastProvider>
-        <Toaster />
-        <AuthGate />
-      </ToastProvider>
-    </AuthContext.Provider>
+    <ThemeProvider defaultTheme="system" storageKey="vite-ui-theme">
+      <AuthContext.Provider value={{ me, loading: authLoading, refresh }}>
+        <ToastProvider>
+          <Toaster />
+          <AuthGate />
+        </ToastProvider>
+      </AuthContext.Provider>
+    </ThemeProvider>
   );
 }
 
@@ -75,10 +78,7 @@ function AuthGate() {
                   </>
                 )}
               </div>
-              <div
-                className="relative hidden md:flex md:items-center md:justify-center"
-                style={{ background: "linear-gradient(135deg, #f5f0ff 0%, #f5f4f0 100%)" }}
-              >
+              <div className="relative hidden bg-muted md:flex md:items-center md:justify-center">
                 <span className="text-8xl opacity-80">🪡</span>
               </div>
             </CardContent>
