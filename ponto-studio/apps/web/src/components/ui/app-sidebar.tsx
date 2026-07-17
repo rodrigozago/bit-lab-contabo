@@ -11,7 +11,6 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarRail,
 } from "@/components/ui/sidebar.tsx";
 
 interface ProjectContext {
@@ -27,10 +26,8 @@ interface Props extends React.ComponentProps<typeof Sidebar> {
 
 /**
  * Sidebar de navegação compartilhada entre as duas dashboards (Home e
- * Editor) — mesma composição/look-and-feel do padrão canônico do shadcn
- * (https://ui.shadcn.com/docs/components/base/sidebar): collapsible="icon",
- * SidebarRail pro toggle/resize visual, SidebarTrigger no header do
- * conteúdo (ver Home.tsx/Editor.tsx).
+ * Editor) — peça central do design system: a navegação principal é
+ * visualmente idêntica nas duas telas.
  */
 export function AppSidebar({ projectContext, onNavigateHome, ...props }: Props) {
   const location = useLocation();
@@ -38,11 +35,11 @@ export function AppSidebar({ projectContext, onNavigateHome, ...props }: Props) 
   const goHome = onNavigateHome ?? (() => navigate("/"));
 
   return (
-    <Sidebar collapsible="icon" {...props}>
+    <Sidebar collapsible="none" className="h-full w-full border-r-0" {...props}>
       <SidebarHeader>
         <div className="flex items-center gap-2 px-2 py-1.5">
           <span className="text-2xl leading-none">🪡</span>
-          <span className="text-sm font-bold group-data-[collapsible=icon]:hidden">Ponto Studio</span>
+          <span className="text-sm font-bold">Ponto Studio</span>
         </div>
       </SidebarHeader>
       <SidebarContent>
@@ -51,11 +48,7 @@ export function AppSidebar({ projectContext, onNavigateHome, ...props }: Props) 
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton
-                  onClick={goHome}
-                  isActive={location.pathname === "/"}
-                  tooltip="Meus projetos"
-                >
+                <SidebarMenuButton onClick={goHome} isActive={location.pathname === "/"}>
                   <FolderKanban />
                   <span>Meus projetos</span>
                 </SidebarMenuButton>
@@ -65,7 +58,7 @@ export function AppSidebar({ projectContext, onNavigateHome, ...props }: Props) 
         </SidebarGroup>
 
         {projectContext && (
-          <SidebarGroup className="group-data-[collapsible=icon]:hidden">
+          <SidebarGroup>
             <SidebarGroupLabel>Projeto</SidebarGroupLabel>
             <SidebarGroupContent className="px-2 text-sm">
               <p className="truncate font-medium text-sidebar-foreground">{projectContext.name}</p>
@@ -76,7 +69,6 @@ export function AppSidebar({ projectContext, onNavigateHome, ...props }: Props) 
           </SidebarGroup>
         )}
       </SidebarContent>
-      <SidebarRail />
     </Sidebar>
   );
 }

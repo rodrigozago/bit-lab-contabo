@@ -8,7 +8,8 @@ import { Welcome } from "./Welcome.tsx";
 import { UserMenu } from "./UserMenu.tsx";
 import { useToast } from "./Toast.tsx";
 import { AppSidebar } from "@/components/ui/app-sidebar.tsx";
-import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar.tsx";
+import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar.tsx";
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Card } from "@/components/ui/card.tsx";
 
@@ -35,42 +36,46 @@ export function Home() {
 
   return (
     <SidebarProvider>
-      <AppSidebar />
-      <SidebarInset>
-        {projects === null ? (
-          <div className="flex flex-1 items-center justify-center">
-            <span className="text-3xl">🪡</span>
-          </div>
-        ) : creating ? (
-          <Welcome
-            onStart={(projectId) => navigate(`/projects/${projectId}`)}
-            onCancel={projects.length > 0 ? () => setCreating(false) : undefined}
-          />
-        ) : (
-          <div className="flex flex-1 flex-col gap-6 p-6 md:p-8">
-            <header className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <SidebarTrigger />
-                <h1 className="text-2xl font-bold">Meus projetos</h1>
+      <ResizablePanelGroup direction="horizontal" autoSaveId="ponto-studio-home-layout" className="min-h-svh">
+        <ResizablePanel defaultSize={18} minSize={14} maxSize={30}>
+          <AppSidebar />
+        </ResizablePanel>
+        <ResizableHandle withHandle />
+        <ResizablePanel defaultSize={82}>
+          <SidebarInset>
+            {projects === null ? (
+              <div className="flex flex-1 items-center justify-center">
+                <span className="text-3xl">🪡</span>
               </div>
-              <div className="flex items-center gap-3">
-                <Button onClick={() => setCreating(true)}>
-                  <Plus /> Novo projeto
-                </Button>
-                <UserMenu />
+            ) : creating ? (
+              <Welcome
+                onStart={(projectId) => navigate(`/projects/${projectId}`)}
+                onCancel={projects.length > 0 ? () => setCreating(false) : undefined}
+              />
+            ) : (
+              <div className="flex flex-1 flex-col gap-6 p-6 md:p-8">
+                <header className="flex items-center justify-between">
+                  <h1 className="text-2xl font-bold">Meus projetos</h1>
+                  <div className="flex items-center gap-3">
+                    <Button onClick={() => setCreating(true)}>
+                      <Plus /> Novo projeto
+                    </Button>
+                    <UserMenu />
+                  </div>
+                </header>
+
+                {error && <p className="text-sm text-destructive">{error}</p>}
+
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-4">
+                  {projects.map((project) => (
+                    <ProjectCard key={project.id} project={project} />
+                  ))}
+                </div>
               </div>
-            </header>
-
-            {error && <p className="text-sm text-destructive">{error}</p>}
-
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-4">
-              {projects.map((project) => (
-                <ProjectCard key={project.id} project={project} />
-              ))}
-            </div>
-          </div>
-        )}
-      </SidebarInset>
+            )}
+          </SidebarInset>
+        </ResizablePanel>
+      </ResizablePanelGroup>
     </SidebarProvider>
   );
 }
