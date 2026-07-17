@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Tldraw,
@@ -15,7 +15,7 @@ import {
   type TLShape,
 } from "@tldraw/tldraw";
 import "@tldraw/tldraw/tldraw.css";
-import type { EmbroideryElement, EmbroideryProject } from "@ponto-studio/shared";
+import type { CanvasSize, EmbroideryElement, EmbroideryProject } from "@ponto-studio/shared";
 import { useProjectStore, type SaveStatus } from "../store/projectStore.ts";
 import { api } from "../api/client.ts";
 import { rectToSvgPath } from "../utils/geometry.ts";
@@ -27,6 +27,43 @@ import { UserMenu } from "./UserMenu.tsx";
 import { useToast } from "./Toast.tsx";
 import { HistoryModal } from "./HistoryModal.tsx";
 import type { ImportConfirmPayload } from "./ImportModal.tsx";
+
+// ── Área do bastidor ───────────────────────────────────────────────────────────
+// Mapeamento fixo entre mm do bastidor e o page-space do tldraw: origem (0,0),
+// escala constante. Imagens importadas são posicionadas dentro desse
+// retângulo (contain-fit), então o que se vê no canvas já reflete o que sai
+// no export — sem isso não havia relação nenhuma entre a tela e os mm reais.
+const HOOP_PX_PER_MM = 4;
+
+function hoopPageBounds(canvas: CanvasSize) {
+  return { x: 0, y: 0, w: canvas.widthMm * HOOP_PX_PER_MM, h: canvas.heightMm * HOOP_PX_PER_MM };
+}
+
+/**
+ * Mostra os limites físicos do bastidor no canvas: a área fora dele fica
+ * vermelha e esmaecida (truque de box-shadow com spread gigante — pinta tudo
+ * ao redor do retângulo sem precisar de máscara SVG). Renderizado dentro do
+ * mesmo layer pannable/zoomable dos shapes (OnTheCanvas), por isso as
+ * coordenadas são direto em page-space, sem conversão manual de zoom/câmera.
+ */
+function HoopOverlay({ canvas }: { canvas: CanvasSize }) {
+  const bounds = hoopPageBounds(canvas);
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left: 0,
+        top: 0,
+        width: bounds.w,
+        height: bounds.h,
+        transform: `translate(${bounds.x}px, ${bounds.y}px)`,
+        boxShadow: "0 0 0 9999px rgba(220,50,50,0.22)",
+        border: "1.5px dashed rgba(220,50,50,0.5)",
+        pointerEvents: "none",
+      }}
+    />
+  );
+}
 
 // ── Layer System ──────────────────────────────────────────────────────────────
 
@@ -144,7 +181,9 @@ function CustomToolbar() {
 }
 
 // Sem PageMenu: o projeto não tem conceito de múltiplas páginas (1 EmbroideryProject = 1 canvas).
-const tldrawComponents: TLComponents = {
+// OnTheCanvas é criado por componente (useMemo no Editor) porque precisa do
+// canvas.widthMm/heightMm do projeto pra desenhar o overlay do bastidor.
+const baseTldrawComponents: Omit<TLComponents, "OnTheCanvas"> = {
   Toolbar: CustomToolbar,
   PageMenu: null,
 };
@@ -182,6 +221,17 @@ export function Editor({ project, onProjectChange, onBackToHome }: Props) {
   const [tldrawEditor, setTldrawEditor] = useState<TldrawEditor | null>(null);
   const [layers, setLayers] = useState<LayerState>({ reference: true, embroidery: true });
   const initialSvgLoaded = useRef(false);
+  // Evita reentrância no listener abaixo quando ELE MESMO chama updateShapes
+  // pra propagar um resize entre os shapes de um mesmo grupo de import.
+  const suppressGroupSync = useRef(false);
+
+  const tldrawComponents: TLComponents = useMemo(
+    () => ({
+      ...baseTldrawComponents,
+      OnTheCanvas: () => <HoopOverlay canvas={localProject.canvas} />,
+    }),
+    [localProject.canvas]
+  );
 
   const handleMount = useCallback((editor: TldrawEditor) => {
     setTldrawEditor(editor);
@@ -209,16 +259,51 @@ export function Editor({ project, onProjectChange, onBackToHome }: Props) {
             if (elementId) removeElement(elementId);
           }
         }
-        for (const [, to] of Object.values(entry.changes.updated)) {
+        if (suppressGroupSync.current) return;
+
+        for (const [from, to] of Object.values(entry.changes.updated)) {
           if (to.typeName !== "shape") continue;
           const shape = to as TLShape;
+          const prevShape = from as TLShape;
           const elementId = shape.meta?.["elementId"] as string | undefined;
-          if (!elementId) continue;
           const bounds = editor.getShapePageBounds(shape.id);
-          if (bounds) {
+          if (elementId && bounds) {
             updateElement(elementId, {
               svgPath: rectToSvgPath(bounds.x, bounds.y, bounds.w, bounds.h),
             });
+          }
+
+          // Imagem importada (referência OU uma cor do bordado) redimensionada
+          // → todo o import (referência + demais cores) resize/reposiciona
+          // junto, senão as camadas empilhadas ficam desalinhadas entre si.
+          const groupId = shape.meta?.["importGroupId"] as string | undefined;
+          const prevProps = prevShape.props as { w?: number; h?: number };
+          const props = shape.props as { w?: number; h?: number };
+          const resized = prevProps.w !== props.w || prevProps.h !== props.h;
+          if (!groupId || !resized || !bounds) continue;
+
+          const siblings = editor
+            .getCurrentPageShapes()
+            .filter((s) => s.id !== shape.id && s.meta?.["importGroupId"] === groupId);
+          if (siblings.length === 0) continue;
+
+          suppressGroupSync.current = true;
+          editor.updateShapes(
+            siblings.map((s) => ({
+              id: s.id, type: s.type,
+              x: bounds.x, y: bounds.y,
+              props: { ...s.props, w: bounds.w, h: bounds.h },
+            }))
+          );
+          suppressGroupSync.current = false;
+
+          for (const s of siblings) {
+            const siblingElementId = s.meta?.["elementId"] as string | undefined;
+            if (siblingElementId) {
+              updateElement(siblingElementId, {
+                svgPath: rectToSvgPath(bounds.x, bounds.y, bounds.w, bounds.h),
+              });
+            }
           }
         }
       },
@@ -309,14 +394,19 @@ export function Editor({ project, onProjectChange, onBackToHome }: Props) {
       img.src = previewDataUrl;
     });
 
-    const maxPx = 600;
-    const scale = Math.min(1, maxPx / Math.max(dims.w, dims.h));
+    // Contain-fit dentro do retângulo do bastidor (não mais centralizado no
+    // viewport arbitrário) — assim o que se vê alinhado ao overlay vermelho
+    // já é, na prática, o que cabe (ou não) no bastidor de verdade.
+    const hoop = hoopPageBounds(localProject.canvas);
+    const scale = Math.min(hoop.w / dims.w, hoop.h / dims.h);
     const canvasW = Math.round(dims.w * scale);
     const canvasH = Math.round(dims.h * scale);
+    const imgX = hoop.x + (hoop.w - canvasW) / 2;
+    const imgY = hoop.y + (hoop.h - canvasH) / 2;
 
-    const vp = tldrawEditor.getViewportPageBounds();
-    const imgX = vp.x + (vp.w - canvasW) / 2;
-    const imgY = vp.y + (vp.h - canvasH) / 2;
+    // Liga referência + todas as cores do bordado num grupo: redimensionar
+    // qualquer uma delas redimensiona as outras junto (mantém alinhadas).
+    const importGroupId = crypto.randomUUID();
 
     // ── Camada 1: imagem de referência ──
     const imageAssetId = AssetRecordType.createId();
@@ -328,7 +418,7 @@ export function Editor({ project, onProjectChange, onBackToHome }: Props) {
     tldrawEditor.createShape({
       type: "image", x: imgX, y: imgY, opacity: 0.4,
       props: { assetId: imageAssetId, w: canvasW, h: canvasH },
-      meta: { layer: 'reference' },
+      meta: { layer: 'reference', importGroupId },
     } as Parameters<typeof tldrawEditor.createShape>[0]);
 
     // ── Camada 2: áreas do bordado, UMA POR COR ──
@@ -361,11 +451,16 @@ export function Editor({ project, onProjectChange, onBackToHome }: Props) {
       tldrawEditor.createShape({
         type: "image", x: imgX, y: imgY,
         props: { assetId: svgAssetId, w: canvasW, h: canvasH },
-        meta: { layer: 'embroidery', elementId },
+        meta: { layer: 'embroidery', elementId, importGroupId },
       } as Parameters<typeof tldrawEditor.createShape>[0]);
     }
 
-    tldrawEditor.zoomToFit();
+    // Enquadra o bastidor inteiro (não só a imagem) — o usuário precisa ver
+    // o overlay vermelho pra entender se o desenho cabe ou não.
+    tldrawEditor.zoomToBounds(
+      { x: Math.min(hoop.x, imgX), y: Math.min(hoop.y, imgY), w: Math.max(hoop.w, canvasW), h: Math.max(hoop.h, canvasH) },
+      { inset: 40 }
+    );
     } catch (err) {
       toast.error(
         `Erro ao adicionar a imagem ao bordado: ${err instanceof Error ? err.message : "erro desconhecido"}`
@@ -373,7 +468,7 @@ export function Editor({ project, onProjectChange, onBackToHome }: Props) {
     } finally {
       setImporting(false);
     }
-  }, [tldrawEditor, addElement, toast]);
+  }, [tldrawEditor, addElement, toast, localProject.canvas]);
 
   // Seleciona o elemento no painel e o shape correspondente no canvas
   function handleSelectElement(elementId: string) {

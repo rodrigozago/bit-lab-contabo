@@ -34,7 +34,7 @@ describe("useProjectStore", () => {
     expect(result.current.project.elements).toHaveLength(1);
     expect(result.current.selectedElement?.id).toBe(id);
     expect(result.current.selectedElement?.color).toBe("#7c5cbf");
-    expect(result.current.selectedElement?.stitch.type).toBe("satin");
+    expect(result.current.selectedElement?.stitch.type).toBe("tatami");
   });
 
   it("addElement com svgContent guarda o SVG completo", () => {

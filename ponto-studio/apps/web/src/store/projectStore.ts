@@ -52,7 +52,9 @@ export function useProjectStore(
       svgPath,
       ...(svgContent ? { svgContent } : {}),
       color,
-      stitch: { type: "satin", density: 0.6, angle: 45 },
+      // tatami é o default: mais fiel pra letras/detalhes que cetim, que
+      // exagera bordas em formas com contornos irregulares (STI-2)
+      stitch: { type: "tatami", density: 0.6, angle: 45 },
     };
     setProject((p) => {
       const next = { ...p, elements: [...p.elements, el], updatedAt: new Date().toISOString() };
