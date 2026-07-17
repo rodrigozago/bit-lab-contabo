@@ -17,7 +17,7 @@ import {
 } from "@tldraw/tldraw";
 import "@tldraw/tldraw/tldraw.css";
 import type { ImperativePanelHandle } from "react-resizable-panels";
-import { ImageUp, Type as TypeIcon, Download, History as HistoryIcon, Trash2, PanelLeft, PanelRight } from "lucide-react";
+import { ImageUp, Type as TypeIcon, Download, History as HistoryIcon, Trash2, PanelRight } from "lucide-react";
 import { HOOP_PX_PER_MM, type CanvasSize, type EmbroideryElement, type EmbroideryProject } from "@ponto-studio/shared";
 import { useProjectStore, type SaveStatus } from "../store/projectStore.ts";
 import { api } from "../api/client.ts";
@@ -35,7 +35,7 @@ import { HistoryModal } from "./HistoryModal.tsx";
 import type { ImportConfirmPayload } from "./ImportModal.tsx";
 import { cn } from "@/lib/utils.ts";
 import { AppSidebar } from "@/components/ui/app-sidebar.tsx";
-import { SidebarProvider, Sidebar, SidebarContent, SidebarGroup, SidebarGroupLabel, SidebarGroupContent } from "@/components/ui/sidebar.tsx";
+import { SidebarProvider, SidebarInset, SidebarTrigger, Sidebar, SidebarContent, SidebarGroup, SidebarGroupLabel, SidebarGroupContent } from "@/components/ui/sidebar.tsx";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable.tsx";
 import { Button } from "@/components/ui/button.tsx";
 
@@ -191,15 +191,7 @@ export function Editor({ project, onProjectChange, onBackToHome }: Props) {
   // Evita reentrância no listener abaixo quando ELE MESMO chama updateShapes
   // pra propagar um resize entre os shapes de um mesmo grupo de import.
   const suppressGroupSync = useRef(false);
-  const leftPanelRef = useRef<ImperativePanelHandle>(null);
   const rightPanelRef = useRef<ImperativePanelHandle>(null);
-
-  function toggleLeftPanel() {
-    const panel = leftPanelRef.current;
-    if (!panel) return;
-    if (panel.isCollapsed()) panel.expand();
-    else panel.collapse();
-  }
 
   function toggleRightPanel() {
     const panel = rightPanelRef.current;
@@ -218,6 +210,19 @@ export function Editor({ project, onProjectChange, onBackToHome }: Props) {
 
   const handleMount = useCallback((editor: TldrawEditor) => {
     setTldrawEditor(editor);
+
+    // Centraliza a câmera no bastidor sempre que o editor monta. As sidebars
+    // agora vivem num ResizablePanelGroup com autoSaveId — a largura salva no
+    // localStorage é restaurada um instante depois do primeiro paint, o que
+    // redimensiona o painel do canvas DEPOIS que o tldraw já calculou sua
+    // câmera inicial. Como a câmera fica fixa em page-space, esse resize
+    // tardio faz o desenho "pular de lugar" na tela. Dois rAF garantem que
+    // isso rode só depois que o layout dos painéis já assentou.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        editor.zoomToBounds(hoopPageBounds(localProject.canvas), { inset: 40 });
+      });
+    });
 
     // Shapes desenhados pelo usuário nascem na camada de bordado
     editor.getInitialMetaForShape = () => ({ layer: "embroidery" });
@@ -511,58 +516,53 @@ export function Editor({ project, onProjectChange, onBackToHome }: Props) {
   }
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden">
-      {/* ── Topbar ── */}
-      <header className="z-10 flex h-14 shrink-0 items-center justify-between border-b bg-background px-4">
-        <div className="flex items-center gap-2.5">
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={toggleLeftPanel} title="Mostrar/ocultar navegação">
-            <PanelLeft />
-          </Button>
-          <span className="text-xl leading-none">🪡</span>
-          <span className="text-base font-bold">{localProject.name}</span>
-          <SaveStatusIndicator status={saveStatus} lastSavedAt={lastSavedAt} lastError={lastError} onRetry={retrySync} />
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setShowImport(true)}>
-            <ImageUp /> Importar imagem
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setShowTextTool(true)}>
-            <TypeIcon /> Adicionar texto
-          </Button>
-          <Button size="sm" onClick={() => setShowExport(true)}>
-            <Download /> Exportar bordado
-          </Button>
-          <Button variant="secondary" size="sm" onClick={() => setShowHistory(true)} title="Histórico do projeto">
-            <HistoryIcon /> Histórico
-          </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            className="text-destructive hover:text-destructive"
-            onClick={handleDeleteProject}
-            disabled={deleting}
-            title="Deletar projeto"
-          >
-            <Trash2 /> Deletar
-          </Button>
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={toggleRightPanel} title="Mostrar/ocultar painel direito">
-            <PanelRight />
-          </Button>
-          <UserMenu />
-        </div>
-      </header>
+    <SidebarProvider className="h-screen overflow-hidden">
+      <AppSidebar
+        projectContext={{ name: localProject.name, canvas: localProject.canvas }}
+        onNavigateHome={onBackToHome}
+      />
+      <SidebarInset className="overflow-hidden">
+        {/* ── Topbar ── */}
+        <header className="z-10 flex h-14 shrink-0 items-center justify-between border-b bg-background px-4">
+          <div className="flex items-center gap-2.5">
+            <SidebarTrigger />
+            <span className="text-xl leading-none">🪡</span>
+            <span className="text-base font-bold">{localProject.name}</span>
+            <SaveStatusIndicator status={saveStatus} lastSavedAt={lastSavedAt} lastError={lastError} onRetry={retrySync} />
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => setShowImport(true)}>
+              <ImageUp /> Importar imagem
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setShowTextTool(true)}>
+              <TypeIcon /> Adicionar texto
+            </Button>
+            <Button size="sm" onClick={() => setShowExport(true)}>
+              <Download /> Exportar bordado
+            </Button>
+            <Button variant="secondary" size="sm" onClick={() => setShowHistory(true)} title="Histórico do projeto">
+              <HistoryIcon /> Histórico
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="text-destructive hover:text-destructive"
+              onClick={handleDeleteProject}
+              disabled={deleting}
+              title="Deletar projeto"
+            >
+              <Trash2 /> Deletar
+            </Button>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={toggleRightPanel} title="Mostrar/ocultar painel direito">
+              <PanelRight />
+            </Button>
+            <UserMenu />
+          </div>
+        </header>
 
-      {/* ── Main layout ── */}
-      <SidebarProvider className="min-h-0 flex-1">
-        <ResizablePanelGroup direction="horizontal" autoSaveId="ponto-studio-editor-layout" className="flex-1">
-          <ResizablePanel ref={leftPanelRef} defaultSize={16} minSize={12} maxSize={26} collapsible collapsedSize={4}>
-            <AppSidebar
-              projectContext={{ name: localProject.name, canvas: localProject.canvas }}
-              onNavigateHome={onBackToHome}
-            />
-          </ResizablePanel>
-          <ResizableHandle withHandle />
-          <ResizablePanel defaultSize={60} minSize={30}>
+        {/* ── Main layout ── */}
+        <ResizablePanelGroup direction="horizontal" autoSaveId="ponto-studio-editor-canvas-layout" className="flex-1">
+          <ResizablePanel defaultSize={76} minSize={40}>
             <div className="relative h-full">
               <Tldraw onMount={handleMount} components={tldrawComponents} />
             </div>
@@ -652,7 +652,6 @@ export function Editor({ project, onProjectChange, onBackToHome }: Props) {
             </Sidebar>
           </ResizablePanel>
         </ResizablePanelGroup>
-      </SidebarProvider>
 
       {showExport && (
         <ExportModal projectId={localProject.id} canvas={localProject.canvas} onClose={() => setShowExport(false)} />
@@ -684,7 +683,8 @@ export function Editor({ project, onProjectChange, onBackToHome }: Props) {
           </div>
         </div>
       )}
-    </div>
+      </SidebarInset>
+    </SidebarProvider>
   );
 }
 
