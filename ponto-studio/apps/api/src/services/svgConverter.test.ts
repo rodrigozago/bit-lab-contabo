@@ -2,6 +2,10 @@ import { describe, it, expect } from "vitest";
 import type { EmbroideryProject, EmbroideryElement, StitchParams } from "@ponto-studio/shared";
 import { convertProjectToSvg } from "./svgConverter.js";
 
+// svgPath está em page-px do tldraw (ver rectToSvgPath/HOOP_PX_PER_MM); um
+// retângulo 10x10 vira 2.5x2.5mm no canvas — usado como bbox do elemento
+// pra contain-fit do svgContent (extractAndAnnotatePaths) ou reescalado
+// direto (elementToSvgPath, fallback sem svgContent).
 function makeElement(overrides: Partial<EmbroideryElement> = {}): EmbroideryElement {
   return {
     id: "el-1",
@@ -39,7 +43,8 @@ describe("convertProjectToSvg", () => {
 
   it("converte elemento com svgPath em <path> com cor e ponto satin", () => {
     const svg = convertProjectToSvg(makeProject([makeElement()]));
-    expect(svg).toContain('d="M 0 0 L 10 0 L 10 10 L 0 10 Z"');
+    // svgPath (10x10 page-px) reescalado pra mm via HOOP_PX_PER_MM=4 → 2.5x2.5
+    expect(svg).toContain('d="M 0 0 L 2.5 0 L 2.5 2.5 L 0 2.5 Z"');
     expect(svg).toContain('fill="#ff5733"');
     expect(svg).toContain('inkstitch:angle="45"');
     expect(svg).toContain('inkstitch:fill_method="contour_fill"');
@@ -109,13 +114,16 @@ describe("convertProjectToSvg", () => {
     expect(pathLine!).toContain('fill="#E64980"');
   });
 
-  it("reescala o d do path da IA do viewBox de origem para o canvas do projeto (mm)", () => {
-    // canvas do teste é 100x80mm; viewBox 100x100 → contain-fit escala 0.8, offsetX 10, offsetY 0
+  it("reescala o d do path da IA do viewBox de origem para o bbox do elemento no canvas (mm)", () => {
+    // svgPath default (10x10 page-px) → bbox do elemento 2.5x2.5mm em (0,0);
+    // viewBox 100x100 → contain-fit escala 0.025 dentro desse bbox (não mais
+    // do canvas inteiro — é o que faz redimensionar a camada no editor
+    // realmente mudar o tamanho do bordado exportado)
     const el = makeElement({
       svgContent: `<svg viewBox="0 0 100 100"><path d="M 10,10 H 50 V 50 H 10 Z" fill="#E64980"/></svg>`,
     });
     const svg = convertProjectToSvg(makeProject([el]));
-    expect(svg).toContain('d="M 18 8 H 50 V 40 H 18 Z"');
+    expect(svg).toContain('d="M 0.25 0.25 H 1.25 V 1.25 H 0.25 Z"');
   });
 
   it("regressão: id=\"...\" antes de d=\"...\" não deve corromper a extração do path (colisão 'id=' contém 'd=')", () => {
@@ -135,7 +143,10 @@ describe("convertProjectToSvg", () => {
   it("regressão: viewBox 200x200 da IA em canvas 100x100mm não deve extrapolar o bastidor", () => {
     // Bug real observado: SVG da IA com viewBox 0 0 200 200 exportado sem reescala
     // gerava um DST de ~176x168mm num bastidor de 100x100mm.
+    // svgPath cobrindo o bastidor inteiro (100mm × HOOP_PX_PER_MM=4 = 400px) —
+    // é o que uma importação nova gera de fato (contain-fit no bastidor).
     const el = makeElement({
+      svgPath: "M 0 0 L 400 0 L 400 400 L 0 400 Z",
       svgContent: `<svg viewBox="0 0 200 200"><path d="M100 170 C91 160 72 143 58 124 C43 104 34 84 37 68 C40 50 55 37 75 36 C90 35 99 45 100 61 C101 45 110 35 126 36 C147 38 161 51 163 68 C166 85 158 106 142 126 C128 145 109 160 100 170 z" fill="#ed1c24"/></svg>`,
     });
     const project: EmbroideryProject = {
@@ -157,6 +168,7 @@ describe("convertProjectToSvg", () => {
   it("usa svgPath como fallback quando svgContent não tem paths", () => {
     const el = makeElement({ svgContent: "<svg><rect width='5' height='5'/></svg>" });
     const svg = convertProjectToSvg(makeProject([el]));
-    expect(svg).toContain('d="M 0 0 L 10 0 L 10 10 L 0 10 Z"');
+    // fallback também reescala page-px → mm (mesma conversão de elementToSvgPath)
+    expect(svg).toContain('d="M 0 0 L 2.5 0 L 2.5 2.5 L 0 2.5 Z"');
   });
 });

@@ -4,6 +4,7 @@ import "react-image-crop/dist/ReactCrop.css";
 import { saveAnalysis, listAnalyses, removeAnalysis } from "../store/analysisCache.ts";
 import type { CachedAnalysis } from "../store/analysisCache.ts";
 import { api, pollAnalysisUntilDone } from "../api/client.ts";
+import { normalizeSvgToFillContainer } from "../utils/svgLayers.ts";
 
 export interface AnalyzeResult {
   svg: string;
@@ -248,7 +249,7 @@ export function ImportModal({ onClose, onConfirm }: Props) {
                       {/* SVG mini-preview */}
                       <div
                         style={s.cacheSvgPreview}
-                        dangerouslySetInnerHTML={{ __html: entry.svg }}
+                        dangerouslySetInnerHTML={{ __html: normalizeSvgToFillContainer(entry.svg) }}
                       />
                     </div>
                     <button
@@ -437,7 +438,10 @@ export function ImportModal({ onClose, onConfirm }: Props) {
                 </div>
                 <div style={s.previewCol}>
                   <p style={s.previewLabel}>Vetorial gerado</p>
-                  <div style={s.previewImgBox} dangerouslySetInnerHTML={{ __html: result.svg }} />
+                  <div
+                    style={s.previewImgBox}
+                    dangerouslySetInnerHTML={{ __html: normalizeSvgToFillContainer(result.svg) }}
+                  />
                 </div>
               </div>
 

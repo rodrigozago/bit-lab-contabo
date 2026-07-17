@@ -18,6 +18,34 @@ export interface ColorLayer {
 
 const DEFAULT_FILL = "#000000";
 
+/**
+ * Força um SVG cru a preencher o container onde é injetado: seta
+ * width/height="100%" no elemento raiz (o worker devolve o SVG com
+ * width/height em PX, ex. "800"/"600" — batendo com o tamanho da imagem
+ * original — então um <svg> injetado direto no DOM renderiza nesse tamanho
+ * fixo, "maior" que a caixa que o envolve, em vez de se ajustar a ela como
+ * o <img> ao lado, que usa object-fit). Preserva/gera o viewBox pra manter
+ * a proporção, e adiciona preserveAspectRatio pra não distorcer.
+ */
+export function normalizeSvgToFillContainer(svg: string): string {
+  const doc = new DOMParser().parseFromString(svg, "image/svg+xml");
+  const docEl = doc.documentElement as Element | undefined;
+  const root = docEl && docEl.tagName?.toLowerCase() === "svg" ? docEl : doc.querySelector("svg");
+  if (!root) return svg;
+
+  if (!root.getAttribute("viewBox")) {
+    const w = root.getAttribute("width");
+    const h = root.getAttribute("height");
+    if (w && h) root.setAttribute("viewBox", `0 0 ${parseFloat(w)} ${parseFloat(h)}`);
+  }
+  root.setAttribute("width", "100%");
+  root.setAttribute("height", "100%");
+  root.setAttribute("preserveAspectRatio", "xMidYMid meet");
+  root.setAttribute("style", "display:block;");
+
+  return new XMLSerializer().serializeToString(root);
+}
+
 /** Normaliza fills para #rrggbb minúsculo; rgb(...) é convertido; outros valores passam intactos. */
 export function normalizeColor(value: string | null | undefined): string {
   if (!value || value === "none") return DEFAULT_FILL;

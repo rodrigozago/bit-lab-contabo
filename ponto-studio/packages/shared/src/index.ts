@@ -30,6 +30,15 @@ export interface CanvasSize {
   heightMm: number;
 }
 
+/**
+ * px por mm no page-space do tldraw — mapeia o overlay do bastidor no editor
+ * (apps/web/Editor.tsx) para os mesmos mm reais usados pelo export/estimativas
+ * (apps/api/svgConverter.ts). Precisa ser o MESMO valor nos dois lados: é o
+ * que faz redimensionar uma camada no canvas realmente mudar o tamanho do
+ * bordado exportado, em vez do desenho sempre ser esticado pro bastidor inteiro.
+ */
+export const HOOP_PX_PER_MM = 4;
+
 // ─── Bastidores (hoops) ───────────────────────────────────────────────────────
 
 export interface Hoop {

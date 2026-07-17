@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { EmbroideryElement } from "@ponto-studio/shared";
-import { splitSvgByColor, normalizeColor, recolorSvg, composeThumbnail } from "./svgLayers.ts";
+import { splitSvgByColor, normalizeColor, recolorSvg, composeThumbnail, normalizeSvgToFillContainer } from "./svgLayers.ts";
 
 function makeElement(overrides: Partial<EmbroideryElement> = {}): EmbroideryElement {
   return {
@@ -158,5 +158,28 @@ describe("composeThumbnail", () => {
     const result = composeThumbnail(elements);
     expect(result).not.toBeNull();
     expect((result!.match(/<path/g) ?? []).length).toBe(1);
+  });
+});
+
+describe("normalizeSvgToFillContainer", () => {
+  it("substitui width/height em px por 100% preservando o viewBox", () => {
+    const svg = `<svg ${NS} width="800" height="600" viewBox="0 0 800 600"><rect width="10" height="10"/></svg>`;
+    const result = normalizeSvgToFillContainer(svg);
+    expect(result).toContain('width="100%"');
+    expect(result).toContain('height="100%"');
+    expect(result).toContain('viewBox="0 0 800 600"');
+  });
+
+  it("gera viewBox a partir de width/height quando o SVG não tem um", () => {
+    const svg = `<svg ${NS} width="800" height="600"><rect width="10" height="10"/></svg>`;
+    const result = normalizeSvgToFillContainer(svg);
+    expect(result).toContain('viewBox="0 0 800 600"');
+    expect(result).toContain('width="100%"');
+  });
+
+  it("preserva o conteúdo interno do SVG", () => {
+    const svg = `<svg ${NS} width="100" height="100"><path d="M0 0Z" fill="#ff0000"/></svg>`;
+    const result = normalizeSvgToFillContainer(svg);
+    expect(result).toContain('fill="#ff0000"');
   });
 });

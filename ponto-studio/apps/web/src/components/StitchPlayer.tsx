@@ -7,8 +7,7 @@ interface Props {
 
 const SPEEDS = [0.5, 1, 2, 4];
 const TARGET_SECONDS = 15; // duração aproximada de uma volta completa em 1×
-const CANVAS_W = 480;
-const CANVAS_H = 320;
+const CANVAS_CSS_H = 220; // altura fixa em CSS; a largura acompanha o container
 
 export function StitchPlayer({ pattern }: Props) {
   const total = pattern.stitches.length;
@@ -16,6 +15,25 @@ export function StitchPlayer({ pattern }: Props) {
   const [index, setIndex] = useState(0); // posição atual (fracionária durante o play)
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
+  // Resolução do canvas em px CSS reais (não um raster fixo 480×320) — sem
+  // isso o browser estica o raster pra caber na caixa, distorcendo e
+  // deslocando visualmente o desenho (já centralizado nas coordenadas
+  // internas, mas o stretch não-uniforme quebra a centralização aparente).
+  const [canvasSize, setCanvasSize] = useState({ w: 480, h: CANVAS_CSS_H });
+  const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      const w = Math.round(entry.contentRect.width);
+      if (w > 0) setCanvasSize({ w, h: CANVAS_CSS_H });
+    });
+    observer.observe(canvas);
+    return () => observer.disconnect();
+  }, []);
 
   // índices onde uma nova cor começa (0 + logo após cada COLOR_BREAK) — pros botões de navegar por cor
   const colorStarts = useMemo(() => {
@@ -76,13 +94,17 @@ export function StitchPlayer({ pattern }: Props) {
     const ctx = canvas?.getContext("2d");
     if (!canvas || !ctx) return;
 
-    ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+    const { w: cssW, h: cssH } = canvasSize;
+    // raster em px físicos (dpr) pra ficar nítido; desenha em coordenadas CSS
+    // (ctx.scale compensa) — canvas.width/height já setados via JSX abaixo.
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, cssW, cssH);
     ctx.fillStyle = "#fafaf9";
-    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+    ctx.fillRect(0, 0, cssW, cssH);
 
-    const scale = Math.min(CANVAS_W / bbox.w, CANVAS_H / bbox.h) * 0.95;
-    const offsetX = (CANVAS_W - bbox.w * scale) / 2 - bbox.x * scale;
-    const offsetY = (CANVAS_H - bbox.h * scale) / 2 - bbox.y * scale;
+    const scale = Math.min(cssW / bbox.w, cssH / bbox.h) * 0.95;
+    const offsetX = (cssW - bbox.w * scale) / 2 - bbox.x * scale;
+    const offsetY = (cssH - bbox.h * scale) / 2 - bbox.y * scale;
 
     ctx.lineWidth = 1;
     ctx.lineJoin = "round";
@@ -117,7 +139,7 @@ export function StitchPlayer({ pattern }: Props) {
       }
     }
     if (penDown) ctx.stroke();
-  }, [pattern, index, bbox]);
+  }, [pattern, index, bbox, canvasSize, dpr]);
 
   function jumpToColor(direction: -1 | 1) {
     setPlaying(false);
@@ -133,7 +155,12 @@ export function StitchPlayer({ pattern }: Props) {
 
   return (
     <div style={s.wrap}>
-      <canvas ref={canvasRef} width={CANVAS_W} height={CANVAS_H} style={s.canvas} />
+      <canvas
+        ref={canvasRef}
+        width={Math.round(canvasSize.w * dpr)}
+        height={Math.round(canvasSize.h * dpr)}
+        style={s.canvas}
+      />
 
       <div style={s.stats}>
         {Math.min(Math.floor(index), total)} / {total} pontos · {pattern.stats.colorCount} cores

@@ -15,7 +15,7 @@ import {
   type TLShape,
 } from "@tldraw/tldraw";
 import "@tldraw/tldraw/tldraw.css";
-import type { CanvasSize, EmbroideryElement, EmbroideryProject } from "@ponto-studio/shared";
+import { HOOP_PX_PER_MM, type CanvasSize, type EmbroideryElement, type EmbroideryProject } from "@ponto-studio/shared";
 import { useProjectStore, type SaveStatus } from "../store/projectStore.ts";
 import { api } from "../api/client.ts";
 import { rectToSvgPath } from "../utils/geometry.ts";
@@ -30,11 +30,8 @@ import type { ImportConfirmPayload } from "./ImportModal.tsx";
 
 // ── Área do bastidor ───────────────────────────────────────────────────────────
 // Mapeamento fixo entre mm do bastidor e o page-space do tldraw: origem (0,0),
-// escala constante. Imagens importadas são posicionadas dentro desse
-// retângulo (contain-fit), então o que se vê no canvas já reflete o que sai
-// no export — sem isso não havia relação nenhuma entre a tela e os mm reais.
-const HOOP_PX_PER_MM = 4;
-
+// escala HOOP_PX_PER_MM (compartilhada com o svgConverter da API — mesmo
+// fator dos dois lados, senão redimensionar no editor não bate com o export).
 function hoopPageBounds(canvas: CanvasSize) {
   return { x: 0, y: 0, w: canvas.widthMm * HOOP_PX_PER_MM, h: canvas.heightMm * HOOP_PX_PER_MM };
 }

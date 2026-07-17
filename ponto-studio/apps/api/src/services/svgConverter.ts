@@ -1,5 +1,5 @@
-import type { EmbroideryProject, EmbroideryElement, CanvasSize } from "@ponto-studio/shared";
-import { parseViewBoxDimensions, computeContainTransform, scalePathData } from "./svgTransform.js";
+import { HOOP_PX_PER_MM, type EmbroideryProject, type EmbroideryElement, type CanvasSize } from "@ponto-studio/shared";
+import { parseViewBoxDimensions, computeContainTransform, scalePathData, type Dimensions } from "./svgTransform.js";
 
 /**
  * Converte um EmbroideryProject em SVG compatível com pyembroidery/Ink/Stitch.
@@ -85,20 +85,54 @@ function extractPathParts(svg: string): PathPart[] {
 }
 
 /**
+ * Bounding box do elemento DENTRO DO CANVAS, em mm — derivado de `el.svgPath`
+ * (retângulo em page-px do tldraw, ver rectToSvgPath e o overlay do bastidor
+ * em Editor.tsx), convertido via o mesmo HOOP_PX_PER_MM usado no editor.
+ * É o que faz redimensionar/mover uma camada no canvas mudar de fato o
+ * tamanho/posição do bordado exportado — sem isso, o desenho original
+ * sempre era esticado pro bastidor INTEIRO, ignorando qualquer resize.
+ */
+function parseElementBoundsMm(svgPath: string | undefined): (Dimensions & { x: number; y: number }) | null {
+  if (!svgPath) return null;
+  const nums = (svgPath.match(/-?\d+\.?\d*/g) ?? []).map(Number);
+  if (nums.length < 8) return null;
+  const xs = [nums[0]!, nums[2]!, nums[4]!, nums[6]!];
+  const ys = [nums[1]!, nums[3]!, nums[5]!, nums[7]!];
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  if (!(maxX > minX) || !(maxY > minY)) return null;
+  return {
+    x: minX / HOOP_PX_PER_MM,
+    y: minY / HOOP_PX_PER_MM,
+    width: (maxX - minX) / HOOP_PX_PER_MM,
+    height: (maxY - minY) / HOOP_PX_PER_MM,
+  };
+}
+
+/**
  * Extrai todos os <path> do SVG gerado pela IA, preserva suas cores originais
  * e sobrescreve/adiciona os atributos inkstitch com as configurações do elemento.
  *
- * As coordenadas de "d" são reescaladas do viewBox do SVG da IA para o canvas
- * do projeto (em mm) — necessário porque o worker de bordado lê os números
- * crus de "d" como milímetros e ignora viewBox/transform de contêiner.
+ * As coordenadas de "d" são reescaladas do viewBox do SVG da IA para o
+ * bounding box do ELEMENTO dentro do canvas (em mm) — contain-fit dentro da
+ * área que o usuário posicionou/redimensionou no editor, não o bastidor
+ * inteiro. Sem `el.svgPath` válido (elemento legado, sem bbox conhecido),
+ * cai de volta pro bastidor inteiro.
  */
 function extractAndAnnotatePaths(el: EmbroideryElement, canvas: CanvasSize): string {
   const svg = el.svgContent ?? "";
   const stitchAttrs = buildStitchAttributes(el);
 
   const sourceDims = parseViewBoxDimensions(svg);
+  const elementBounds = parseElementBoundsMm(el.svgPath);
   const transform = sourceDims
-    ? computeContainTransform(sourceDims, { width: canvas.widthMm, height: canvas.heightMm })
+    ? (() => {
+        const target = elementBounds ?? { width: canvas.widthMm, height: canvas.heightMm };
+        const fit = computeContainTransform(sourceDims, target);
+        return elementBounds
+          ? { scale: fit.scale, offsetX: fit.offsetX + elementBounds.x, offsetY: fit.offsetY + elementBounds.y }
+          : fit;
+      })()
     : null;
 
   const paths = extractPathParts(svg).map(({ cleanAttrs, d }) => {
@@ -147,7 +181,10 @@ function extractViewBox(svg: string): string | null {
 
 function elementToSvgPath(el: EmbroideryElement): string {
   const stitchAttrs = buildStitchAttributes(el);
-  const d = el.svgPath || "M 0 0";
+  const rawD = el.svgPath || "M 0 0";
+  // shapes desenhadas no tldraw (retângulo/elipse/desenho livre) guardam "d"
+  // em page-px — mesma conversão pra mm usada em extractAndAnnotatePaths.
+  const d = scalePathData(rawD, 1 / HOOP_PX_PER_MM, 0, 0);
   return `<path
     id="${el.id}"
     d="${escapeXml(d)}"
