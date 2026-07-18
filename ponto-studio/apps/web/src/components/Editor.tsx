@@ -559,6 +559,32 @@ export function Editor({ project, onProjectChange }: Props) {
           <ResizableHandle withHandle />
           <ResizablePanel ref={rightPanelRef} defaultSize={24} minSize={16} maxSize={34} collapsible collapsedSize={4}>
             <div className="flex h-full w-full flex-col overflow-y-auto border-l bg-sidebar text-sidebar-foreground">
+              {/* ── PARTES (motor unificado camadas+áreas) ── */}
+              <PartsPanel
+                elements={localProject.elements}
+                selectedElementId={selectedElement?.id ?? null}
+                editor={tldrawEditor}
+                onSelect={handleSelectElement}
+                onToggleHidden={handleToggleElementHidden}
+                onMove={moveElement}
+              />
+
+              {/* ── PROPRIEDADES ── */}
+              {selectedElement ? (
+                <PropertiesPanel
+                  element={selectedElement}
+                  onChange={(patch) => { void handlePropertiesChange(selectedElement.id, patch); }}
+                  onDelete={() => handleDeleteElement(selectedElement.id)}
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center gap-2 border-t p-4 text-center">
+                  <span className="text-xl">👆</span>
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    Selecione uma parte pra configurar
+                  </p>
+                </div>
+              )}
+
               {/* ── ARQUIVO ── */}
               <SidebarGroup>
                 <SidebarGroupLabel>Arquivo</SidebarGroupLabel>
@@ -597,31 +623,6 @@ export function Editor({ project, onProjectChange }: Props) {
 
               {/* ── FERRAMENTAS / ALINHAR / DISTRIBUIR ── */}
               <ShapeActionsPanel editor={tldrawEditor} selectedShapeIds={selectedShapeIds} />
-
-              {/* ── PARTES (motor unificado camadas+áreas) ── */}
-              <PartsPanel
-                elements={localProject.elements}
-                selectedElementId={selectedElement?.id ?? null}
-                editor={tldrawEditor}
-                onSelect={handleSelectElement}
-                onToggleHidden={handleToggleElementHidden}
-                onMove={moveElement}
-              />
-
-              {selectedElement ? (
-                <PropertiesPanel
-                  element={selectedElement}
-                  onChange={(patch) => { void handlePropertiesChange(selectedElement.id, patch); }}
-                  onDelete={() => handleDeleteElement(selectedElement.id)}
-                />
-              ) : (
-                <div className="flex flex-col items-center justify-center gap-2 border-t p-6 text-center">
-                  <span className="text-2xl">👆</span>
-                  <p className="text-xs leading-relaxed text-muted-foreground">
-                    Selecione uma parte pra configurar o bordado
-                  </p>
-                </div>
-              )}
             </div>
           </ResizablePanel>
         </ResizablePanelGroup>
