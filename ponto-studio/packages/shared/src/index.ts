@@ -37,6 +37,8 @@ export interface EmbroideryElement {
   groupId?: string;
   /** nome do grupo de importação (ex.: nome do arquivo) */
   groupName?: string;
+  /** rotação em radianos (persistida); aplicada na exportação do bordado */
+  rotation?: number;
 }
 
 export interface CanvasSize {

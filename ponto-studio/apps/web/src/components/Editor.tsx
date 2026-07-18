@@ -239,8 +239,11 @@ export function Editor({ project, onProjectChange }: Props) {
           const elementId = shape.meta?.["elementId"] as string | undefined;
           const bounds = editor.getShapePageBounds(shape.id);
           if (elementId && bounds) {
+            // Sincroniza rotação + transformações do shape do tldraw com o modelo salvo
+            // (antes só sincronizava svgPath, perdendo rotação/flip nas transformações)
             updateElement(elementId, {
               svgPath: rectToSvgPath(bounds.x, bounds.y, bounds.w, bounds.h),
+              rotation: shape.rotation,
             });
           }
 
@@ -273,6 +276,7 @@ export function Editor({ project, onProjectChange }: Props) {
             if (siblingElementId) {
               updateElement(siblingElementId, {
                 svgPath: rectToSvgPath(bounds.x, bounds.y, bounds.w, bounds.h),
+                rotation: s.rotation,
               });
             }
           }
@@ -304,14 +308,15 @@ export function Editor({ project, onProjectChange }: Props) {
         }]);
 
         const vp = editor.getViewportPageBounds();
-        // Respeita a visibilidade persistida da parte (element.hidden) ao
-        // recriar o shape — antes o show/hide vivia só no tldraw e sumia.
+        // Respeita a visibilidade e rotação persistidas da parte ao recriar o shape
         const hidden = !!initialElement.hidden;
+        const rotation = initialElement.rotation ?? 0;
         editor.createShape({
           type: "image",
           x: vp.x + (vp.w - 100) / 2, y: vp.y + (vp.h - 100) / 2,
           opacity: hidden ? 0 : 1,
           isLocked: hidden,
+          rotation,
           props: { assetId: svgAssetId, w: 100, h: 100 },
           // sem referência associada (elemento legado recarregado) — ainda
           // assim ganha um importGroupId próprio pra aparecer como grupo

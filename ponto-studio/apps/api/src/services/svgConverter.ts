@@ -145,7 +145,18 @@ function extractAndAnnotatePaths(el: EmbroideryElement, canvas: CanvasSize): str
     return elementToSvgPath(el);
   }
 
-  return `<g id="${el.id}">\n    ${paths.join("\n    ")}\n  </g>`;
+  // Aplica rotação (persistida do tldraw) se houver
+  const rotation = el.rotation ?? 0;
+  let transformAttr = "";
+  if (rotation !== 0) {
+    // Calcula o centro do elemento em mm para rotação
+    const centerX = (elementBounds?.x ?? 0) + (elementBounds?.width ?? 0) / 2;
+    const centerY = (elementBounds?.y ?? 0) + (elementBounds?.height ?? 0) / 2;
+    const angleDeg = (rotation * 180) / Math.PI; // radianos → graus
+    transformAttr = ` transform="rotate(${angleDeg} ${centerX} ${centerY})"`;
+  }
+
+  return `<g id="${el.id}"${transformAttr}>\n    ${paths.join("\n    ")}\n  </g>`;
 }
 
 /**
@@ -185,13 +196,26 @@ function elementToSvgPath(el: EmbroideryElement): string {
   // shapes desenhadas no tldraw (retângulo/elipse/desenho livre) guardam "d"
   // em page-px — mesma conversão pra mm usada em extractAndAnnotatePaths.
   const d = scalePathData(rawD, 1 / HOOP_PX_PER_MM, 0, 0);
-  return `<path
-    id="${el.id}"
-    d="${escapeXml(d)}"
-    fill="${el.color}"
-    stroke="none"
-    ${stitchAttrs}
-  />`;
+
+  // Aplica rotação (persistida do tldraw) se houver
+  const rotation = el.rotation ?? 0;
+  let transformAttr = "";
+  if (rotation !== 0) {
+    const bounds = parseElementBoundsMm(el.svgPath);
+    const centerX = (bounds?.x ?? 0) + (bounds?.width ?? 0) / 2;
+    const centerY = (bounds?.y ?? 0) + (bounds?.height ?? 0) / 2;
+    const angleDeg = (rotation * 180) / Math.PI; // radianos → graus
+    transformAttr = ` transform="rotate(${angleDeg} ${centerX} ${centerY})"`;
+  }
+
+  return `<g id="${el.id}"${transformAttr}>
+    <path
+      d="${escapeXml(d)}"
+      fill="${el.color}"
+      stroke="none"
+      ${stitchAttrs}
+    />
+  </g>`;
 }
 
 /**
