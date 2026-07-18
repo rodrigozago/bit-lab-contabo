@@ -47,6 +47,58 @@ describe("useProjectStore", () => {
     expect(result.current.project.elements[0].svgContent).toBe("<svg></svg>");
   });
 
+  it("addElement guarda name/groupId/groupName quando passados", () => {
+    const { result } = renderHook(() => useProjectStore(makeProject()));
+
+    act(() => {
+      result.current.addElement("M 0 0 Z", "#000", undefined, {
+        name: "Contorno",
+        groupId: "grp-1",
+        groupName: "logo.png",
+      });
+    });
+
+    const el = result.current.project.elements[0];
+    expect(el.name).toBe("Contorno");
+    expect(el.groupId).toBe("grp-1");
+    expect(el.groupName).toBe("logo.png");
+    expect(el.hidden).toBeUndefined();
+  });
+
+  it("toggleElementHidden alterna e persiste a visibilidade da parte", () => {
+    const { result } = renderHook(() => useProjectStore(makeProject()));
+
+    let id = "";
+    act(() => {
+      id = result.current.addElement("M 0 0 Z", "#000");
+    });
+    expect(result.current.project.elements[0].hidden).toBeFalsy();
+
+    act(() => {
+      result.current.toggleElementHidden(id);
+    });
+    expect(result.current.project.elements[0].hidden).toBe(true);
+
+    act(() => {
+      result.current.toggleElementHidden(id);
+    });
+    expect(result.current.project.elements[0].hidden).toBe(false);
+  });
+
+  it("updateElement aplica name (renomear parte)", () => {
+    const { result } = renderHook(() => useProjectStore(makeProject()));
+
+    let id = "";
+    act(() => {
+      id = result.current.addElement("M 0 0 Z", "#000");
+    });
+    act(() => {
+      result.current.updateElement(id, { name: "Pétalas" });
+    });
+
+    expect(result.current.project.elements[0].name).toBe("Pétalas");
+  });
+
   it("updateElement aplica patch parcial", () => {
     const { result } = renderHook(() => useProjectStore(makeProject()));
 

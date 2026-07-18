@@ -3,13 +3,6 @@ import { useNavigate } from "react-router-dom";
 import {
   Tldraw,
   AssetRecordType,
-  DefaultToolbar,
-  SelectToolbarItem,
-  HandToolbarItem,
-  DrawToolbarItem,
-  RectangleToolbarItem,
-  EllipseToolbarItem,
-  EraserToolbarItem,
   type Editor as TldrawEditor,
   type TLComponents,
   type TLShape,
@@ -23,16 +16,17 @@ import { useProjectStore, type SaveStatus } from "../store/projectStore.ts";
 import { api } from "../api/client.ts";
 import { rectToSvgPath } from "../utils/geometry.ts";
 import { splitSvgByColor, recolorSvg } from "../utils/svgLayers.ts";
+import { findShapeByElementId, setShapesHidden } from "../utils/canvasShapes.ts";
 import { PropertiesPanel } from "./PropertiesPanel.tsx";
 import { ShapeActionsPanel } from "./ShapeActionsPanel.tsx";
-import { LayersPanel } from "./LayersPanel.tsx";
+import { PartsPanel } from "./PartsPanel.tsx";
+import { CanvasToolbar } from "./CanvasToolbar.tsx";
 import { ExportModal } from "./ExportModal.tsx";
 import { ImportModal } from "./ImportModal.tsx";
 import { TextToolModal } from "./TextToolModal.tsx";
 import { useToast } from "./Toast.tsx";
 import { HistoryModal } from "./HistoryModal.tsx";
 import type { ImportConfirmPayload } from "./ImportModal.tsx";
-import { cn } from "@/lib/utils.ts";
 import { AppSidebar } from "@/components/app-sidebar";
 import { ModeToggle } from "@/components/mode-toggle";
 import { SidebarProvider, SidebarInset, SidebarTrigger, SidebarGroup, SidebarGroupLabel, SidebarGroupContent } from "@/components/ui/sidebar.tsx";
@@ -129,29 +123,14 @@ function SaveStatusIndicator({
 }
 
 // ── UI do tldraw enxuta (EDIT-2) ────────────────────────────────────────────────
-// Só o essencial pra desenhar/editar áreas de bordado: seleção, mover (hand),
-// desenho livre e as 2 formas mais úteis pra delimitar área (retângulo/elipse) +
-// borracha. Sem texto/nota/frame/seta/formas decorativas — não fazem sentido
-// como área de bordado. Sem asset (import de imagem) — o app tem fluxo próprio
-// ("📷 Importar imagem"), o botão nativo do tldraw só confundiria.
-function CustomToolbar() {
-  return (
-    <DefaultToolbar>
-      <SelectToolbarItem />
-      <HandToolbarItem />
-      <DrawToolbarItem />
-      <RectangleToolbarItem />
-      <EllipseToolbarItem />
-      <EraserToolbarItem />
-    </DefaultToolbar>
-  );
-}
-
+// A toolbar horizontal nativa do tldraw fica desligada (Toolbar: null) — as
+// ferramentas agora vivem no CanvasToolbar vertical (estilo Photoshop) sobreposto
+// à esquerda do canvas, que dirige a mesma API do tldraw (setCurrentTool).
 // Sem PageMenu: o projeto não tem conceito de múltiplas páginas (1 EmbroideryProject = 1 canvas).
 // OnTheCanvas é criado por componente (useMemo no Editor) porque precisa do
 // canvas.widthMm/heightMm do projeto pra desenhar o overlay do bastidor.
 const baseTldrawComponents: Omit<TLComponents, "OnTheCanvas"> = {
-  Toolbar: CustomToolbar,
+  Toolbar: null,
   PageMenu: null,
 };
 
@@ -176,6 +155,7 @@ export function Editor({ project, onProjectChange }: Props) {
     addElement,
     updateElement,
     moveElement,
+    toggleElementHidden,
     removeElement,
     saveStatus,
     lastSavedAt,
@@ -324,16 +304,22 @@ export function Editor({ project, onProjectChange }: Props) {
         }]);
 
         const vp = editor.getViewportPageBounds();
+        // Respeita a visibilidade persistida da parte (element.hidden) ao
+        // recriar o shape — antes o show/hide vivia só no tldraw e sumia.
+        const hidden = !!initialElement.hidden;
         editor.createShape({
           type: "image",
           x: vp.x + (vp.w - 100) / 2, y: vp.y + (vp.h - 100) / 2,
+          opacity: hidden ? 0 : 1,
+          isLocked: hidden,
           props: { assetId: svgAssetId, w: 100, h: 100 },
           // sem referência associada (elemento legado recarregado) — ainda
           // assim ganha um importGroupId próprio pra aparecer como grupo
-          // no painel de camadas, só com a sub-camada "Bordado".
+          // no painel de partes.
           meta: {
             layer: 'embroidery', elementId: initialElement.id,
             importGroupId: crypto.randomUUID(), importGroupName: "Bordado",
+            ...(hidden ? { prevOpacity: 1 } : {}),
           },
         } as Parameters<typeof editor.createShape>[0]);
       };
@@ -387,9 +373,9 @@ export function Editor({ project, onProjectChange }: Props) {
       meta: {},
     }]);
     // Referência nasce OCULTA por padrão (mesmo truque de isLocked+opacity:0
-    // usado no toggle do LayersPanel — prevOpacity guarda o valor de volta
-    // quando o usuário reativar a camada pelo painel) — o usuário normalmente
-    // só quer ver o bordado, não a foto original por baixo.
+    // usado no toggle de visibilidade — prevOpacity guarda o valor de volta
+    // quando o usuário reativar a foto pelo painel de Partes) — o usuário
+    // normalmente só quer ver o bordado, não a foto original por baixo.
     tldrawEditor.createShape({
       type: "image", x: imgX, y: imgY, opacity: 0, isLocked: true,
       props: { assetId: imageAssetId, w: canvasW, h: canvasH },
@@ -414,7 +400,8 @@ export function Editor({ project, onProjectChange }: Props) {
       const elementId = addElement(
         rectToSvgPath(imgX, imgY, canvasW, canvasH),
         layer.color,
-        layer.svgContent
+        layer.svgContent,
+        { groupId: importGroupId, groupName: importGroupName }
       );
 
       const svgAssetId = AssetRecordType.createId();
@@ -453,6 +440,17 @@ export function Editor({ project, onProjectChange }: Props) {
       .getCurrentPageShapes()
       .find((s: TLShape) => s.meta?.["elementId"] === elementId);
     if (shape && !shape.isLocked) tldrawEditor.setSelectedShapes([shape.id]);
+  }
+
+  // Alterna a visibilidade da parte: persiste em element.hidden (store) e
+  // reflete no shape vinculado do canvas (opacity/lock).
+  function handleToggleElementHidden(elementId: string) {
+    const el = localProject.elements.find((e) => e.id === elementId);
+    const nextHidden = !el?.hidden;
+    toggleElementHidden(elementId);
+    if (!tldrawEditor) return;
+    const shape = findShapeByElementId(tldrawEditor, elementId);
+    if (shape) setShapesHidden(tldrawEditor, [shape.id], nextHidden);
   }
 
   // Remove o elemento e o shape vinculado no canvas
@@ -536,29 +534,9 @@ export function Editor({ project, onProjectChange }: Props) {
             <Separator orientation="vertical" className="mx-2 data-[orientation=vertical]:h-4" />
             <span className="truncate text-sm font-semibold">{localProject.name}</span>
             <SaveStatusIndicator status={saveStatus} lastSavedAt={lastSavedAt} lastError={lastError} onRetry={retrySync} />
+            {/* Ações (importar/exportar/histórico/deletar) migraram pras seções
+                do painel direito — a topbar fica só com contexto + toggles. */}
             <div className="ml-auto flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => setShowImport(true)}>
-                <ImageUp /> Importar imagem
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setShowTextTool(true)}>
-                <TypeIcon /> Adicionar texto
-              </Button>
-              <Button size="sm" onClick={() => setShowExport(true)}>
-                <Download /> Exportar bordado
-              </Button>
-              <Button variant="secondary" size="sm" onClick={() => setShowHistory(true)} title="Histórico do projeto">
-                <HistoryIcon /> Histórico
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                className="text-destructive hover:text-destructive"
-                onClick={handleDeleteProject}
-                disabled={deleting}
-                title="Deletar projeto"
-              >
-                <Trash2 /> Deletar
-              </Button>
               <Button variant="ghost" size="icon" className="size-7" onClick={toggleRightPanel} title="Mostrar/ocultar painel direito">
                 <PanelRight />
               </Button>
@@ -570,90 +548,80 @@ export function Editor({ project, onProjectChange }: Props) {
         {/* ── Main layout: canvas | handle | painel de ferramentas ── */}
         <ResizablePanelGroup direction="horizontal" autoSaveId="ponto-studio-editor-canvas-layout" className="min-h-0 flex-1">
           <ResizablePanel defaultSize={76} minSize={40}>
-            <div className="relative h-full">
+            {/* isolate: cria stacking context próprio pro tldraw, senão os z-index
+                internos dele (até 1000) vazam pro contexto raiz e cobrem os
+                portais do Radix (dropdown do usuário/logout, tooltip da sidebar). */}
+            <div className="relative h-full isolate">
               <Tldraw onMount={handleMount} components={tldrawComponents} />
+              {tldrawEditor && <CanvasToolbar editor={tldrawEditor} />}
             </div>
           </ResizablePanel>
           <ResizableHandle withHandle />
           <ResizablePanel ref={rightPanelRef} defaultSize={24} minSize={16} maxSize={34} collapsible collapsedSize={4}>
             <div className="flex h-full w-full flex-col overflow-y-auto border-l bg-sidebar text-sidebar-foreground">
-                <LayersPanel editor={tldrawEditor} />
-                <ShapeActionsPanel editor={tldrawEditor} selectedShapeIds={selectedShapeIds} />
+              {/* ── ARQUIVO ── */}
+              <SidebarGroup>
+                <SidebarGroupLabel>Arquivo</SidebarGroupLabel>
+                <SidebarGroupContent className="grid grid-cols-2 gap-1.5">
+                  <Button variant="secondary" size="sm" onClick={() => setShowHistory(true)} title="Histórico do projeto">
+                    <HistoryIcon /> Histórico
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="text-destructive hover:text-destructive"
+                    onClick={handleDeleteProject}
+                    disabled={deleting}
+                    title="Deletar projeto"
+                  >
+                    <Trash2 /> Deletar
+                  </Button>
+                </SidebarGroupContent>
+              </SidebarGroup>
 
-                {selectedElement ? (
-                  <PropertiesPanel
-                    element={selectedElement}
-                    onChange={(patch) => { void handlePropertiesChange(selectedElement.id, patch); }}
-                    onDelete={() => handleDeleteElement(selectedElement.id)}
-                  />
-                ) : (
-                  <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
-                    <span className="text-3xl">👆</span>
-                    <p className="text-sm leading-relaxed text-muted-foreground">
-                      Selecione uma área no canvas para configurar o bordado
-                    </p>
-                  </div>
-                )}
+              {/* ── EDITAR ── */}
+              <SidebarGroup>
+                <SidebarGroupLabel>Editar</SidebarGroupLabel>
+                <SidebarGroupContent className="flex flex-col gap-1.5">
+                  <Button variant="outline" size="sm" onClick={() => setShowImport(true)}>
+                    <ImageUp /> Importar imagem
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => setShowTextTool(true)}>
+                    <TypeIcon /> Adicionar texto
+                  </Button>
+                  <Button size="sm" onClick={() => setShowExport(true)}>
+                    <Download /> Exportar bordado
+                  </Button>
+                </SidebarGroupContent>
+              </SidebarGroup>
 
-                <SidebarGroup className="border-t">
-                  <SidebarGroupLabel>Áreas ({localProject.elements.length})</SidebarGroupLabel>
-                  <SidebarGroupContent className="flex max-h-52 flex-col overflow-y-auto">
-                    {localProject.elements.length === 0 && (
-                      <p className="px-2 py-1.5 text-xs text-muted-foreground">
-                        Importe uma imagem e analise com IA — a área do bordado é criada automaticamente.
-                      </p>
-                    )}
-                    {localProject.elements.length > 1 && (
-                      <p className="px-2 py-1.5 text-xs text-muted-foreground">
-                        Ordem de costura na máquina — use ▲/▼ pra reordenar.
-                      </p>
-                    )}
-                    {localProject.elements.map((el, idx) => (
-                      <div
-                        key={el.id}
-                        className={cn(
-                          "flex items-center gap-1 border-b py-1 pr-2",
-                          el.id === selectedElement?.id && "bg-accent"
-                        )}
-                      >
-                        <button
-                          className="flex min-w-0 flex-1 items-center gap-2 py-1 pl-2 text-left"
-                          onClick={() => handleSelectElement(el.id)}
-                        >
-                          <span className="w-5 shrink-0 text-xs font-bold text-muted-foreground">{idx + 1}º</span>
-                          <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: el.color }} />
-                          <span className="truncate text-xs capitalize">
-                            {el.stitch.type} — {el.color}
-                          </span>
-                        </button>
-                        <span className="flex shrink-0 flex-col">
-                          <button
-                            className={cn(
-                              "px-1.5 text-[9px] leading-tight text-muted-foreground",
-                              idx === 0 && "opacity-25"
-                            )}
-                            disabled={idx === 0}
-                            title="Costurar antes"
-                            onClick={() => moveElement(el.id, "up")}
-                          >
-                            ▲
-                          </button>
-                          <button
-                            className={cn(
-                              "px-1.5 text-[9px] leading-tight text-muted-foreground",
-                              idx === localProject.elements.length - 1 && "opacity-25"
-                            )}
-                            disabled={idx === localProject.elements.length - 1}
-                            title="Costurar depois"
-                            onClick={() => moveElement(el.id, "down")}
-                          >
-                            ▼
-                          </button>
-                        </span>
-                      </div>
-                    ))}
-                  </SidebarGroupContent>
-                </SidebarGroup>
+              {/* ── FERRAMENTAS / ALINHAR / DISTRIBUIR ── */}
+              <ShapeActionsPanel editor={tldrawEditor} selectedShapeIds={selectedShapeIds} />
+
+              {/* ── PARTES (motor unificado camadas+áreas) ── */}
+              <PartsPanel
+                elements={localProject.elements}
+                selectedElementId={selectedElement?.id ?? null}
+                editor={tldrawEditor}
+                onSelect={handleSelectElement}
+                onToggleHidden={handleToggleElementHidden}
+                onMove={moveElement}
+              />
+
+              {selectedElement ? (
+                <PropertiesPanel
+                  element={selectedElement}
+                  onChange={(patch) => { void handlePropertiesChange(selectedElement.id, patch); }}
+                  onDelete={() => handleDeleteElement(selectedElement.id)}
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center gap-2 border-t p-6 text-center">
+                  <span className="text-2xl">👆</span>
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    Selecione uma parte pra configurar o bordado
+                  </p>
+                </div>
+              )}
             </div>
           </ResizablePanel>
         </ResizablePanelGroup>

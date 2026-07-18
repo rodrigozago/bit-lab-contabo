@@ -46,7 +46,12 @@ export function useProjectStore(
   // Retry manual — clique no indicador "Erro ao salvar" tenta de novo com o estado atual
   const retrySync = useCallback(() => { void runSync(project); }, [project, runSync]);
 
-  const addElement = useCallback((svgPath: string, color: string, svgContent?: string) => {
+  const addElement = useCallback((
+    svgPath: string,
+    color: string,
+    svgContent?: string,
+    opts?: { name?: string; groupId?: string; groupName?: string },
+  ) => {
     const el: EmbroideryElement = {
       id: crypto.randomUUID(),
       svgPath,
@@ -55,6 +60,9 @@ export function useProjectStore(
       // tatami é o default: mais fiel pra letras/detalhes que cetim, que
       // exagera bordas em formas com contornos irregulares (STI-2)
       stitch: { type: "tatami", density: 0.6, angle: 45 },
+      ...(opts?.name ? { name: opts.name } : {}),
+      ...(opts?.groupId ? { groupId: opts.groupId } : {}),
+      ...(opts?.groupName ? { groupName: opts.groupName } : {}),
     };
     setProject((p) => {
       const next = { ...p, elements: [...p.elements, el], updatedAt: new Date().toISOString() };
@@ -92,6 +100,21 @@ export function useProjectStore(
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Visibilidade da parte é persistida (element.hidden) — o Editor reflete no
+  // shape vinculado do tldraw. Antes o show/hide vivia só no tldraw e sumia ao
+  // recarregar o projeto.
+  const toggleElementHidden = useCallback((id: string) => {
+    setProject((p) => {
+      const next = {
+        ...p,
+        elements: p.elements.map((e) => (e.id === id ? { ...e, hidden: !e.hidden } : e)),
+        updatedAt: new Date().toISOString(),
+      };
+      scheduleSync(next);
+      return next;
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const removeElement = useCallback((id: string) => {
     setProject((p) => {
       const next = {
@@ -114,6 +137,7 @@ export function useProjectStore(
     addElement,
     updateElement,
     moveElement,
+    toggleElementHidden,
     removeElement,
     saveStatus,
     lastSavedAt,

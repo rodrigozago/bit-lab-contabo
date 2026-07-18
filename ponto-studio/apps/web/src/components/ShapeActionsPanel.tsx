@@ -16,7 +16,6 @@ import {
   AlignVerticalDistributeCenter,
 } from "lucide-react";
 import { Button } from "@/components/ui/button.tsx";
-import { Separator } from "@/components/ui/separator.tsx";
 import { SidebarGroup, SidebarGroupContent, SidebarGroupLabel } from "@/components/ui/sidebar.tsx";
 
 interface Props {
@@ -27,8 +26,8 @@ interface Props {
 /**
  * Ferramentas de manipulação (grupo/rotacionar/espelhar/alinhar/distribuir) —
  * chamam a API do tldraw direto (editor.groupShapes/rotateShapesBy/etc já
- * existem prontas), essa UI só torna essas ações descobríveis no app sem
- * depender do usuário saber do menu de contexto (botão direito) do tldraw.
+ * existem prontas). Divididas em três seções da sidebar (FERRAMENTAS / ALINHAR /
+ * DISTRIBUIR) pra ficarem descobríveis sem depender do menu de contexto do tldraw.
  */
 export function ShapeActionsPanel({ editor, selectedShapeIds }: Props) {
   const count = selectedShapeIds.length;
@@ -45,64 +44,41 @@ export function ShapeActionsPanel({ editor, selectedShapeIds }: Props) {
   }
 
   return (
-    <SidebarGroup>
-      <SidebarGroupLabel>Ferramentas</SidebarGroupLabel>
-      <SidebarGroupContent className="flex flex-col gap-2">
-        <div className="grid grid-cols-2 gap-1.5">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!canGroup}
-            onClick={() => run((e) => e.groupShapes(selectedShapeIds))}
-          >
+    <>
+      {/* ── FERRAMENTAS ── */}
+      <SidebarGroup>
+        <SidebarGroupLabel>Ferramentas</SidebarGroupLabel>
+        <SidebarGroupContent className="grid grid-cols-2 gap-1.5">
+          <Button variant="outline" size="sm" disabled={!canGroup} onClick={() => run((e) => e.groupShapes(selectedShapeIds))}>
             <Group /> Agrupar
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!canUngroup}
-            onClick={() => run((e) => e.ungroupShapes(selectedShapeIds))}
-          >
+          <Button variant="outline" size="sm" disabled={!canUngroup} onClick={() => run((e) => e.ungroupShapes(selectedShapeIds))}>
             <Ungroup /> Desagrupar
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!canTransform}
-            onClick={() => run((e) => e.rotateShapesBy(selectedShapeIds, -Math.PI / 2))}
-          >
+          <Button variant="outline" size="sm" disabled={!canTransform} onClick={() => run((e) => e.rotateShapesBy(selectedShapeIds, -Math.PI / 2))}>
             <RotateCcw /> Girar
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!canTransform}
-            onClick={() => run((e) => e.rotateShapesBy(selectedShapeIds, Math.PI / 2))}
-          >
+          <Button variant="outline" size="sm" disabled={!canTransform} onClick={() => run((e) => e.rotateShapesBy(selectedShapeIds, Math.PI / 2))}>
             <RotateCw /> Girar
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!canTransform}
-            onClick={() => run((e) => e.flipShapes(selectedShapeIds, "horizontal"))}
-          >
+          <Button variant="outline" size="sm" disabled={!canTransform} onClick={() => run((e) => e.flipShapes(selectedShapeIds, "horizontal"))}>
             <FlipHorizontal /> Espelhar H
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!canTransform}
-            onClick={() => run((e) => e.flipShapes(selectedShapeIds, "vertical"))}
-          >
+          <Button variant="outline" size="sm" disabled={!canTransform} onClick={() => run((e) => e.flipShapes(selectedShapeIds, "vertical"))}>
             <FlipVertical /> Espelhar V
           </Button>
-        </div>
+          {count === 0 && (
+            <p className="col-span-2 text-[11px] text-muted-foreground">
+              Selecione formas no canvas pra habilitar.
+            </p>
+          )}
+        </SidebarGroupContent>
+      </SidebarGroup>
 
-        <Separator />
-
-        <p className="text-[11px] font-semibold text-muted-foreground">Alinhar</p>
-        <div className="grid grid-cols-2 gap-1.5">
+      {/* ── ALINHAR ── */}
+      <SidebarGroup>
+        <SidebarGroupLabel>Alinhar</SidebarGroupLabel>
+        <SidebarGroupContent className="grid grid-cols-2 gap-1.5">
           <Button variant="outline" size="sm" disabled={!canAlign} onClick={() => run((e) => e.alignShapes(selectedShapeIds, "left"))}>
             <AlignStartVertical /> Esquerda
           </Button>
@@ -121,24 +97,21 @@ export function ShapeActionsPanel({ editor, selectedShapeIds }: Props) {
           <Button variant="outline" size="sm" disabled={!canAlign} onClick={() => run((e) => e.alignShapes(selectedShapeIds, "bottom"))}>
             <AlignEndHorizontal /> Base
           </Button>
-        </div>
+        </SidebarGroupContent>
+      </SidebarGroup>
 
-        <Separator />
-
-        <p className="text-[11px] font-semibold text-muted-foreground">Distribuir</p>
-        <div className="grid grid-cols-2 gap-1.5">
+      {/* ── DISTRIBUIR ── */}
+      <SidebarGroup>
+        <SidebarGroupLabel>Distribuir</SidebarGroupLabel>
+        <SidebarGroupContent className="grid grid-cols-2 gap-1.5">
           <Button variant="outline" size="sm" disabled={!canDistribute} onClick={() => run((e) => e.distributeShapes(selectedShapeIds, "horizontal"))}>
             <AlignHorizontalDistributeCenter /> Horizontal
           </Button>
           <Button variant="outline" size="sm" disabled={!canDistribute} onClick={() => run((e) => e.distributeShapes(selectedShapeIds, "vertical"))}>
             <AlignVerticalDistributeCenter /> Vertical
           </Button>
-        </div>
-
-        {count === 0 && (
-          <p className="text-[11px] text-muted-foreground">Selecione formas no canvas pra habilitar as ferramentas.</p>
-        )}
-      </SidebarGroupContent>
-    </SidebarGroup>
+        </SidebarGroupContent>
+      </SidebarGroup>
+    </>
   );
 }

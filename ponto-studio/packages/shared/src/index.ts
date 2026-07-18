@@ -14,6 +14,12 @@ export interface StitchParams {
   pullCompensationMm?: number;
 }
 
+/**
+ * Uma "parte" do bordado — a unidade única do editor (antes havia dois conceitos
+ * paralelos: "áreas" no modelo salvo e "camadas" só no tldraw). Cada parte é uma
+ * região de cor com seu tipo de ponto, ordem de costura (posição no array),
+ * visibilidade e agrupamento por importação — tudo persistido.
+ */
 export interface EmbroideryElement {
   id: string;
   /** SVG path data (d attribute) que delimita a área. Usado para shapes simples. */
@@ -23,6 +29,14 @@ export interface EmbroideryElement {
   /** cor em hex, ex: "#FF5733" */
   color: string;
   stitch: StitchParams;
+  /** rótulo editável da parte; fallback exibido = `${tipo} — ${cor}` */
+  name?: string;
+  /** oculta a parte no canvas (persistido; antes só existia como truque no tldraw) */
+  hidden?: boolean;
+  /** agrupa partes vindas da mesma importação (foto/texto) */
+  groupId?: string;
+  /** nome do grupo de importação (ex.: nome do arquivo) */
+  groupName?: string;
 }
 
 export interface CanvasSize {
