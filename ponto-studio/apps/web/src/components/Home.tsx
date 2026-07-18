@@ -45,7 +45,7 @@ export function Home() {
     return (
       <BaseLayout>
         <Welcome
-          onStart={(projectId) => navigate(`/projects/${projectId}`)}
+          onStart={(projectId) => navigate(`/app/projects/${projectId}`)}
           onCancel={projects.length > 0 ? () => setCreating(false) : undefined}
         />
       </BaseLayout>
@@ -98,7 +98,7 @@ function ProjectCard({ project }: { project: EmbroideryProject }) {
 
   return (
     <div className="relative flex">
-      <Link to={`/projects/${project.id}`} className="flex-1">
+      <Link to={`/app/projects/${project.id}`} className="flex-1">
         <Card className="flex h-full flex-col gap-2.5 p-3 transition-colors hover:border-primary/50 hover:shadow-md">
           <div className="flex h-[140px] items-center justify-center overflow-hidden rounded-md bg-muted">
             {thumbnail ? (

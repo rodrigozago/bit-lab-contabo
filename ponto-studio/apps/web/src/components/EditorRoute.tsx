@@ -37,7 +37,7 @@ export function EditorRoute() {
           <CardContent className="flex flex-col items-center gap-3 p-10 text-center">
             <p className="text-sm text-muted-foreground">Projeto não encontrado.</p>
             <Button variant="link" asChild className="h-auto p-0">
-              <Link to="/">← Meus projetos</Link>
+              <Link to="/app">← Meus projetos</Link>
             </Button>
           </CardContent>
         </Card>
@@ -57,6 +57,6 @@ export function EditorRoute() {
   }
 
   return (
-    <Editor project={project} onProjectChange={handleProjectChange} onBackToHome={() => navigate("/")} />
+    <Editor project={project} onProjectChange={handleProjectChange} onBackToHome={() => navigate("/app")} />
   );
 }

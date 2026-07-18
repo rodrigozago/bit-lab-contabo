@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "./styles/utils.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -9,6 +10,29 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  /* Launch UI — accent colors */
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-light: var(--light);
+  --color-light-foreground: var(--light-foreground);
+  /* Launch UI — spacing */
+  --spacing-container: 1280px;
+  --spacing-container-lg: 1536px;
+  /* Launch UI — shadows */
+  --shadow-md: 0 4px 6px -1px var(--shadow), 0 2px 4px -2px var(--shadow);
+  --shadow-xl: 0 20px 25px -5px var(--shadow), 0 8px 10px -6px var(--shadow);
+  --shadow-2xl: 0 25px 50px -12px var(--shadow);
+  --shadow-mockup: -12px 16px 48px var(--shadow-strong);
+  /* Launch UI — separators */
+  --line-width: 1px;
+  /* Launch UI — animations */
+  --animate-appear: appear 0.6s forwards ease-out;
+  --animate-appear-zoom: appear-zoom 0.6s forwards ease-out;
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
+  /* Launch UI — breakpoints */
+  --breakpoint-xs: 30rem;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -40,11 +64,61 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Launch UI — keyframes */
+  @keyframes appear {
+    0% {
+      opacity: 0;
+      transform: translateY(1rem);
+      filter: blur(0.5rem);
+    }
+    50% {
+      filter: blur(0);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0);
+      filter: blur(0);
+    }
+  }
+  @keyframes appear-zoom {
+    0% {
+      opacity: 0;
+      transform: scale(0.5);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+  @keyframes accordion-down {
+    from {
+      height: 0;
+    }
+    to {
+      height: var(--radix-accordion-content-height);
+    }
+  }
+  @keyframes accordion-up {
+    from {
+      height: var(--radix-accordion-content-height);
+    }
+    to {
+      height: 0;
+    }
+  }
 }
 
 :root {
   --font-inter: 'Inter', system-ui, sans-serif;
   --radius: 0.625rem;
+  /* Launch UI — accent + illustration + shadows (light) */
+  --brand: oklch(66.5% 0.1804 47.04);
+  --brand-foreground: oklch(75.77% 0.159 55.91);
+  --light: var(--brand);
+  --light-foreground: var(--brand-foreground);
+  --shadow: #00000008;
+  --shadow-strong: #00000008;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -79,6 +153,13 @@
 }
 
 .dark {
+  /* Launch UI — accent + illustration + shadows (dark) */
+  --brand: oklch(83.6% 0.1177 66.87);
+  --brand-foreground: oklch(75.77% 0.159 55.91);
+  --light: var(--foreground);
+  --light-foreground: var(--foreground);
+  --shadow: #00000020;
+  --shadow-strong: #00000088;
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);

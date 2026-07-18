@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Home } from "./components/Home.tsx";
 import { EditorRoute } from "./components/EditorRoute.tsx";
+import { LandingPage } from "./components/landing/index.tsx";
 import { api } from "./api/client.ts";
 import { AuthContext, useAuth, loginUrl, type Me } from "./lib/auth.ts";
 import { ToastProvider } from "./components/Toast.tsx";
@@ -33,14 +34,36 @@ export default function App() {
       <AuthContext.Provider value={{ me, loading: authLoading, refresh }}>
         <ToastProvider>
           <Toaster />
-          <AuthGate />
+          <BrowserRouter>
+            <Routes>
+              {/* Landing pública na raiz — sem gate de auth */}
+              <Route path="/" element={<LandingPage />} />
+              {/* App autenticado vive em /app */}
+              <Route
+                path="/app"
+                element={
+                  <AuthGate>
+                    <Home />
+                  </AuthGate>
+                }
+              />
+              <Route
+                path="/app/projects/:id"
+                element={
+                  <AuthGate>
+                    <EditorRoute />
+                  </AuthGate>
+                }
+              />
+            </Routes>
+          </BrowserRouter>
         </ToastProvider>
       </AuthContext.Provider>
     </ThemeProvider>
   );
 }
 
-function AuthGate() {
+function AuthGate({ children }: { children: React.ReactNode }) {
   const { me, loading } = useAuth();
 
   if (loading) {
@@ -88,12 +111,5 @@ function AuthGate() {
     );
   }
 
-  return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/projects/:id" element={<EditorRoute />} />
-      </Routes>
-    </BrowserRouter>
-  );
+  return <>{children}</>;
 }

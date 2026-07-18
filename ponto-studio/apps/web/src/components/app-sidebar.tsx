@@ -36,7 +36,7 @@ const navGroups = [
     items: [
       {
         title: "Meus projetos",
-        url: "/",
+        url: "/app",
         icon: FolderKanban,
       },
     ],
@@ -55,7 +55,7 @@ export function AppSidebar({ projectContext, ...props }: AppSidebarProps) {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
-              <Link to="/">
+              <Link to="/app">
                 <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
                   <Logo size={24} className="text-current" />
                 </div>

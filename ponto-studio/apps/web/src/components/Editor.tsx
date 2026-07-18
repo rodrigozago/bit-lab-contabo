@@ -507,7 +507,7 @@ export function Editor({ project, onProjectChange }: Props) {
     setDeleting(true);
     try {
       await api.projects.delete(project.id);
-      navigate("/");
+      navigate("/app");
     } catch (err) {
       toast.error(
         `Erro ao deletar projeto: ${err instanceof Error ? err.message : "erro desconhecido"}`
