@@ -1,4 +1,4 @@
-import { HOOP_PX_PER_MM, type EmbroideryProject, type EmbroideryElement, type CanvasSize } from "@ponto-studio/shared";
+import { HOOP_PX_PER_MM, type EmbroideryProject, type EmbroideryElement, type CanvasSize, type StitchType } from "@ponto-studio/shared";
 import { parseViewBoxDimensions, computeContainTransform, scalePathData, type Dimensions } from "./svgTransform.js";
 
 /**
@@ -17,6 +17,7 @@ export function convertProjectToSvg(project: EmbroideryProject): string {
 <svg
   xmlns="http://www.w3.org/2000/svg"
   xmlns:inkstitch="http://inkstitch.org/namespace"
+  xmlns:ponto="https://ponto.studio/ns"
   width="${canvas.widthMm}mm"
   height="${canvas.heightMm}mm"
   viewBox="0 0 ${canvas.widthMm} ${canvas.heightMm}"
@@ -135,9 +136,14 @@ function extractAndAnnotatePaths(el: EmbroideryElement, canvas: CanvasSize): str
       })()
     : null;
 
+  // Rotação vai POR PATH (ponto:rotation*) — o worker lê só atributos de
+  // <path> (svg2paths2 ignora transform/viewBox, inclusive em <g>) e aplica
+  // Path.rotated() antes de gerar os pontos.
+  const rotAttrs = rotationAttrs(el, elementBounds);
+
   const paths = extractPathParts(svg).map(({ cleanAttrs, d }) => {
     const scaledD = transform ? scalePathData(d, transform.scale, transform.offsetX, transform.offsetY) : d;
-    return `<path ${cleanAttrs} d="${escapeXml(scaledD)}" fill="${el.color}" stroke="none" ${stitchAttrs} />`;
+    return `<path ${cleanAttrs} d="${escapeXml(scaledD)}" fill="${el.color}" stroke="none" ${stitchAttrs}${rotAttrs} />`;
   });
 
   if (paths.length === 0) {
@@ -145,18 +151,25 @@ function extractAndAnnotatePaths(el: EmbroideryElement, canvas: CanvasSize): str
     return elementToSvgPath(el);
   }
 
-  // Aplica rotação (persistida do tldraw) se houver
-  const rotation = el.rotation ?? 0;
-  let transformAttr = "";
-  if (rotation !== 0) {
-    // Calcula o centro do elemento em mm para rotação
-    const centerX = (elementBounds?.x ?? 0) + (elementBounds?.width ?? 0) / 2;
-    const centerY = (elementBounds?.y ?? 0) + (elementBounds?.height ?? 0) / 2;
-    const angleDeg = (rotation * 180) / Math.PI; // radianos → graus
-    transformAttr = ` transform="rotate(${angleDeg} ${centerX} ${centerY})"`;
-  }
+  return `<g id="${el.id}">\n    ${paths.join("\n    ")}\n  </g>`;
+}
 
-  return `<g id="${el.id}"${transformAttr}>\n    ${paths.join("\n    ")}\n  </g>`;
+/**
+ * Atributos `ponto:rotation*` do elemento: rotação em graus + centro (em mm,
+ * centro do bbox salvo pelo editor — que guarda o retângulo NÃO rotacionado,
+ * então o centro aqui coincide com o centro de rotação do shape no tldraw).
+ * Emitidos por <path> porque o worker não enxerga atributos de <g>.
+ */
+function rotationAttrs(
+  el: EmbroideryElement,
+  elementBounds: (Dimensions & { x: number; y: number }) | null
+): string {
+  const rotation = el.rotation ?? 0;
+  if (rotation === 0) return "";
+  const centerX = (elementBounds?.x ?? 0) + (elementBounds?.width ?? 0) / 2;
+  const centerY = (elementBounds?.y ?? 0) + (elementBounds?.height ?? 0) / 2;
+  const angleDeg = +((rotation * 180) / Math.PI).toFixed(4);
+  return ` ponto:rotation="${angleDeg}" ponto:rotation_cx="${+centerX.toFixed(3)}" ponto:rotation_cy="${+centerY.toFixed(3)}"`;
 }
 
 /**
@@ -171,7 +184,7 @@ export function buildElementPreviewSvg(el: EmbroideryElement, canvas: CanvasSize
   const viewBox = extractViewBox(svg) ?? `0 0 ${canvas.widthMm} ${canvas.heightMm}`;
 
   const unitsPerMm = dims && canvas.widthMm > 0 ? dims.width / canvas.widthMm : 1;
-  const lineDistanceUnits = +(densityToMm(el.stitch.density) * unitsPerMm).toFixed(3);
+  const lineDistanceUnits = +(densityToMm(el.stitch.density, el.stitch.type) * unitsPerMm).toFixed(3);
   const stitchAttrs = buildStitchAttributes(el, lineDistanceUnits);
 
   const paths = extractPathParts(svg).map(
@@ -196,24 +209,14 @@ function elementToSvgPath(el: EmbroideryElement): string {
   // shapes desenhadas no tldraw (retângulo/elipse/desenho livre) guardam "d"
   // em page-px — mesma conversão pra mm usada em extractAndAnnotatePaths.
   const d = scalePathData(rawD, 1 / HOOP_PX_PER_MM, 0, 0);
+  const rotAttrs = rotationAttrs(el, parseElementBoundsMm(el.svgPath));
 
-  // Aplica rotação (persistida do tldraw) se houver
-  const rotation = el.rotation ?? 0;
-  let transformAttr = "";
-  if (rotation !== 0) {
-    const bounds = parseElementBoundsMm(el.svgPath);
-    const centerX = (bounds?.x ?? 0) + (bounds?.width ?? 0) / 2;
-    const centerY = (bounds?.y ?? 0) + (bounds?.height ?? 0) / 2;
-    const angleDeg = (rotation * 180) / Math.PI; // radianos → graus
-    transformAttr = ` transform="rotate(${angleDeg} ${centerX} ${centerY})"`;
-  }
-
-  return `<g id="${el.id}"${transformAttr}>
+  return `<g id="${el.id}">
     <path
       d="${escapeXml(d)}"
       fill="${el.color}"
       stroke="none"
-      ${stitchAttrs}
+      ${stitchAttrs}${rotAttrs}
     />
   </g>`;
 }
@@ -227,7 +230,7 @@ function elementToSvgPath(el: EmbroideryElement): string {
 function buildStitchAttributes(el: EmbroideryElement, lineDistanceOverride?: number): string {
   const { type, angle, underlay, pullCompensationMm } = el.stitch;
   const isPreview = lineDistanceOverride !== undefined;
-  const lineDistance = lineDistanceOverride ?? densityToMm(el.stitch.density);
+  const lineDistance = lineDistanceOverride ?? densityToMm(el.stitch.density, type);
   const suffix = isPreview ? "" : "mm";
   let base = `inkstitch:angle="${angle}"`;
 
@@ -240,13 +243,18 @@ function buildStitchAttributes(el: EmbroideryElement, lineDistanceOverride?: num
     }
   }
 
+  // Comprimento máx. do ponto AO LONGO da linha (tatami) — distinto do
+  // espaçamento entre linhas. Só no export (mm): no preview as coordenadas
+  // estão em unidades do viewBox e o worker usa o default interno.
+  const maxLen = !isPreview && type === "tatami" ? ` inkstitch:max_stitch_length="3mm"` : "";
+
   switch (type) {
     case "satin":
       // contour_fill → zigue-zague borda-a-borda no worker (STI-2); preview e
       // export usam o mesmo método pro que se vê bater com o que se borda.
       return `${base} inkstitch:fill_method="contour_fill" inkstitch:line_distance="${lineDistance}${suffix}"`;
     case "tatami":
-      return `${base} inkstitch:fill_method="tatami_fill" inkstitch:line_distance="${lineDistance}${suffix}"`;
+      return `${base} inkstitch:fill_method="tatami_fill" inkstitch:line_distance="${lineDistance}${suffix}"${maxLen}`;
     case "running":
       return `${base} inkstitch:stroke_method="running_stitch" inkstitch:running_stitch_length="${lineDistance}${suffix}"`;
     default:
@@ -254,9 +262,22 @@ function buildStitchAttributes(el: EmbroideryElement, lineDistanceOverride?: num
   }
 }
 
-function densityToMm(density: number): number {
-  const min = 0.3;
-  const max = 3.0;
+/**
+ * density (0–1, slider da UI) → mm, por tipo de ponto. Faixas calibradas nos
+ * defaults do Ink/Stitch:
+ *   - tatami: espaçamento entre linhas 1.0→0.25mm (default 0.25; a faixa
+ *     antiga 3.0→0.3 deixava o meio do slider com vãos visíveis e fazia o
+ *     underlay aparecer através do preenchimento — efeito "duas agulhas");
+ *   - satin: passo do zigue-zague 0.8→0.2mm (default Ink/Stitch 0.4);
+ *   - running: comprimento do ponto 3.5→1.5mm (default 2.5).
+ */
+function densityToMm(density: number, type: StitchType = "tatami"): number {
+  const ranges: Record<StitchType, [min: number, max: number]> = {
+    tatami: [0.25, 1.0],
+    satin: [0.2, 0.8],
+    running: [1.5, 3.5],
+  };
+  const [min, max] = ranges[type] ?? ranges.tatami;
   return +(max - density * (max - min)).toFixed(2);
 }
 

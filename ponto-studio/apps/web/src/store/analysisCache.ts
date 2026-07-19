@@ -4,12 +4,16 @@
  * Guarda os últimos MAX_ENTRIES resultados.
  */
 
+import type { AnalyzeMetrics } from "@ponto-studio/shared";
+
 export interface CachedAnalysis {
   id: string;
   fileName: string;
   fileSize: number;
   previewDataUrl: string; // imagem original em base64 para exibir thumbnail
   svg: string;
+  /** métricas por camada (heurística de parâmetros) — ausente em cache antigo */
+  metrics?: AnalyzeMetrics;
   analyzedAt: string; // ISO8601
 }
 
@@ -53,7 +57,8 @@ export function getCached(file: File): CachedAnalysis | null {
 export function saveAnalysis(
   file: File,
   previewDataUrl: string,
-  svg: string
+  svg: string,
+  metrics?: AnalyzeMetrics
 ): CachedAnalysis {
   const entry: CachedAnalysis = {
     id: crypto.randomUUID(),
@@ -61,6 +66,7 @@ export function saveAnalysis(
     fileSize: file.size,
     previewDataUrl,
     svg,
+    ...(metrics ? { metrics } : {}),
     analyzedAt: new Date().toISOString(),
   };
 

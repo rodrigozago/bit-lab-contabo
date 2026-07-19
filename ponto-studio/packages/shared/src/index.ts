@@ -39,6 +39,8 @@ export interface EmbroideryElement {
   groupName?: string;
   /** rotação em radianos (persistida); aplicada na exportação do bordado */
   rotation?: number;
+  /** true enquanto o stitch veio da heurística automática (limpa ao editar) */
+  stitchSuggested?: boolean;
 }
 
 export interface CanvasSize {
@@ -179,11 +181,38 @@ export interface LocalAnalyzeParams {
   excludeBackground: boolean;
 }
 
+/** Métricas geométricas de uma camada de cor da análise (base da heurística
+ * de sugestão de parâmetros de ponto — ver stitchHeuristics no web). */
+export interface AnalyzeLayerMetrics {
+  /** cor final da camada no SVG, hex #rrggbb */
+  color: string;
+  /** % da imagem coberta pela camada */
+  areaPct: number;
+  /** largura típica do traço em px da imagem analisada (2× distance transform) */
+  meanWidthPx: number;
+  maxWidthPx: number;
+  /** nº de regiões desconectadas */
+  regionCount: number;
+  /** orientação do eixo principal, 0–180° (y pra baixo, como no SVG) */
+  principalAngleDeg: number;
+  /** razão dos eixos principais (≥1); alto = forma alongada (candidata a cetim) */
+  elongation: number;
+}
+
+export interface AnalyzeMetrics {
+  /** dimensões da imagem analisada (pós-downscale) — base pra converter px→mm */
+  imageWidth: number;
+  imageHeight: number;
+  layers: AnalyzeLayerMetrics[];
+}
+
 export interface AnalyzeJobStatus {
   jobId: string;
   status: JobStatus;
   /** SVG resultante, presente quando status === "done" */
   svg?: string;
+  /** métricas por camada (ausente em jobs de workers antigos) */
+  metrics?: AnalyzeMetrics;
   errorMessage?: string;
 }
 

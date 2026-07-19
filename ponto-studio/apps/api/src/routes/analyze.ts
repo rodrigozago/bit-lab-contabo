@@ -70,6 +70,17 @@ export async function analyzeRoutes(app: FastifyInstance) {
         return reply.status(500).send({ ok: false, error: "Result file missing" });
       }
       status.svg = readFileSync(svgPath, "utf-8");
+
+      // métricas por camada (heurística de parâmetros) — tolerante à ausência
+      // (worker antigo não grava o arquivo)
+      const metricsPath = join(EXPORTS_DIR, `${job.jobId}.metrics.json`);
+      if (existsSync(metricsPath)) {
+        try {
+          status.metrics = JSON.parse(readFileSync(metricsPath, "utf-8"));
+        } catch {
+          // metrics corrompido não deve derrubar a análise
+        }
+      }
     }
 
     return reply.send({ ok: true, data: status });

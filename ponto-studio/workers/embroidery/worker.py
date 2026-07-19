@@ -26,7 +26,9 @@ import math
 import pyembroidery
 import redis
 import svgpathtools
-from svgpathtools import Line, svg2paths2
+from svgpathtools import svg2paths2
+from shapely.geometry import LineString, Polygon
+from shapely.geometry.base import BaseGeometry
 
 # ── Configuração ──────────────────────────────────────────────────────────────
 
@@ -50,12 +52,22 @@ FORMAT_MAP: dict[str, str] = {
     "JEF": "jef",
 }
 
-# Parâmetros de ponto (em décimos de mm — unidade interna do pyembroidery)
-STITCH_SPACING_MM = 0.4       # distância entre linhas de preenchimento
-RUNNING_STITCH_LEN_MM = 2.5   # comprimento de ponto corrido
-SCALE_SVG_TO_EMB = 10         # 1 mm SVG → 10 unidades pyembroidery
-UNDERLAY_SPACING_MM = 2.0     # espaçamento da passada de base (esparsa de propósito)
-LOCK_OFFSET_MM = 0.3          # amplitude dos micro-pontos de trava (tie-in/tie-off)
+# Parâmetros de ponto (mm; SCALE_SVG_TO_EMB converte pra décimos de mm do
+# pyembroidery). Defaults calibrados pelos do Ink/Stitch (lib/elements/*.py):
+# row spacing 0.25mm, max stitch length 4mm, staggers 4, underlay 3× o topo,
+# satin zigzag 0.4mm, center-walk 3mm, travel 2.5mm.
+STITCH_SPACING_MM = 0.4        # distância entre linhas de preenchimento
+RUNNING_STITCH_LEN_MM = 2.5    # comprimento de ponto corrido
+SCALE_SVG_TO_EMB = 10          # 1 mm SVG → 10 unidades pyembroidery
+LOCK_OFFSET_MM = 0.3           # amplitude dos micro-pontos de trava (tie-in/tie-off)
+TATAMI_STITCH_LEN_MM = 3.0     # comprimento máx. do ponto AO LONGO da linha (≠ espaçamento entre linhas)
+FILL_STAGGERS = 4              # ciclo de deslocamento das penetrações entre linhas (anti-"veludo canelado")
+UNDERLAY_SPACING_FACTOR = 3.0  # underlay tatami: espaçamento = 3× o do preenchimento do topo
+CENTER_WALK_SPACING_MM = 1.5   # passo do center-walk (underlay do satin) ao longo da coluna
+SATIN_MAX_WIDTH_MM = 10.0      # coluna mais larga que isso não é satin — cai pra tatami
+TRAVEL_STITCH_LEN_MM = 2.5     # travel entre linhas: subdividido em pontos deste tamanho
+JUMP_GAP_MM = 6.0              # travel maior que isso vira JUMP (não costura ponte longa)
+POLYGON_SAMPLING_MM = 0.2      # resolução da amostragem path → polígono shapely
 
 
 # ── Conversão SVG → bordado ───────────────────────────────────────────────────
@@ -124,31 +136,92 @@ def path_to_running_stitches(
     return stitches
 
 
-def satin_path_with_stitches(
-    path: svgpathtools.Path,
-    spacing_mm: float = STITCH_SPACING_MM,
-    angle_deg: float = 45.0,
-    pull_comp_mm: float = 0.0,
-) -> list[tuple[float, float, bool]]:
-    """
-    Cetim (STI-2): zigue-zague lado-a-lado atravessando a forma — em cada
-    linha de varredura, em vez de preencher o interior com pontos (tatami),
-    a agulha vai de uma BORDA à outra; linhas consecutivas alternam a
-    direção, formando a coluna de cetim clássica (brilho contínuo, sem
-    "textura" de preenchimento).
+def _sample_ring(sub: svgpathtools.Path, sampling_mm: float) -> list[tuple[float, float]]:
+    """Amostra um subpath contínuo num anel de pontos (fechado)."""
+    pts: list[tuple[float, float]] = []
+    for seg in sub:
+        seg_len = seg.length()
+        if seg_len == 0:
+            continue
+        n = max(int(seg_len / sampling_mm), 1)
+        for i in range(n):
+            pt = seg.point(i / n)
+            pts.append((pt.real, pt.imag))
+    if pts and pts[0] != pts[-1]:
+        pts.append(pts[0])
+    return pts
 
-    Reusa a mesma varredura par-ímpar do tatami, então buracos e formas
-    separadas continuam respeitados (cada par vira uma coluna própria, com
-    jump entre elas).
-    """
-    xmin, xmax, ymin, ymax = path.bbox()
-    if xmax == xmin or ymax == ymin:
-        return [(x, y, i == 0) for i, (x, y) in enumerate(path_to_polyline(path))]
 
-    spacing = max(spacing_mm, 1e-3)
+def path_to_polygon(
+    path: svgpathtools.Path, sampling_mm: float = POLYGON_SAMPLING_MM
+) -> BaseGeometry | None:
+    """
+    Converte um Path do svgpathtools em geometria shapely com regra EVEN-ODD:
+    cada subpath fechado vira um Polygon e a composição por symmetric_difference
+    acumulado reproduz exatamente a regra par-ímpar do SVG (subpath dentro de
+    outro = buraco; dentro de buraco = ilha; etc). É o mesmo modelo do Ink/Stitch
+    (que interseta linhas de grating com um polígono shapely) — e elimina por
+    construção o bug do pareamento par-ímpar de PONTOS de cruzamento, que
+    quebrava quando a varredura passava exatamente sobre um vértice.
+    """
+    try:
+        subpaths = path.continuous_subpaths()
+    except Exception:
+        subpaths = [path]
+
+    polys: list[Polygon] = []
+    for sub in subpaths:
+        ring = _sample_ring(sub, sampling_mm)
+        if len(ring) < 4:
+            continue
+        try:
+            p = Polygon(ring)
+            if not p.is_valid:
+                p = p.buffer(0)  # conserta auto-interseções (comum em paths do vtracer)
+            if not p.is_empty and p.area > 0:
+                polys.append(p)
+        except Exception:
+            continue
+
+    if not polys:
+        return None
+    geom: BaseGeometry = polys[0]
+    for p in polys[1:]:
+        try:
+            geom = geom.symmetric_difference(p)
+        except Exception:
+            continue
+    return None if geom.is_empty else geom
+
+
+def _segments_from_intersection(inter: BaseGeometry) -> list[LineString]:
+    """Extrai os trechos de linha de uma interseção shapely (como o Ink/Stitch)."""
+    if inter.is_empty:
+        return []
+    t = inter.geom_type
+    if t == "LineString":
+        return [inter]
+    if t in ("MultiLineString", "GeometryCollection"):
+        return [g for g in inter.geoms if g.geom_type == "LineString"]
+    return []  # Point/MultiPoint (tangências) — sem trecho costurável
+
+
+def _grating_segments(
+    geom: BaseGeometry, spacing: float, angle_deg: float
+) -> tuple[list[tuple[int, float, float, list[tuple[float, float]]]], float, float]:
+    """
+    Varredura estilo Ink/Stitch: gera linhas paralelas ao ângulo, interseta cada
+    uma com o polígono e devolve, por linha, os SEGMENTOS internos já projetados
+    na coordenada `s` ao longo da direção da linha.
+
+    Retorna (rows, dx, dy) onde rows = [(row_idx, bx, by, [(s_lo, s_hi), …])].
+    `s` é comparável entre linhas (mesma origem projetada) — é o que permite o
+    grid global de penetrações com stagger.
+    """
+    xmin, ymin, xmax, ymax = geom.bounds
     rad = math.radians(angle_deg)
-    dx, dy = math.cos(rad), math.sin(rad)
-    px, py = -dy, dx
+    dx, dy = math.cos(rad), math.sin(rad)   # direção da linha de varredura
+    px, py = -dy, dx                        # eixo perpendicular (avança entre linhas)
 
     center_x, center_y = (xmin + xmax) / 2, (ymin + ymax) / 2
     c_dir = center_x * dx + center_y * dy
@@ -158,41 +231,148 @@ def satin_path_with_stitches(
     perp_projs = [cx * px + cy * py for cx, cy in corners]
     t_min, t_max = min(perp_projs), max(perp_projs)
 
-    stitches: list[tuple[float, float, bool]] = []
+    rows: list[tuple[int, float, float, list[tuple[float, float]]]] = []
     n_rows = int((t_max - t_min) / spacing) + 1
     for row in range(n_rows + 1):
         t = t_min + row * spacing
         bx = t * px + c_dir * dx
         by = t * py + c_dir * dy
-        scan = Line(
-            complex(bx - dx * half_len, by - dy * half_len),
-            complex(bx + dx * half_len, by + dy * half_len),
-        )
-
-        crossings: list[float] = []
+        scan = LineString([
+            (bx - dx * half_len, by - dy * half_len),
+            (bx + dx * half_len, by + dy * half_len),
+        ])
         try:
-            for _self_hit, (T_scan, _seg, _t) in path.intersect(scan):
-                pt = scan.point(T_scan)
-                crossings.append((pt.real - bx) * dx + (pt.imag - by) * dy)
+            inter = scan.intersection(geom)
         except Exception:
             continue
 
-        crossings.sort()
-        pairs = list(zip(crossings[0::2], crossings[1::2]))
+        segs: list[tuple[float, float]] = []
+        for ls in _segments_from_intersection(inter):
+            ss = [(X - bx) * dx + (Y - by) * dy for X, Y in ls.coords]
+            s_lo, s_hi = min(ss), max(ss)
+            if s_hi - s_lo > 1e-6:
+                segs.append((s_lo, s_hi))
+        segs.sort()
+        rows.append((row, bx, by, _merge_intervals(segs)))
 
-        for pair_idx, (lo, hi) in enumerate(pairs):
+    return rows, dx, dy
+
+
+def _merge_intervals(
+    segs: list[tuple[float, float]], eps: float = 1e-4
+) -> list[tuple[float, float]]:
+    """
+    Funde intervalos adjacentes/sobrepostos da mesma linha. Necessário porque
+    uma linha de varredura COLINEAR com uma aresta do polígono (ex.: a base de
+    um retângulo) interseta cada mini-segmento do anel amostrado separadamente —
+    viravam dezenas de "colunas" de 0.2mm com jump entre elas em vez de um
+    segmento contínuo.
+    """
+    if len(segs) <= 1:
+        return segs
+    merged: list[tuple[float, float]] = [segs[0]]
+    for lo, hi in segs[1:]:
+        last_lo, last_hi = merged[-1]
+        if lo <= last_hi + eps:
+            merged[-1] = (last_lo, max(last_hi, hi))
+        else:
+            merged.append((lo, hi))
+    return merged
+
+
+def _polyline_fallback(path: svgpathtools.Path) -> list[tuple[float, float, bool]]:
+    return [(x, y, i == 0) for i, (x, y) in enumerate(path_to_polyline(path))]
+
+
+def satin_path_with_stitches(
+    path: svgpathtools.Path,
+    spacing_mm: float = STITCH_SPACING_MM,
+    angle_deg: float = 45.0,
+    pull_comp_mm: float = 0.0,
+) -> list[tuple[float, float, bool]]:
+    """
+    Cetim: zigue-zague borda-a-borda atravessando a coluna — em cada linha de
+    varredura a agulha vai de uma BORDA à outra, alternando a direção, formando
+    a coluna de cetim clássica. `spacing_mm` é o passo do zigue-zague
+    (Ink/Stitch: zigzag_spacing, default 0.4mm).
+
+    Proteção de máquina: coluna com largura MEDIANA acima de SATIN_MAX_WIDTH_MM
+    não é cetim viável (pontos longos demais soltam do tecido) — cai pra tatami,
+    como o Ink/Stitch recomenda em colunas largas.
+    """
+    geom = path_to_polygon(path)
+    if geom is None:
+        return _polyline_fallback(path)
+
+    spacing = max(spacing_mm, 1e-3)
+    rows, dx, dy = _grating_segments(geom, spacing, angle_deg)
+
+    widths = [hi - lo for _row, _bx, _by, segs in rows for lo, hi in segs]
+    if widths:
+        median_w = sorted(widths)[len(widths) // 2]
+        if median_w > SATIN_MAX_WIDTH_MM:
+            log.warning(
+                "Coluna de cetim com largura mediana %.1fmm > %.0fmm — usando tatami",
+                median_w, SATIN_MAX_WIDTH_MM,
+            )
+            return fill_path_with_stitches(
+                path, spacing_mm=STITCH_SPACING_MM, angle_deg=angle_deg,
+                pull_comp_mm=pull_comp_mm,
+            )
+
+    stitches: list[tuple[float, float, bool]] = []
+    for row, bx, by, segs in rows:
+        for seg_idx, (lo, hi) in enumerate(segs):
             # STI-3: pull compensation — estica o zigue-zague nas duas bordas
             lo -= pull_comp_mm
             hi += pull_comp_mm
             # zigue-zague: alterna a ordem borda→borda a cada linha
             ends = (lo, hi) if row % 2 == 0 else (hi, lo)
             for k, s in enumerate(ends):
-                jump_before = pair_idx > 0 and k == 0
+                jump_before = seg_idx > 0 and k == 0
                 stitches.append((bx + s * dx, by + s * dy, jump_before))
 
-    if stitches:
-        return stitches
-    return [(x, y, i == 0) for i, (x, y) in enumerate(path_to_polyline(path))]
+    return stitches or _polyline_fallback(path)
+
+
+def satin_centerwalk_underlay(
+    path: svgpathtools.Path,
+    angle_deg: float = 45.0,
+    spacing_mm: float = CENTER_WALK_SPACING_MM,
+    repeats: int = 2,
+) -> list[tuple[float, float, bool]]:
+    """
+    Underlay center-walk do cetim (default do Ink/Stitch): uma costura corrida
+    pelo CENTRO da coluna (ida e volta, repeats=2), invisível sob o zigue-zague.
+    Substitui o antigo crosshatch perpendicular, que era quase tão denso quanto
+    o preenchimento principal e aparecia "atravessado" no bordado final — o
+    efeito de "duas agulhas costurando dois lados ao mesmo tempo".
+    """
+    geom = path_to_polygon(path)
+    if geom is None:
+        return []
+
+    rows, dx, dy = _grating_segments(geom, max(spacing_mm, 1e-3), angle_deg)
+    mids: list[tuple[float, float]] = []
+    for _row, bx, by, segs in rows:
+        if not segs:
+            continue
+        # múltiplos segmentos na mesma linha (formas separadas): segue o maior
+        lo, hi = max(segs, key=lambda p: p[1] - p[0])
+        m = (lo + hi) / 2
+        mids.append((bx + m * dx, by + m * dy))
+
+    if len(mids) < 2:
+        return []
+
+    pts: list[tuple[float, float, bool]] = []
+    for rep in range(max(repeats, 1)):
+        seq = mids if rep % 2 == 0 else list(reversed(mids))
+        start = 0 if rep == 0 else 1  # a volta começa de onde a ida parou
+        for i in range(start, len(seq)):
+            x, y = seq[i]
+            pts.append((x, y, rep == 0 and i == 0))
+    return pts
 
 
 def fill_path_with_stitches(
@@ -200,84 +380,93 @@ def fill_path_with_stitches(
     spacing_mm: float = STITCH_SPACING_MM,
     angle_deg: float = 45.0,
     pull_comp_mm: float = 0.0,
+    stitch_len_mm: float = TATAMI_STITCH_LEN_MM,
+    staggers: int = FILL_STAGGERS,
 ) -> list[tuple[float, float, bool]]:
     """
-    Preenchimento por varredura de linhas paralelas ao ângulo dado, com regra
-    PAR-ÍMPAR: em cada linha, as interseções reais com o contorno são ordenadas
-    e os pontos são emitidos só ENTRE PARES consecutivos (0–1, 2–3, …). Assim,
-    buracos (miolo de letras como a/b/6) adicionam duas interseções e viram
-    lacunas vazias — não são bordados por cima.
+    Preenchimento tatami no modelo do Ink/Stitch (lib/stitches/fill.py):
 
-    Retorna (x, y, jump_before): quando uma linha de varredura cruza um
-    buraco OU um vão entre formas separadas (ex.: entre duas letras), ela
-    produz 2+ pares na MESMA linha — sem marcar o início de cada par novo
-    com jump_before=True, o ponto final de um par era costurado em linha
-    reta até o início do próximo, "fechando" o buraco/vão com um ponto por
-    cima dele (bug real: some ao vivo o efeito piora com densidade alta,
-    porque mais linhas de varredura = mais desses pontos-ponte).
+    - Linhas de varredura viram SEGMENTOS via interseção shapely com o polígono
+      even-odd (nunca pares de pontos de cruzamento) — buracos e tangências são
+      respeitados por construção.
+    - `spacing_mm` é a distância ENTRE linhas; `stitch_len_mm` é o comprimento
+      máximo do ponto AO LONGO da linha (dois parâmetros distintos — tatami real
+      tem linhas a ~0.4mm com pontos de ~3mm; usar um valor só gerava ou pontos
+      minúsculos ou linhas esparsas com vãos).
+    - Penetrações num grid GLOBAL ao longo da linha com STAGGER cíclico
+      (`staggers` linhas antes de repetir) — sem isso as penetrações se alinham
+      em colunas e o preenchimento ganha sulcos visíveis ("veludo canelado").
+    - Linhas alternam a direção (vai-e-volta); travel entre linhas é subdividido
+      em pontos de TRAVEL_STITCH_LEN_MM; vão maior que JUMP_GAP_MM vira JUMP.
+
+    Retorna (x, y, jump_before).
     """
-    xmin, xmax, ymin, ymax = path.bbox()
-    if xmax == xmin or ymax == ymin:
-        return [(x, y, i == 0) for i, (x, y) in enumerate(path_to_polyline(path))]
+    geom = path_to_polygon(path)
+    if geom is None:
+        return _polyline_fallback(path)
 
-    spacing = max(spacing_mm, 1e-3)  # unidades SVG
-    rad = math.radians(angle_deg)
-    dx, dy = math.cos(rad), math.sin(rad)   # direção da linha de varredura
-    px, py = -dy, dx                        # eixo perpendicular (avança entre linhas)
-
-    center_x, center_y = (xmin + xmax) / 2, (ymin + ymax) / 2
-    c_dir = center_x * dx + center_y * dy   # projeção do centro no eixo da linha
-    half_len = math.hypot(xmax - xmin, ymax - ymin)  # cobre a bbox inteira
-
-    # faixa do eixo perpendicular sobre os cantos da bbox
-    corners = [(xmin, ymin), (xmax, ymin), (xmax, ymax), (xmin, ymax)]
-    perp_projs = [cx * px + cy * py for cx, cy in corners]
-    t_min, t_max = min(perp_projs), max(perp_projs)
+    spacing = max(spacing_mm, 1e-3)
+    stitch_len = max(stitch_len_mm, 0.5)
+    rows, dx, dy = _grating_segments(geom, spacing, angle_deg)
 
     stitches: list[tuple[float, float, bool]] = []
-    n_rows = int((t_max - t_min) / spacing) + 1
-    for row in range(n_rows + 1):
-        t = t_min + row * spacing
-        # ponto-base da linha: projeção `t` no perp e no centro do eixo da linha
-        bx = t * px + c_dir * dx
-        by = t * py + c_dir * dy
-        scan = Line(
-            complex(bx - dx * half_len, by - dy * half_len),
-            complex(bx + dx * half_len, by + dy * half_len),
-        )
+    last_pt: tuple[float, float] | None = None
 
-        # posição `s` de cada interseção ao longo da direção da linha
-        crossings: list[float] = []
-        try:
-            for _self_hit, (T_scan, _seg, _t) in path.intersect(scan):
-                pt = scan.point(T_scan)
-                crossings.append((pt.real - bx) * dx + (pt.imag - by) * dy)
-        except Exception:
+    for row, bx, by, segs in rows:
+        if not segs:
             continue
+        # stagger do Ink/Stitch: desloca o grid de penetrações a cada linha
+        stagger_offset = ((row / staggers) % 1.0) * stitch_len
+        reverse = row % 2 == 1
+        ordered = list(reversed(segs)) if reverse else segs
 
-        crossings.sort()
-        # regra par-ímpar: pontos só ENTRE pares consecutivos (buracos = lacunas)
-        pairs = list(zip(crossings[0::2], crossings[1::2]))
-        if row % 2 == 1:
-            pairs = [(hi, lo) for lo, hi in reversed(pairs)]  # zig-zag
-
-        for pair_idx, (s_a, s_b) in enumerate(pairs):
-            lo, hi = min(s_a, s_b), max(s_a, s_b)
+        for seg_idx, (lo, hi) in enumerate(ordered):
             # STI-3: pull compensation — o fio traciona o tecido pra dentro na
             # direção da costura; esticar cada linha nas pontas compensa isso
             lo -= pull_comp_mm
             hi += pull_comp_mm
-            seq = [lo + k * spacing for k in range(int((hi - lo) / spacing) + 1)]
-            if s_a > s_b:
-                seq.reverse()
-            for k, s in enumerate(seq):
-                # novo par na MESMA linha = atravessou um buraco/vão — pula
-                jump_before = pair_idx > 0 and k == 0
-                stitches.append((bx + s * dx, by + s * dy, jump_before))
 
-    if stitches:
-        return stitches
-    return [(x, y, i == 0) for i, (x, y) in enumerate(path_to_polyline(path))]
+            # penetrações no grid global s = k·stitch_len + stagger_offset
+            k0 = math.ceil((lo - stagger_offset) / stitch_len)
+            interior: list[float] = []
+            k = k0
+            while True:
+                s = k * stitch_len + stagger_offset
+                if s >= hi - 1e-6:
+                    break
+                if s > lo + 1e-6:
+                    interior.append(s)
+                k += 1
+            seq = [lo] + interior + [hi]
+            if reverse:
+                seq.reverse()
+
+            first_of_seg = True
+            for s in seq:
+                x, y = bx + s * dx, by + s * dy
+                jump_before = False
+                if first_of_seg:
+                    if seg_idx > 0:
+                        jump_before = True  # vão/buraco na MESMA linha — pula
+                    elif last_pt is not None:
+                        gap = math.hypot(x - last_pt[0], y - last_pt[1])
+                        if gap > JUMP_GAP_MM:
+                            jump_before = True  # ponte longa (forma côncava) — pula
+                        elif gap > TRAVEL_STITCH_LEN_MM:
+                            # travel curto: subdivide em pontos de até 2.5mm
+                            n = int(gap / TRAVEL_STITCH_LEN_MM)
+                            for i in range(1, n + 1):
+                                f = i / (n + 1)
+                                stitches.append((
+                                    last_pt[0] + (x - last_pt[0]) * f,
+                                    last_pt[1] + (y - last_pt[1]) * f,
+                                    False,
+                                ))
+                stitches.append((x, y, jump_before))
+                last_pt = (x, y)
+                first_of_seg = False
+
+    return stitches or _polyline_fallback(path)
 
 
 def _add_lock_stitches(pattern: pyembroidery.EmbPattern, x: float, y: float) -> None:
@@ -328,6 +517,7 @@ def svg_to_embroidery(svg_path: Path, format_ext: str) -> pyembroidery.EmbPatter
         density_raw = attrs.get("inkstitch:line_distance", str(STITCH_SPACING_MM))
         run_len_raw = attrs.get("inkstitch:running_stitch_length", str(RUNNING_STITCH_LEN_MM))
         pull_comp_raw = attrs.get("inkstitch:pull_compensation_mm", "0")
+        max_len_raw = attrs.get("inkstitch:max_stitch_length", str(TATAMI_STITCH_LEN_MM))
         wants_underlay = attrs.get("inkstitch:underlay", "") == "true"
 
         try:
@@ -350,6 +540,28 @@ def svg_to_embroidery(svg_path: Path, format_ext: str) -> pyembroidery.EmbPatter
         except ValueError:
             pull_comp = 0.0
 
+        try:
+            stitch_len = float(str(max_len_raw).replace("mm", ""))
+        except ValueError:
+            stitch_len = TATAMI_STITCH_LEN_MM
+
+        # Rotação da parte (ponto:rotation, em graus) — o tldraw rotaciona o
+        # shape no canvas e a API repassa aqui POR PATH, porque svg2paths2 lê só
+        # o `d` (ignora transform/viewBox, inclusive em <g>). Path.rotated()
+        # rotaciona curvas e arcos corretamente; aplicada ANTES da geração de
+        # pontos, então o ângulo de varredura acompanha o desenho rotacionado.
+        try:
+            rot_deg = float(attrs.get("ponto:rotation", "0") or 0)
+        except ValueError:
+            rot_deg = 0.0
+        if rot_deg:
+            try:
+                rot_cx = float(attrs.get("ponto:rotation_cx", "0") or 0)
+                rot_cy = float(attrs.get("ponto:rotation_cy", "0") or 0)
+                path = path.rotated(rot_deg, complex(rot_cx, rot_cy))
+            except Exception as exc:
+                log.warning("Falha ao aplicar rotação %s°: %s", rot_deg, exc)
+
         # Estratégia por tipo (STI-2): running = contorno com comprimento de
         # ponto configurável; contour_fill (cetim na UI) = zigue-zague
         # borda-a-borda; tatami_fill = preenchimento por varredura.
@@ -362,17 +574,29 @@ def svg_to_embroidery(svg_path: Path, format_ext: str) -> pyembroidery.EmbPatter
             elif is_satin:
                 points = satin_path_with_stitches(path, spacing_mm=spacing, angle_deg=angle, pull_comp_mm=pull_comp)
             else:
-                points = fill_path_with_stitches(path, spacing_mm=spacing, angle_deg=angle, pull_comp_mm=pull_comp)
-
-            # STI-3: underlay — passada de base esparsa e PERPENDICULAR antes
-            # do preenchimento (estabiliza o tecido; a passada principal cobre
-            # ela por completo). Mesma cor, sem troca de linha; o primeiro
-            # ponto do preenchimento principal vira JUMP pra não costurar uma
-            # ponte do fim do underlay até o início do preenchimento.
-            if wants_underlay and not is_running:
-                underlay = fill_path_with_stitches(
-                    path, spacing_mm=UNDERLAY_SPACING_MM, angle_deg=angle + 90.0
+                points = fill_path_with_stitches(
+                    path, spacing_mm=spacing, angle_deg=angle,
+                    pull_comp_mm=pull_comp, stitch_len_mm=stitch_len,
                 )
+
+            # STI-3: underlay estilo Ink/Stitch — passada de base ANTES do
+            # preenchimento, que fica invisível debaixo dele. Mesma cor, sem
+            # troca de linha; o primeiro ponto do preenchimento principal vira
+            # JUMP pra não costurar ponte do fim do underlay até o início.
+            #   - cetim: center-walk (costura corrida pelo centro da coluna);
+            #   - tatami: perpendicular com 3× o espaçamento do topo (o antigo
+            #     crosshatch quase tão denso quanto o topo aparecia no bordado
+            #     final como um segundo desenho atravessado — "duas agulhas").
+            if wants_underlay and not is_running:
+                if is_satin:
+                    underlay = satin_centerwalk_underlay(path, angle_deg=angle)
+                else:
+                    underlay = fill_path_with_stitches(
+                        path,
+                        spacing_mm=spacing * UNDERLAY_SPACING_FACTOR,
+                        angle_deg=angle + 90.0,
+                        stitch_len_mm=stitch_len,
+                    )
                 if underlay and points:
                     x0, y0, _ = points[0]
                     points = underlay + [(x0, y0, True)] + points[1:]
@@ -577,7 +801,7 @@ def process_job(r: redis.Redis, job_data: dict[str, Any]) -> None:
 
 def process_analyze_job(r: redis.Redis, job_data: dict[str, Any]) -> None:
     """Análise local: imagem em UPLOADS_DIR → SVG por cor em EXPORTS_DIR."""
-    from analyze import DEFAULT_MERGE_DELTA_E, AnalyzeParams, analyze_image
+    from analyze import DEFAULT_MERGE_DELTA_E, AnalyzeParams, analyze_image_with_metrics
 
     job_id: str = job_data["jobId"]
     image_file: str = job_data["imageFile"]
@@ -599,10 +823,15 @@ def process_analyze_job(r: redis.Redis, job_data: dict[str, Any]) -> None:
             max_areas=int(raw_params.get("maxAreas", AnalyzeParams().max_areas)),
             exclude_background=bool(raw_params.get("excludeBackground", True)),
         )
-        svg = analyze_image(str(image_path), params)
+        svg, metrics = analyze_image_with_metrics(str(image_path), params)
 
         output_file = f"{job_id}.svg"
         (EXPORTS_DIR / output_file).write_text(svg, encoding="utf-8")
+        # métricas por camada ao lado do SVG — a API anexa no status do job
+        # (base da heurística de sugestão de parâmetros de ponto no front)
+        (EXPORTS_DIR / f"{job_id}.metrics.json").write_text(
+            json.dumps(metrics), encoding="utf-8"
+        )
         log.info("Análise %s concluída → %s (%d bytes)", job_id, output_file, len(svg))
 
         result = json.dumps({"jobId": job_id, "status": "done", "outputFile": output_file})

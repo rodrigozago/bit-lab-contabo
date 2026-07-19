@@ -6,6 +6,7 @@ import type {
   ExportJob,
   ApiResponse,
   AnalyzeJobStatus,
+  AnalyzeMetrics,
   LocalAnalyzeParams,
   EmbroideryElement,
   CanvasSize,
@@ -104,8 +105,12 @@ export const api = {
   },
 };
 
-/** Aguarda a análise local terminar e resolve com o SVG resultante. */
-export async function pollAnalysisUntilDone(jobId: string, intervalMs = 1000): Promise<string> {
+/** Aguarda a análise local terminar e resolve com o SVG + métricas por camada
+ * (metrics ausente quando o worker não as gerou). */
+export async function pollAnalysisUntilDone(
+  jobId: string,
+  intervalMs = 1000
+): Promise<{ svg: string; metrics?: AnalyzeMetrics }> {
   return new Promise((resolve, reject) => {
     const timer = setInterval(async () => {
       try {
@@ -113,7 +118,7 @@ export async function pollAnalysisUntilDone(jobId: string, intervalMs = 1000): P
         if (job.status === "done") {
           clearInterval(timer);
           if (!job.svg) return reject(new Error("Análise terminou sem SVG"));
-          resolve(job.svg);
+          resolve({ svg: job.svg, ...(job.metrics ? { metrics: job.metrics } : {}) });
         } else if (job.status === "error") {
           clearInterval(timer);
           reject(new Error(job.errorMessage ?? "Falha na análise da imagem"));

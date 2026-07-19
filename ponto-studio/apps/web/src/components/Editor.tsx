@@ -17,6 +17,7 @@ import { api } from "../api/client.ts";
 import { rectToSvgPath } from "../utils/geometry.ts";
 import { splitSvgByColor, recolorSvg } from "../utils/svgLayers.ts";
 import { findShapeByElementId, setShapesHidden } from "../utils/canvasShapes.ts";
+import { findLayerMetrics, suggestStitchParams } from "../utils/stitchHeuristics.ts";
 import { PropertiesPanel } from "./PropertiesPanel.tsx";
 import { ShapeActionsPanel } from "./ShapeActionsPanel.tsx";
 import { PartsPanel } from "./PartsPanel.tsx";
@@ -239,10 +240,21 @@ export function Editor({ project, onProjectChange }: Props) {
           const elementId = shape.meta?.["elementId"] as string | undefined;
           const bounds = editor.getShapePageBounds(shape.id);
           if (elementId && bounds) {
-            // Sincroniza rotação + transformações do shape do tldraw com o modelo salvo
-            // (antes só sincronizava svgPath, perdendo rotação/flip nas transformações)
+            // Salva o retângulo NÃO rotacionado (w/h do shape, centrado no
+            // centro da AABB — que coincide com o centro do rect rotacionado)
+            // + rotation à parte. Salvar a própria AABB inflava o bbox e o
+            // export encolhia o desenho via contain-fit; a rotação é aplicada
+            // pelo worker (ponto:rotation) ao redor desse mesmo centro.
+            const props = shape.props as { w?: number; h?: number };
+            let w = props.w, h = props.h;
+            if (w == null || h == null) {
+              const geo = editor.getShapeGeometry(shape).bounds;
+              w = geo.w; h = geo.h;
+            }
+            const cx = bounds.x + bounds.w / 2;
+            const cy = bounds.y + bounds.h / 2;
             updateElement(elementId, {
-              svgPath: rectToSvgPath(bounds.x, bounds.y, bounds.w, bounds.h),
+              svgPath: rectToSvgPath(cx - w / 2, cy - h / 2, w, h),
               rotation: shape.rotation,
             });
           }
@@ -274,6 +286,9 @@ export function Editor({ project, onProjectChange }: Props) {
           for (const s of siblings) {
             const siblingElementId = s.meta?.["elementId"] as string | undefined;
             if (siblingElementId) {
+              // siblings acabaram de ser posicionados exatamente em `bounds`
+              // (updateShapes acima), então o rect não-rotacionado deles É o
+              // próprio bounds; a rotação individual segue à parte.
               updateElement(siblingElementId, {
                 svgPath: rectToSvgPath(bounds.x, bounds.y, bounds.w, bounds.h),
                 rotation: s.rotation,
@@ -398,15 +413,32 @@ export function Editor({ project, onProjectChange }: Props) {
       ? colorLayers
       : [{ color: "#7c5cbf", svgContent: result.svg }];
 
-    for (const layer of layersToCreate) {
+    // Heurística de parâmetros: converte as métricas da análise (px da imagem
+    // analisada) pra mm reais no bastidor e sugere tipo/densidade/ângulo por
+    // camada — em vez do default fixo pra tudo. `pxPerMm` usa a largura da
+    // imagem analisada sobre a largura REAL do desenho no bastidor.
+    const analyzeMetrics = result.metrics;
+    const pxPerMm = analyzeMetrics
+      ? analyzeMetrics.imageWidth / (canvasW / HOOP_PX_PER_MM)
+      : 0;
+
+    for (const [layerIndex, layer] of layersToCreate.entries()) {
       // SVG chapado serve de placeholder até o preview de pontos carregar
       const layerDataUrl = await svgToDataUrl(layer.svgContent);
+
+      const layerMetrics = findLayerMetrics(analyzeMetrics, layer.color);
+      const suggested = layerMetrics
+        ? suggestStitchParams(layerMetrics, analyzeMetrics, pxPerMm, layerIndex)
+        : undefined;
 
       const elementId = addElement(
         rectToSvgPath(imgX, imgY, canvasW, canvasH),
         layer.color,
         layer.svgContent,
-        { groupId: importGroupId, groupName: importGroupName }
+        {
+          groupId: importGroupId, groupName: importGroupName,
+          ...(suggested ? { stitch: suggested, stitchSuggested: true } : {}),
+        }
       );
 
       const svgAssetId = AssetRecordType.createId();
@@ -473,6 +505,8 @@ export function Editor({ project, onProjectChange }: Props) {
   // cor mudou, regenera o asset recolorido pra refletir no canvas também
   // (antes, mudar a cor só afetava o dado, não o que aparecia na tela).
   async function handlePropertiesChange(elementId: string, patch: Partial<EmbroideryElement>) {
+    // editar o ponto manualmente substitui a sugestão da heurística
+    if (patch.stitch) patch = { ...patch, stitchSuggested: false };
     updateElement(elementId, patch);
     if (!patch.color || !tldrawEditor) return;
 

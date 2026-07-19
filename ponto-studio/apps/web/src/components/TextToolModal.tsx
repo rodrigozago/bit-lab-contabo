@@ -96,9 +96,9 @@ export function TextToolModal({ onClose, onConfirm }: Props) {
         maxAreas: 8,
         excludeBackground: true,
       });
-      const svg = await pollAnalysisUntilDone(jobId);
+      const { svg, metrics } = await pollAnalysisUntilDone(jobId);
 
-      onConfirm({ file, result: { svg }, previewDataUrl });
+      onConfirm({ file, result: { svg, ...(metrics ? { metrics } : {}) }, previewDataUrl });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao converter o texto em bordado");
       setLoading(false);

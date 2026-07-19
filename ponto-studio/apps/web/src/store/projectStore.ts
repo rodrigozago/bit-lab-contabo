@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import type { EmbroideryProject, EmbroideryElement } from "@ponto-studio/shared";
+import type { EmbroideryProject, EmbroideryElement, StitchParams } from "@ponto-studio/shared";
 
 export type SaveStatus = "idle" | "saving" | "saved" | "error";
 
@@ -50,16 +50,25 @@ export function useProjectStore(
     svgPath: string,
     color: string,
     svgContent?: string,
-    opts?: { name?: string; groupId?: string; groupName?: string },
+    opts?: {
+      name?: string;
+      groupId?: string;
+      groupName?: string;
+      /** parâmetros sugeridos pela heurística (stitchHeuristics) — substituem o default */
+      stitch?: StitchParams;
+      stitchSuggested?: boolean;
+    },
   ) => {
     const el: EmbroideryElement = {
       id: crypto.randomUUID(),
       svgPath,
       ...(svgContent ? { svgContent } : {}),
       color,
-      // tatami é o default: mais fiel pra letras/detalhes que cetim, que
-      // exagera bordas em formas com contornos irregulares (STI-2)
-      stitch: { type: "tatami", density: 0.6, angle: 45 },
+      // sem sugestão da heurística, tatami é o default: mais fiel pra
+      // letras/detalhes que cetim, que exagera bordas em formas com
+      // contornos irregulares (STI-2)
+      stitch: opts?.stitch ?? { type: "tatami", density: 0.6, angle: 45 },
+      ...(opts?.stitchSuggested ? { stitchSuggested: true } : {}),
       ...(opts?.name ? { name: opts.name } : {}),
       ...(opts?.groupId ? { groupId: opts.groupId } : {}),
       ...(opts?.groupName ? { groupName: opts.groupName } : {}),

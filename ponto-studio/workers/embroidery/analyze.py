@@ -9,6 +9,7 @@ Determinístico: seed fixa no k-means — a mesma imagem com os mesmos parâmetr
 produz sempre o mesmo SVG.
 """
 
+import math
 import os
 import re
 import tempfile
@@ -479,11 +480,102 @@ def cap_max_areas(svg: str, max_areas: int) -> str:
     return _rebuild_grouped_svg(root, entries)
 
 
+# ── Métricas por camada (heurística de parâmetros de ponto) ───────────────────
+
+def _layer_metrics(mask: np.ndarray) -> dict:
+    """
+    Métricas geométricas de uma camada de cor (máscara booleana HxW), usadas
+    pela heurística de sugestão de parâmetros de ponto no front:
+      - areaPct: % da imagem coberta pela camada;
+      - meanWidthPx/maxWidthPx: largura típica/máxima do traço (2× o distance
+        transform — distância até a borda ≈ metade da largura local);
+      - regionCount: nº de regiões desconectadas;
+      - principalAngleDeg (0–180, eixo y pra baixo como no SVG) e elongation
+        (razão dos eixos principais, ≥1): orientação e alongamento via momentos
+        centrais — colunas finas/alongadas são candidatas a cetim perpendicular.
+    """
+    m8 = mask.astype(np.uint8)
+    area_px = int(m8.sum())
+    area_pct = 100.0 * area_px / mask.size if mask.size else 0.0
+
+    if area_px == 0:
+        return {
+            "areaPct": 0.0, "meanWidthPx": 0.0, "maxWidthPx": 0.0,
+            "regionCount": 0, "principalAngleDeg": 0.0, "elongation": 1.0,
+        }
+
+    n_comp, _lbl, _stats, _cent = cv2.connectedComponentsWithStats(m8, connectivity=8)
+    dist = cv2.distanceTransform(m8, cv2.DIST_L2, 3)
+    vals = dist[mask]
+
+    mom = cv2.moments(m8, binaryImage=True)
+    if mom["m00"] > 0:
+        mu20 = mom["mu20"] / mom["m00"]
+        mu02 = mom["mu02"] / mom["m00"]
+        mu11 = mom["mu11"] / mom["m00"]
+        angle_deg = math.degrees(0.5 * math.atan2(2 * mu11, mu20 - mu02)) % 180.0
+        spread = math.sqrt(max((mu20 - mu02) ** 2 + 4 * mu11 ** 2, 0.0))
+        lam1 = (mu20 + mu02 + spread) / 2
+        lam2 = (mu20 + mu02 - spread) / 2
+        elongation = math.sqrt(lam1 / lam2) if lam2 > 1e-9 else 10.0
+    else:
+        angle_deg, elongation = 0.0, 1.0
+
+    return {
+        "areaPct": round(area_pct, 3),
+        "meanWidthPx": round(float(2.0 * vals.mean()), 2),
+        "maxWidthPx": round(float(2.0 * vals.max()), 2),
+        "regionCount": int(n_comp - 1),
+        "principalAngleDeg": round(angle_deg, 1),
+        "elongation": round(min(elongation, 99.0), 2),
+    }
+
+
+def _compute_layer_metrics(
+    svg: str, labels: np.ndarray, palette: np.ndarray, bg_index: int | None
+) -> dict:
+    """
+    Reconstrói a máscara de cada camada FINAL do SVG (pós-fusões de cor):
+    cada cluster da paleta (menos o fundo) é atribuído à cor final mais
+    próxima em Lab — o mesmo critério usado nas fusões — e as máscaras dos
+    clusters do mesmo destino são unidas.
+    """
+    h, w = labels.shape
+    ET.register_namespace("", SVG_NS)
+    try:
+        root = ET.fromstring(svg)
+        entries = _extract_color_groups(root)
+    except ET.ParseError:
+        entries = []
+
+    layers: list[dict] = []
+    if entries:
+        final_labs = [_hex_to_lab(e["color"]) for e in entries]
+        cluster_to_layer: dict[int, int] = {}
+        for ci in range(len(palette)):
+            if bg_index is not None and ci == bg_index:
+                continue
+            c_lab = _hex_to_lab(_bgr_to_hex(palette[ci]))
+            dists = [float(np.linalg.norm(c_lab - fl)) for fl in final_labs]
+            cluster_to_layer[ci] = int(np.argmin(dists))
+
+        for li, entry in enumerate(entries):
+            mask = np.zeros((h, w), dtype=bool)
+            for ci, target in cluster_to_layer.items():
+                if target == li:
+                    mask |= labels == ci
+            layers.append({"color": entry["color"], **_layer_metrics(mask)})
+
+    return {"imageWidth": w, "imageHeight": h, "layers": layers}
+
+
 # ── Entrada principal ──────────────────────────────────────────────────────────
 
-def analyze_image(image_path: str, params: AnalyzeParams | None = None) -> str:
+def analyze_image_with_metrics(
+    image_path: str, params: AnalyzeParams | None = None
+) -> tuple[str, dict]:
     """
-    Pipeline completo: imagem → SVG agrupado por cor.
+    Pipeline completo: imagem → (SVG agrupado por cor, métricas por camada).
 
     Com `exclude_background` (default), `colors` significa cores DO DESENHO:
     internamente segmenta em `colors + 1` clusters (desenho + fundo), detecta
@@ -514,6 +606,7 @@ def analyze_image(image_path: str, params: AnalyzeParams | None = None) -> str:
     svg = vectorize(quantized, p)
     grouped = group_paths_by_color(svg)
 
+    bg_index: int | None = None
     if exclude_background and len(palette) > 1:
         bg_index = _detect_background_index(labels, len(palette))
         grouped = _remove_color_group(grouped, _bgr_to_hex(palette[bg_index]))
@@ -521,4 +614,11 @@ def analyze_image(image_path: str, params: AnalyzeParams | None = None) -> str:
     grouped = merge_similar_svg_colors(grouped, p.color_tolerance)
     grouped = cap_max_areas(grouped, p.max_areas)
 
-    return grouped
+    metrics = _compute_layer_metrics(grouped, labels, palette, bg_index)
+    return grouped, metrics
+
+
+def analyze_image(image_path: str, params: AnalyzeParams | None = None) -> str:
+    """Compat: só o SVG (ver analyze_image_with_metrics)."""
+    svg, _metrics = analyze_image_with_metrics(image_path, params)
+    return svg

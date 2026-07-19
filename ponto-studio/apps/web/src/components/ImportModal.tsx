@@ -6,6 +6,8 @@ import { saveAnalysis, listAnalyses, removeAnalysis } from "../store/analysisCac
 import type { CachedAnalysis } from "../store/analysisCache.ts";
 import { api, pollAnalysisUntilDone } from "../api/client.ts";
 import { normalizeSvgToFillContainer } from "../utils/svgLayers.ts";
+import { suggestColorsFromImage } from "../utils/stitchHeuristics.ts";
+import type { AnalyzeMetrics } from "@ponto-studio/shared";
 import { cn } from "@/lib/utils.ts";
 import { Button } from "@/components/ui/button.tsx";
 import { Slider } from "@/components/ui/slider.tsx";
@@ -15,6 +17,8 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 
 export interface AnalyzeResult {
   svg: string;
+  /** métricas por camada da análise — base da sugestão de parâmetros de ponto */
+  metrics?: AnalyzeMetrics;
 }
 
 export interface ImportConfirmPayload {
@@ -69,7 +73,20 @@ export function ImportModal({ onClose, onConfirm }: Props) {
     setFile(f);
     setError("");
     const reader = new FileReader();
-    reader.onload = () => setPreviewUrl(reader.result as string);
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      setPreviewUrl(dataUrl);
+      // Pré-preenche o slider de cores com a sugestão da própria imagem
+      // (contagem de cores dominantes no cliente) — o usuário pode ajustar.
+      if (f.type !== "image/svg+xml") {
+        const img = new Image();
+        img.onload = () => {
+          const suggested = suggestColorsFromImage(img);
+          if (suggested !== null) setColors(suggested);
+        };
+        img.src = dataUrl;
+      }
+    };
     reader.onerror = () => {
       setFile(null);
       setPreviewUrl("");
@@ -95,7 +112,7 @@ export function ImportModal({ onClose, onConfirm }: Props) {
 
   function handleSelectCached(entry: CachedAnalysis) {
     setPreviewUrl(entry.previewDataUrl);
-    setResult({ svg: entry.svg });
+    setResult({ svg: entry.svg, ...(entry.metrics ? { metrics: entry.metrics } : {}) });
     setFromCache(true);
     const blob = new Blob([], { type: "image/png" });
     setFile(new File([blob], entry.fileName, { type: "image/png" }));
@@ -116,12 +133,12 @@ export function ImportModal({ onClose, onConfirm }: Props) {
         reader.readAsDataURL(file);
       });
 
-      const svg = await analyzeLocal(file);
+      const { svg, metrics } = await analyzeLocal(file);
 
-      saveAnalysis(file, previewDataUrl, svg);
+      saveAnalysis(file, previewDataUrl, svg, metrics);
       setCachedList(listAnalyses());
       setPreviewUrl(previewDataUrl);
-      setResult({ svg });
+      setResult({ svg, ...(metrics ? { metrics } : {}) });
       setScreen("preview");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro desconhecido");
@@ -129,7 +146,7 @@ export function ImportModal({ onClose, onConfirm }: Props) {
     }
   }
 
-  async function analyzeLocal(f: File): Promise<string> {
+  async function analyzeLocal(f: File): Promise<{ svg: string; metrics?: AnalyzeMetrics }> {
     if (f.type === "image/svg+xml") {
       throw new Error("SVG já é vetorial — o processamento local aceita PNG ou JPG.");
     }

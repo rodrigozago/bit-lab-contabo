@@ -50,14 +50,25 @@ describe("convertProjectToSvg", () => {
     expect(svg).toContain('inkstitch:fill_method="contour_fill"');
   });
 
-  it("gera atributos tatami com line_distance derivado da densidade", () => {
+  it("gera atributos tatami com line_distance derivado da densidade + max_stitch_length", () => {
     const el = makeElement({
       stitch: { type: "tatami", density: 0.6, angle: 30 } satisfies StitchParams,
     });
     const svg = convertProjectToSvg(makeProject([el]));
     expect(svg).toContain('inkstitch:fill_method="tatami_fill"');
-    // densityToMm: 3.0 - 0.6 * (3.0 - 0.3) = 1.38
-    expect(svg).toContain('inkstitch:line_distance="1.38mm"');
+    // densityToMm (faixa Ink/Stitch 0.25–1.0): 1.0 - 0.6 * (1.0 - 0.25) = 0.55
+    expect(svg).toContain('inkstitch:line_distance="0.55mm"');
+    // comprimento do ponto ao longo da linha é um parâmetro separado
+    expect(svg).toContain('inkstitch:max_stitch_length="3mm"');
+  });
+
+  it("satin usa a faixa de zigzag spacing (0.2–0.8mm)", () => {
+    const el = makeElement({
+      stitch: { type: "satin", density: 0.6, angle: 45 } satisfies StitchParams,
+    });
+    const svg = convertProjectToSvg(makeProject([el]));
+    // 0.8 - 0.6 * (0.8 - 0.2) = 0.44
+    expect(svg).toContain('inkstitch:line_distance="0.44mm"');
   });
 
   it("gera atributos de running stitch", () => {
@@ -66,7 +77,34 @@ describe("convertProjectToSvg", () => {
     });
     const svg = convertProjectToSvg(makeProject([el]));
     expect(svg).toContain('inkstitch:stroke_method="running_stitch"');
-    expect(svg).toContain('inkstitch:running_stitch_length="0.3mm"');
+    // faixa do running: 3.5 - 1 * (3.5 - 1.5) = 1.5
+    expect(svg).toContain('inkstitch:running_stitch_length="1.5mm"');
+  });
+
+  it("rotação vira ponto:rotation* POR PATH (não transform, que o worker ignora)", () => {
+    // elemento de 2.5×2.5mm em (0,0) rotacionado 90° → centro (1.25, 1.25)
+    const el = makeElement({ rotation: Math.PI / 2 });
+    const svg = convertProjectToSvg(makeProject([el]));
+    expect(svg).toContain('ponto:rotation="90"');
+    expect(svg).toContain('ponto:rotation_cx="1.25"');
+    expect(svg).toContain('ponto:rotation_cy="1.25"');
+    expect(svg).toContain('xmlns:ponto="https://ponto.studio/ns"');
+    expect(svg).not.toContain("transform=");
+  });
+
+  it("rotação também é emitida nos paths extraídos do svgContent", () => {
+    const el = makeElement({
+      rotation: Math.PI / 4,
+      svgContent: `<svg viewBox="0 0 10 10"><path d="M 1 1 Z" fill="#aabbcc"/></svg>`,
+    });
+    const svg = convertProjectToSvg(makeProject([el]));
+    expect(svg).toContain('ponto:rotation="45"');
+    expect(svg).not.toContain("transform=");
+  });
+
+  it("sem rotação, nenhum atributo ponto:rotation é emitido", () => {
+    const svg = convertProjectToSvg(makeProject([makeElement()]));
+    expect(svg).not.toContain("ponto:rotation");
   });
 
   it("usa a cor do elemento (el.color) em todos os paths, mesmo os com fill próprio", () => {

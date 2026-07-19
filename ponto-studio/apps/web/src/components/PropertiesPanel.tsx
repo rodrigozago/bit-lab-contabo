@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronRight, Trash2 } from "lucide-react";
+import { ChevronRight, Sparkles, Trash2 } from "lucide-react";
 import type { EmbroideryElement, StitchType } from "@ponto-studio/shared";
 import { cn } from "@/lib/utils.ts";
 import { Button } from "@/components/ui/button.tsx";
@@ -29,6 +29,15 @@ export function PropertiesPanel({ element, onChange, onDelete }: Props) {
     <SidebarGroup>
       <SidebarGroupLabel>Propriedades</SidebarGroupLabel>
       <SidebarGroupContent className="flex flex-col gap-3 px-2 pb-2">
+        {element.stitchSuggested && (
+          <p
+            className="flex items-center gap-1.5 rounded-md bg-accent px-2 py-1.5 text-xs text-muted-foreground"
+            title="Tipo, densidade e ângulo escolhidos automaticamente a partir da forma desta parte. Qualquer ajuste seu substitui a sugestão."
+          >
+            <Sparkles className="size-3.5 shrink-0" />
+            Parâmetros sugeridos automaticamente
+          </p>
+        )}
         <div className="flex flex-col gap-1.5">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Tipo de ponto</p>
           <div className="flex flex-col gap-1.5">
