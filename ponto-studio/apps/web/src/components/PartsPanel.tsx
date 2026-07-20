@@ -18,6 +18,7 @@ const STITCH_LABEL: Record<StitchType, string> = {
   running: "Corrido",
   zigzag: "Ziguezague",
   ripple: "Ondulado",
+  satinColumn: "Cetim",
 };
 
 function partLabel(el: EmbroideryElement): string {

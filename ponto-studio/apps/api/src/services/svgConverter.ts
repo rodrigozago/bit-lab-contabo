@@ -27,12 +27,63 @@ export function convertProjectToSvg(project: EmbroideryProject): string {
 }
 
 function elementToSvgGroup(el: EmbroideryElement, canvas: CanvasSize): string {
+  if (el.stitch.type === "satinColumn") {
+    // Extração de trilhos só é conhecida pra formas simples (sem svgContent —
+    // ver comentário de SatinColumnStitchParams no packages/shared). Com
+    // svgContent (geometria de polígono arbitrária) não dá pra extrair 2
+    // trilhos nesta fase — cai pro tatami com a mesma densidade, mantendo a
+    // geometria original (a UI já esconde "Cetim" como opção pra esses casos,
+    // isso aqui é só a rede de segurança pra dados salvos antes dessa checagem).
+    if (!el.svgContent) {
+      const satinSvg = satinColumnToSvgGroup(el);
+      if (satinSvg) return satinSvg;
+    }
+    return elementToSvgGroupByShape({ ...el, stitch: { type: "tatami", density: el.stitch.density, angle: 45 } }, canvas);
+  }
+  return elementToSvgGroupByShape(el, canvas);
+}
+
+function elementToSvgGroupByShape(el: EmbroideryElement, canvas: CanvasSize): string {
   // Se tem SVG completo da IA, extrai os paths de dentro e reaplica atributos inkstitch
   if (el.svgContent && el.svgContent.trim().startsWith("<")) {
     return extractAndAnnotatePaths(el, canvas);
   }
   // Caso simples: svgPath é o atributo "d"
   return elementToSvgPath(el);
+}
+
+/**
+ * Constrói os 2 trilhos (rails) do cetim a partir do bounding box retangular
+ * de uma forma simples (ver `parseElementBoundsMm`) — os 2 lados MAIS
+ * COMPRIDOS do retângulo viram os 2 trilhos (o zigue-zague atravessa o lado
+ * mais curto). `null` se não houver bounds válidos (sem `svgPath` utilizável).
+ */
+function satinColumnToSvgGroup(el: EmbroideryElement): string | null {
+  const bounds = parseElementBoundsMm(el.svgPath);
+  if (!bounds || !(bounds.width > 0) || !(bounds.height > 0)) return null;
+  const { x, y, width, height } = bounds;
+
+  // Cada trilho percorre a MESMA direção (ex.: os dois da esquerda pra
+  // direita) — pareamento por índice do Ink/Stitch (old-style, sem rungs)
+  // conecta o ponto 0 de um trilho com o ponto 0 do outro, senão o
+  // zigue-zague sai cruzado.
+  const rawD = width >= height
+    ? `M ${x} ${y} L ${x + width} ${y} M ${x} ${y + height} L ${x + width} ${y + height}`
+    : `M ${x} ${y} L ${x} ${y + height} M ${x + width} ${y} L ${x + width} ${y + height}`;
+
+  const centerX = x + width / 2;
+  const centerY = y + height / 2;
+  const angleDeg = ((el.rotation ?? 0) * 180) / Math.PI;
+  const d = rotatePathData(rawD, angleDeg, centerX, centerY);
+  const { presentation, inkstitch } = buildStitchAttributes(el);
+
+  return `<g id="${el.id}">
+    <path
+      d="${escapeXml(d)}"
+      ${presentation}
+      ${inkstitch}
+    />
+  </g>`;
 }
 
 /**
@@ -232,9 +283,11 @@ const DEFAULT_MEANDER_PATTERN = "N4-21c";
  * `auto_fill` FANTASMA (default do Ink/Stitch quando `fill_method` não é
  * emitido), silenciosamente empilhado por baixo do ponto corrido. Por isso
  * estes tipos SEMPRE emitem `fill="none" stroke="cor"` (nunca os dois juntos
- * como os fills de verdade) — ver `buildStitchAttributes`.
+ * como os fills de verdade) — ver `buildStitchAttributes`. `satinColumn`
+ * também entra aqui: `SatinColumn.color` (`lib/elements/satin_column.py`)
+ * lê a cor do `stroke`, não do `fill`.
  */
-const STROKE_FAMILY_TYPES: ReadonlySet<StitchType> = new Set(["running", "zigzag", "ripple"]);
+const STROKE_FAMILY_TYPES: ReadonlySet<StitchType> = new Set(["running", "zigzag", "ripple", "satinColumn"]);
 
 /** density (0–1 da UI) → valor real, por faixa. Ranges calibrados nos defaults do Ink/Stitch. */
 function densityToRange(density: number, [min, max]: readonly [number, number]): number {
@@ -349,6 +402,16 @@ function buildStitchAttributes(el: EmbroideryElement, unitsPerMm?: number): Stit
       if (stitch.joinStyle !== undefined) attrs += ` inkstitch:join_style="${stitch.joinStyle}"`;
       if (stitch.repeats && stitch.repeats > 1) attrs += ` inkstitch:repeats="${stitch.repeats}"`;
       if (stitch.beanStitchRepeats) attrs += ` inkstitch:bean_stitch_repeats="${stitch.beanStitchRepeats}"`;
+      return { presentation, inkstitch: attrs };
+    }
+    case "satinColumn": {
+      const spacing = toViewBoxUnits(densityToRange(stitch.density, ZIGZAG_SPACING_RANGE_MM));
+      let attrs = `inkstitch:satin_column="true" inkstitch:satin_method="satin_column" ` +
+        `inkstitch:zigzag_spacing_mm="${spacing}" ` +
+        `inkstitch:center_walk_underlay="${stitch.underlay ? "true" : "false"}"`;
+      if (stitch.pullCompensationMm && stitch.pullCompensationMm > 0) {
+        attrs += ` inkstitch:pull_compensation_mm="${stitch.pullCompensationMm}"`;
+      }
       return { presentation, inkstitch: attrs };
     }
   }

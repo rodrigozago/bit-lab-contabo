@@ -5,9 +5,9 @@
 > Marque os checkpoints `[ ]` → `[x]` conforme for implementando.
 
 **Última atualização:** 2026-07-20
-**Status geral:** 🟢 Fase 0 + Fase 1 + Fase 2 CONCLUÍDAS — motor real (Ink/Stitch) rodando com 7 tipos de
-ponto (Tatami/Contour/Meander/Circular/Running/Zigzag/Ripple), UI por tipo, heurística de sugestão, rotação
-real. Próximo: Fase 3 (Satin Column).
+**Status geral:** 🟢 Fase 0 + Fase 1 + Fase 2 + Fase 3 CONCLUÍDAS — motor real (Ink/Stitch) rodando com 8
+tipos de ponto (Tatami/Contour/Meander/Circular/Running/Zigzag/Ripple/Satin Column), UI por tipo,
+heurística de sugestão, rotação real. Próximo: Fase 4 (Guided/Linear Gradient/Tartan/Cross Stitch).
 
 ---
 
@@ -37,12 +37,18 @@ real. Próximo: Fase 3 (Satin Column).
   baixo do ponto corrido (confirmado: 286 pontos vs 48 na mesma geometria só trocando `fill`/`stroke`).
   Ver Seção 6.1 pros detalhes e por que isso também elimina o campo `angle` do `running` (nunca teve
   efeito real — só afetava o fill fantasma).
+- **Fase 3 concluída em 2026-07-20**: Satin Column real (`satinColumn`), **escopo reduzido de propósito**
+  (decisão explícita do usuário) — só extrai os 2 trilhos de formas SIMPLES (retângulo/elipse/livre, sem
+  `svgContent`); partes vindas de importação de imagem caem no fallback pra `tatami`. Ver Seção 7.1 pro
+  porquê e pro achado de que, pra coluna RETA (nosso escopo), Cetim e Ziguezague geram a MESMA geometria —
+  o ganho de shipar Cetim agora é `pull_compensation_mm`/`center_walk_underlay` (que `zigzag_stitch` não
+  tem) e preparar terreno pra colunas curvas numa fase futura.
 
 ### Checklist de alto nível
 - [x] **Fase 0** — Runner do Ink/Stitch no worker (fundação; validado headless) ✅ 2026-07-20
 - [x] **Fase 1** — Schema de params + Fills (Tatami, Contour, Meander, Circular) + UI + heurística ✅ 2026-07-20
 - [x] **Fase 2** — Stroke (running/bean/zigzag/ripple) ✅ 2026-07-20
-- [ ] **Fase 3** — Satin Column (extração de trilhos)
+- [x] **Fase 3** — Satin Column (formas simples; extração geral de polígono fica pra depois) ✅ 2026-07-20
 - [ ] **Fase 4** — Demais fills (Guided, Linear Gradient, Tartan, Cross Stitch)
 
 ---
@@ -479,32 +485,112 @@ puro = mm (mesma convenção do resto do documento: 1 user unit = 1mm).
 
 ---
 
-## 7. Fase 3+ (fast-follow, um a um)
+## 7. Fase 3 — Satin Column — ✅ CONCLUÍDA 2026-07-20
 
-- [ ] **Fase 3 — Satin Column**: gerar geometria de coluna (2 trilhos + rungs) a partir da forma estreita
-      (extração de rails via retângulo de área mínima / eixo médio — **geometria**, não algoritmo de ponto)
-      e entregar ao Ink/Stitch; **fallback pra tatami** quando a extração falhar.
-- [ ] **Fase 4 — Demais fills**: Guided (com linha-guia), Linear Gradient, Tartan, Cross Stitch.
+### 7.1 Decisão de escopo (explícita do usuário) e por quê
+
+O `SatinColumn` do Ink/Stitch (`lib/elements/satin_column.py`, v3.2.2) exige um `<path>` com **2+
+subcaminhos** (os trilhos/rails) — pro modo "old-style" (sem rungs explícitos), os 2 trilhos precisam ter
+o MESMO número de pontos, e a costura conecta ponto[i] do trilho 1 com ponto[i] do trilho 2. Extrair esses
+2 trilhos de um POLÍGONO ARBITRÁRIO (contorno vindo de importação de imagem/IA) é um problema geométrico
+sério: precisa achatar curvas Bezier em polilinhas (não existe ainda no lado TS — Python tinha
+`svgpathtools`, removido na Fase 0), dividir o contorno nos 2 pontos extremos do eixo principal, e
+reamostrar os 2 lados resultantes pro mesmo número de pontos por comprimento de arco.
+
+Diante do risco/esforço, o usuário optou por um **escopo reduzido**: só implementar a extração pra
+**formas simples desenhadas no editor** (retângulo/elipse/desenho livre — ferramenta do tldraw), cujo
+`svgPath` é **sempre** o bounding box retangular da forma (ver `Editor.tsx`, o listener que sincroniza
+`svgPath: rectToSvgPath(...)` pra QUALQUER shape, independente do tipo). Isso torna a extração **trivial**:
+os 2 lados MAIS COMPRIDOS do retângulo são os 2 trilhos, sem nenhuma análise de polígono. Partes com
+`svgContent` (geometria complexa, vinda da análise de imagem) caem no **fallback pra `tatami`** com a
+mesma densidade — tanto no `svgConverter.ts` (rede de segurança pra dados salvos) quanto na UI (a opção
+"Cetim" nem aparece no seletor de tipo de ponto quando o elemento tem `svgContent`).
+
+Extração geral de polígono (pra colunas curvas vindas de importação de imagem) fica pra uma fase futura.
+
+### 7.2 Construção dos trilhos (rects) e atributos confirmados
+
+`satinColumnToSvgGroup` em `svgConverter.ts`: dado o bbox `(x, y, width, height)` do elemento (mesma
+`parseElementBoundsMm` já usada pra rotação), os 2 trilhos correm ao longo do lado mais comprido — os 2
+pontos de cada trilho DEVEM percorrer a MESMA direção (ex.: ambos esquerda→direita), senão o Ink/Stitch
+pareia os pontos errados e o zigue-zague sai cruzado:
+
+```
+width >= height (coluna horizontal):
+  d = "M x,y L x+width,y  M x,y+height L x+width,y+height"   (topo e base, ambos →)
+
+height > width (coluna vertical):
+  d = "M x,y L x,y+height  M x+width,y L x+width,y+height"   (esquerda e direita, ambos ↓)
+```
+
+`SatinColumn.color` lê a cor do `stroke` (não do `fill`) — por isso `satinColumn` entra no
+`STROKE_FAMILY_TYPES` junto com running/zigzag/ripple (`fill="none" stroke=cor`).
+
+Atributos confirmados empiricamente (SVG mínimo, coluna reta 40mm×10mm, dentro do container):
+
+| Atributo | Efeito confirmado |
+|---|---|
+| `satin_column="true"` | Obrigatório — sem ele (mesmo com 2 subpaths + stroke), o Ink/Stitch trataria como `Stroke` comum |
+| `satin_method="satin_column"` | Já é o default (`get_param('satin_method', 'satin_column')`), emitido mesmo assim por clareza |
+| `zigzag_spacing_mm` | 0.4mm→213pts, 0.2mm→413pts (dobra, mesmo nome/comportamento do zigzag simples) |
+| `pull_compensation_mm` | 1mm→bbox largura +2mm (1mm de cada lado) — nome DIFERENTE do `stroke_pull_compensation_mm` do zigzag simples |
+| `center_walk_underlay="true"` | 213→248 pontos (passe extra pelo centro entre os trilhos, params default: 3mm/2 repetições/50% posição) |
+
+**Achado notável**: pra uma coluna RETA (nosso escopo), `satin_column` com 2 trilhos paralelos gera
+**exatamente a mesma contagem/geometria de pontos** que um `zigzag_stitch` simples (Stroke) com
+`stroke-width` igual à distância entre os trilhos — confirmado (213 pontos nos dois casos). Isso faz
+sentido matematicamente: só há diferença real entre os dois métodos quando a coluna CURVA ou muda de
+largura ao longo do comprimento — nenhum dos dois casos é o nosso (retângulo reto). O valor prático de
+shipar "Cetim" já nesta fase é: (1) `pull_compensation_mm` e `center_walk_underlay`, que o `zigzag_stitch`
+simples não tem; (2) preparar o terreno pro Fase 3+ (colunas curvas de verdade).
+
+### Verificação da Fase 3 — ✅ feita
+- Testes empíricos A/B no container: `zigzag_spacing_mm`, `pull_compensation_mm`, `center_walk_underlay` —
+  todos com o efeito esperado (tabela acima), incluindo a comparação satin-reto vs zigzag-simples.
+- SVG de produção com um elemento de CADA um dos 8 tipos (`convertProjectToSvg` real, canvas 60×100mm),
+  processado via `worker.process_job` dentro do container: **3018 pontos totais, 8 blocos de cor**, todos
+  com geometria não-vazia e bbox na posição esperada.
+- `npx pnpm@9.15.4 --filter @ponto-studio/api test` → 51 testes OK (svgTransform 22 + svgConverter 29,
+  incluindo 4 novos testes de `satinColumn`: trilhos horizontais, trilhos verticais, pull_compensation/
+  underlay, e o fallback pra tatami quando há `svgContent`).
+- `npx pnpm@9.15.4 --filter @ponto-studio/web test` → 67 testes OK.
+- `tsc --noEmit` limpo em `api` e `web`.
+- **Ainda não testado nesta sessão**: escolher "Cetim" pela UI de verdade no browser num retângulo
+  desenhado; fluxo completo via `docker compose up` clicando "Exportar".
 
 ---
 
-## 8. Arquivos-chave (resumo)
+## 8. Fase 4+ (fast-follow)
+
+- [ ] **Fase 4 — Demais fills**: Guided (com linha-guia), Linear Gradient, Tartan, Cross Stitch.
+- [ ] **Extensão futura do Satin Column**: extração de trilhos pra polígono arbitrário (formas vindas de
+      importação de imagem/IA) — precisa achatar curvas Bezier e reamostrar os 2 lados do contorno pelo
+      mesmo número de pontos por comprimento de arco. Maior risco/esforço do roadmap todo.
+
+---
+
+## 9. Arquivos-chave (resumo)
 
 **Criados nas Fases 0/1 (prontos):**
 - `workers/embroidery/inkstitch_runner.py` (+ `test_inkstitch_runner.py`) ✅
 - `rotatePathData` em `apps/api/src/services/svgTransform.ts` ✅
 
-**Fase 2 (Stroke) não precisou de arquivo novo** — só edições nos mesmos arquivos da Fase 1. **Fase 3**
-(Satin Column) provavelmente precisa de um helper novo de extração de rails (geometria — ver Seção 7).
+**Fase 2 (Stroke) e Fase 3 (Satin Column) não precisaram de arquivo novo** — só edições nos mesmos
+arquivos da Fase 1 (`satinColumnToSvgGroup` é uma função nova, mas dentro do `svgConverter.ts` existente).
+Extração de trilhos pra polígono arbitrário (Fase 3+, ver Seção 8) provavelmente precisa de um helper
+novo de geometria (achatar curvas + reamostrar por comprimento de arco).
 
-**Fases 0/1/2 completas — arquivos já modificados (não mexer de novo sem motivo):**
+**Fases 0/1/2/3 completas — arquivos já modificados (não mexer de novo sem motivo):**
 - `apps/api/src/services/svgConverter.ts` — `buildStitchAttributes` por tipo + rotação embutida no `d` +
-  `STROKE_FAMILY_TYPES` (fill vs stroke por família, não por tipo individual)
-- `packages/shared/src/index.ts` — `StitchParams` união discriminada (8 tipos: tatami/contour/meander/
-  circular/satin-legado/running/zigzag/ripple)
-- `apps/web/src/components/PropertiesPanel.tsx` — UI por tipo
-- `apps/web/src/utils/stitchHeuristics.ts` — sugestão entre tatami/circular/running (zigzag/ripple ficam
-  de fora da sugestão automática, igual contour/meander — sem heurística clara de "quando usar")
+  `STROKE_FAMILY_TYPES` (fill vs stroke por família, não por tipo individual) + `satinColumnToSvgGroup`
+  (extração de trilhos de bbox retangular) + `elementToSvgGroupByShape` (fallback pra tatami quando
+  `satinColumn` tem `svgContent`)
+- `packages/shared/src/index.ts` — `StitchParams` união discriminada (9 tipos: tatami/contour/meander/
+  circular/satin-legado/running/zigzag/ripple/satinColumn)
+- `apps/web/src/components/PropertiesPanel.tsx` — UI por tipo; opção "Cetim" some quando `svgContent` existe
+- `apps/web/src/utils/stitchHeuristics.ts` — sugestão entre tatami/circular/running (zigzag/ripple/
+  satinColumn ficam de fora da sugestão automática — heurística só roda sobre camadas de imagem
+  analisada, que SEMPRE têm `svgContent`, logo `satinColumn` nunca seria elegível de qualquer forma)
 - `apps/web/src/components/PartsPanel.tsx` — rótulos por tipo
 
 **Já prontos, reusar sem mexer:**
@@ -514,7 +600,7 @@ puro = mm (mesma convenção do resto do documento: 1 user unit = 1mm).
 
 ---
 
-## 9. Workflow-alvo (visão do produto)
+## 10. Workflow-alvo (visão do produto)
 
 1. Importar imagem → motor gera SVG por cor, **fundindo cores semelhantes** (já existe:
    `analyze.py` + `splitSvgByColor`).
@@ -525,7 +611,7 @@ puro = mm (mesma convenção do resto do documento: 1 user unit = 1mm).
 
 ---
 
-## 10. Como verificar tudo (ambiente)
+## 11. Como verificar tudo (ambiente)
 
 - **Docker é obrigatório** pra validar o motor: o Ink/Stitch só roda no Linux do container, e o vtracer
   (análise) segfaulta no Python 3.14/Windows local. Sem o Docker Desktop no ar, só dá pra rodar
@@ -545,7 +631,7 @@ puro = mm (mesma convenção do resto do documento: 1 user unit = 1mm).
 
 ---
 
-## 11. Log de progresso
+## 12. Log de progresso
 
 | Data | Fase/Checkpoint | O que foi feito | Commit |
 |------|-----------------|-----------------|--------|
@@ -553,3 +639,4 @@ puro = mm (mesma convenção do resto do documento: 1 user unit = 1mm).
 | 2026-07-20 | Fase 0 (0.1–0.7) | Ink/Stitch integrado via subprocess; motor caseiro removido; 5 bugs de compatibilidade achados e corrigidos (ver Seção 3.1); e2e validado com SVG de produção real dentro do container | ed2958d |
 | 2026-07-20 | Fase 1 (1.1–1.6) | StitchParams união discriminada (6 tipos); atributos inkstitch:* corrigidos por tipo (tatami_fill→auto_fill, pull_compensation/angle removidos de contour/meander/circular); rotação embutida no `d` via `rotatePathData` (novo, com 9 testes); PropertiesPanel reescrito; heurística estendida (circular); e2e validado com os 5 tipos via SVG de produção real | c1198c8 |
 | 2026-07-20 | Fase 2 (2.0–2.4) | Achado crítico corrigido: fill fantasma em stroke-family (FillStitch+Stroke não são mutuamente exclusivos no Ink/Stitch); `running` perdeu `angle` (nunca teve efeito real) e ganhou `repeats`/`beanStitchRepeats`; tipos novos `zigzag` e `ripple`; `buildStitchAttributes` devolve `{presentation, inkstitch}`; PropertiesPanel com controles novos; e2e validado com os 7 tipos via SVG de produção real (2702 pontos, 7 blocos, todos com geometria) | 2786631 |
+| 2026-07-20 | Fase 3 (3.1–3.4) | Satin Column real (`satinColumn`), escopo reduzido a formas simples (decisão explícita do usuário) — trilhos extraídos trivialmente do bbox retangular; fallback pra tatami quando há `svgContent`; opção "Cetim" some da UI nesse caso. Achado: coluna reta gera geometria idêntica a zigzag_stitch simples (a diferença só aparece em colunas curvas, fora do escopo). e2e validado com os 8 tipos via SVG de produção real (3018 pontos, 8 blocos, todos com geometria) | (não commitado ainda nesta sessão) |

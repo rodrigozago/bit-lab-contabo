@@ -178,6 +178,58 @@ describe("convertProjectToSvg", () => {
     expect(svg).not.toContain("inkstitch:join_style");
   });
 
+  it("satinColumn (retângulo largo) gera 2 trilhos HORIZONTAIS (topo/base) e usa fill=none/stroke=cor", () => {
+    // 400x100 page-px -> 100x25mm (mais largo que alto) -> trilhos correm
+    // ao longo do lado comprido (topo e base), zigue-zague atravessa a altura
+    const el = makeElement({
+      color: "#123456",
+      svgPath: "M 0 0 L 400 0 L 400 100 L 0 100 Z",
+      stitch: { type: "satinColumn", density: 0.5 } satisfies StitchParams,
+    });
+    const svg = convertProjectToSvg(makeProject([el]));
+    expect(svg).toContain('inkstitch:satin_column="true"');
+    expect(svg).toContain('inkstitch:satin_method="satin_column"');
+    // faixa zigzag (0.2-0.6): 0.6 - 0.5*(0.6-0.2) = 0.4
+    expect(svg).toContain('inkstitch:zigzag_spacing_mm="0.4"');
+    expect(svg).toContain('inkstitch:center_walk_underlay="false"');
+    expect(svg).toContain('fill="none"');
+    expect(svg).toContain('stroke="#123456"');
+    // dois subcaminhos: topo (y=0) e base (y=25), ambos de x=0 a x=100, MESMA direção
+    expect(svg).toContain('d="M 0 0 L 100 0 M 0 25 L 100 25"');
+  });
+
+  it("satinColumn (retângulo alto) gera 2 trilhos VERTICAIS (esquerda/direita)", () => {
+    // 100x400 page-px -> 25x100mm (mais alto que largo)
+    const el = makeElement({
+      svgPath: "M 0 0 L 100 0 L 100 400 L 0 400 Z",
+      stitch: { type: "satinColumn", density: 0.5 } satisfies StitchParams,
+    });
+    const svg = convertProjectToSvg(makeProject([el]));
+    expect(svg).toContain('d="M 0 0 L 0 100 M 25 0 L 25 100"');
+  });
+
+  it("satinColumn emite pull_compensation_mm e center_walk_underlay=true quando definidos", () => {
+    const el = makeElement({
+      stitch: { type: "satinColumn", density: 0.5, pullCompensationMm: 0.3, underlay: true } satisfies StitchParams,
+    });
+    const svg = convertProjectToSvg(makeProject([el]));
+    expect(svg).toContain('inkstitch:pull_compensation_mm="0.3"');
+    expect(svg).toContain('inkstitch:center_walk_underlay="true"');
+  });
+
+  it("satinColumn com svgContent (geometria complexa) cai no fallback pra tatami — sem extração de trilhos nesta fase", () => {
+    const el = makeElement({
+      color: "#ed1c24",
+      svgContent: `<svg viewBox="0 0 200 200"><path d="M100 170 L 50 50 Z" fill="#aabbcc"/></svg>`,
+      stitch: { type: "satinColumn", density: 0.5 } satisfies StitchParams,
+    });
+    const svg = convertProjectToSvg(makeProject([el]));
+    expect(svg).not.toContain("inkstitch:satin_column");
+    expect(svg).toContain('inkstitch:fill_method="auto_fill"');
+    expect(svg).toContain('fill="#ed1c24"');
+    expect(svg).toContain('stroke="none"');
+  });
+
   it("ripple emite line_count/join_style/repeats/bean_stitch_repeats quando definidos", () => {
     const el = makeElement({
       stitch: {

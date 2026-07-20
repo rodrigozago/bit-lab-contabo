@@ -23,6 +23,7 @@ const STITCH_OPTIONS: Array<{ value: Exclude<StitchType, "satin">; label: string
   { value: "running", label: "Corrido", desc: "Contorno e detalhes finos. Ponto básico de linha." },
   { value: "zigzag", label: "Ziguezague", desc: "Linha larga em zigue-zague, largura constante. Boa para bordas grossas e traços decorativos." },
   { value: "ripple", label: "Ondulado", desc: "Cópias concêntricas ao redor do centro da forma. Fica bem em texturas tipo onda ou pétala." },
+  { value: "satinColumn", label: "Cetim", desc: "Cetim de verdade, 2 trilhos com zigue-zague entre eles. Só disponível pra formas simples (retângulo/elipse/livre)." },
 ];
 
 /** Constrói um StitchParams "limpo" pro novo tipo, preservando os campos em comum quando fazem sentido. */
@@ -47,6 +48,13 @@ function buildStitchForType(current: StitchParams, type: Exclude<StitchType, "sa
       return { type: "zigzag", density, widthMm: "widthMm" in current ? current.widthMm : 3, repeats };
     case "ripple":
       return { type: "ripple", density, repeats, beanStitchRepeats };
+    case "satinColumn":
+      return {
+        type: "satinColumn",
+        density,
+        underlay,
+        pullCompensationMm: "pullCompensationMm" in current ? current.pullCompensationMm : undefined,
+      };
   }
 }
 
@@ -61,6 +69,13 @@ export function PropertiesPanel({ element, onChange, onDelete }: Props) {
   const [advancedOpen, setAdvancedOpen] = useState(false);
   // "satin" (legado) usa os mesmos controles de "contour" — sempre foi a mesma coisa
   const selectedOption = stitch.type === "satin" ? "contour" : stitch.type;
+  // Cetim de verdade só extrai trilhos de formas simples (sem svgContent —
+  // ver comentário de SatinColumnStitchParams no packages/shared); em partes
+  // vindas de importação de imagem a opção nem aparece, pra não sugerir um
+  // resultado que na prática cai silenciosamente pra tatami no export.
+  const stitchOptions = element.svgContent
+    ? STITCH_OPTIONS.filter((opt) => opt.value !== "satinColumn")
+    : STITCH_OPTIONS;
 
   function setStitch(patch: Partial<StitchParams>) {
     onChange({ stitch: { ...stitch, ...patch } as StitchParams });
@@ -83,7 +98,7 @@ export function PropertiesPanel({ element, onChange, onDelete }: Props) {
         <div className="flex flex-col gap-1.5">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Tipo de ponto</p>
           <div className="flex flex-col gap-1.5">
-            {STITCH_OPTIONS.map((opt) => (
+            {stitchOptions.map((opt) => (
               <button
                 key={opt.value}
                 type="button"
@@ -186,12 +201,12 @@ export function PropertiesPanel({ element, onChange, onDelete }: Props) {
                   <span>
                     Underlay (base)
                     <span className="block text-xs text-muted-foreground">
-                      Passada de estabilização antes do preenchimento
+                      Passada de estabilização antes do ponto principal
                     </span>
                   </span>
                 </label>
 
-                {stitch.type === "tatami" && (
+                {(stitch.type === "tatami" || stitch.type === "satinColumn") && (
                   <div className="flex flex-col gap-1.5">
                     <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                       Compensação de puxão

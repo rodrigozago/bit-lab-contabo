@@ -9,7 +9,7 @@
  * nomes "óbvios" tinham nome errado e eram ignorados em silêncio, ver
  * docs/MOTOR-BORDADO-INKSTITCH.md seção 3.1/Fase 1).
  */
-export type StitchType = "tatami" | "contour" | "meander" | "circular" | "satin" | "running" | "zigzag" | "ripple";
+export type StitchType = "tatami" | "contour" | "meander" | "circular" | "satin" | "running" | "zigzag" | "ripple" | "satinColumn";
 
 /** Tatami — preenchimento uniforme (Ink/Stitch: `auto_fill`). O mais comum pra áreas grandes. */
 export interface TatamiStitchParams {
@@ -143,6 +143,31 @@ export interface RippleStitchParams {
   beanStitchRepeats?: number;
 }
 
+/**
+ * Cetim de verdade (Ink/Stitch: `satin_column`) — 2 trilhos independentes
+ * (rails) ligados por zigue-zague, não um preenchimento. `SatinColumn` no
+ * Ink/Stitch exige um `<path>` com 2+ subcaminhos (rails) e o mesmo número
+ * de pontos em cada um — ver Seção 7.1 do doc de progresso pro porquê disso.
+ *
+ * **Escopo desta fase**: só funciona em partes SEM `svgContent` (formas
+ * simples desenhadas no editor — retângulo/elipse/livre — cujo `svgPath` é
+ * SEMPRE o bounding box retangular da forma; ver Editor.tsx). Os 2 lados mais
+ * COMPRIDOS desse retângulo viram os 2 trilhos (extração trivial, geometria
+ * conhecida). Partes com geometria complexa (`svgContent`, vindas de
+ * importação de imagem/IA) caem no fallback pra `tatami` com a mesma
+ * densidade — extrair trilhos de um polígono arbitrário fica pra uma fase
+ * futura (precisa achatar curvas Bezier e reamostrar os 2 lados do contorno).
+ */
+export interface SatinColumnStitchParams {
+  type: "satinColumn";
+  /** 0.0 = esparso → 1.0 = denso (vira `zigzag_spacing_mm`, invertido) */
+  density: number;
+  /** compensação de puxão em mm, cada lado (Ink/Stitch: `pull_compensation_mm` — nome diferente do `stroke_pull_compensation_mm` do ziguezague simples) */
+  pullCompensationMm?: number;
+  /** passada de base andando pelo centro entre os 2 trilhos (Ink/Stitch: `center_walk_underlay`) */
+  underlay?: boolean;
+}
+
 export type StitchParams =
   | TatamiStitchParams
   | ContourStitchParams
@@ -151,7 +176,8 @@ export type StitchParams =
   | SatinStitchParams
   | RunningStitchParams
   | ZigzagStitchParams
-  | RippleStitchParams;
+  | RippleStitchParams
+  | SatinColumnStitchParams;
 
 /**
  * Uma "parte" do bordado — a unidade única do editor (antes havia dois conceitos
