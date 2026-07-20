@@ -487,8 +487,14 @@ def _layer_metrics(mask: np.ndarray) -> dict:
     Métricas geométricas de uma camada de cor (máscara booleana HxW), usadas
     pela heurística de sugestão de parâmetros de ponto no front:
       - areaPct: % da imagem coberta pela camada;
-      - meanWidthPx/maxWidthPx: largura típica/máxima do traço (2× o distance
-        transform — distância até a borda ≈ metade da largura local);
+      - meanWidthPx: largura TÍPICA do traço, via 2×área/perímetro — pra uma
+        tira fina (área ≈ largura×comprimento, perímetro ≈ 2×comprimento
+        quando comprimento >> largura), isso converge pra largura real. A
+        alternativa óbvia (2× a MÉDIA do distance transform) SUBESTIMA a
+        largura de tiras longas, porque as pontas da tira têm distância à
+        borda bem menor que o meio e puxam a média pra baixo;
+      - maxWidthPx: 2× o MÁXIMO do distance transform (esse não sofre do
+        mesmo problema — o pico fica no meio, longe das pontas);
       - regionCount: nº de regiões desconectadas;
       - principalAngleDeg (0–180, eixo y pra baixo como no SVG) e elongation
         (razão dos eixos principais, ≥1): orientação e alongamento via momentos
@@ -506,7 +512,10 @@ def _layer_metrics(mask: np.ndarray) -> dict:
 
     n_comp, _lbl, _stats, _cent = cv2.connectedComponentsWithStats(m8, connectivity=8)
     dist = cv2.distanceTransform(m8, cv2.DIST_L2, 3)
-    vals = dist[mask]
+
+    contours, _ = cv2.findContours(m8, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    perimeter = sum(cv2.arcLength(c, True) for c in contours)
+    mean_width = 2.0 * area_px / perimeter if perimeter > 0 else 0.0
 
     mom = cv2.moments(m8, binaryImage=True)
     if mom["m00"] > 0:
@@ -523,8 +532,8 @@ def _layer_metrics(mask: np.ndarray) -> dict:
 
     return {
         "areaPct": round(area_pct, 3),
-        "meanWidthPx": round(float(2.0 * vals.mean()), 2),
-        "maxWidthPx": round(float(2.0 * vals.max()), 2),
+        "meanWidthPx": round(mean_width, 2),
+        "maxWidthPx": round(float(2.0 * dist[mask].max()), 2),
         "regionCount": int(n_comp - 1),
         "principalAngleDeg": round(angle_deg, 1),
         "elongation": round(min(elongation, 99.0), 2),

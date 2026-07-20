@@ -16,6 +16,7 @@ from analyze import (
     SVG_NS,
     AnalyzeParams,
     analyze_image,
+    analyze_image_with_metrics,
     bake_translate,
     cap_max_areas,
     clean_labels,
@@ -247,6 +248,60 @@ class TestAnalyzeImageEndToEnd(unittest.TestCase):
             # a mancha verde (0.018% da área) não pode virar camada
             greens = [c for c in groups if int(c[3:5], 16) > 150 and int(c[1:3], 16) < 100]
             self.assertEqual(len(greens), 0, f"mancha de ruído virou camada: {groups}")
+
+
+class TestAnalyzeImageWithMetrics(unittest.TestCase):
+    """
+    B1: analyze_image_with_metrics devolve, além do SVG, métricas por camada
+    (área, largura típica, nº de regiões, orientação) — base da heurística de
+    sugestão de parâmetros de ponto no front (stitchHeuristics.ts).
+    """
+
+    def test_devolve_dimensoes_da_imagem_e_uma_camada_por_cor_do_desenho(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "img.png")
+            make_test_image(path)  # 300x300, fundo branco + vermelho (2 blobs) + azul
+            svg, metrics = analyze_image_with_metrics(path, AnalyzeParams(colors=2))
+
+            groups = svg_color_groups(svg)
+            self.assertEqual(metrics["imageWidth"], 300)
+            self.assertEqual(metrics["imageHeight"], 300)
+            self.assertEqual(len(metrics["layers"]), len(groups), f"metrics.layers != grupos do SVG: {metrics}")
+
+            layer_colors = {l["color"] for l in metrics["layers"]}
+            self.assertEqual(layer_colors, set(groups.keys()))
+
+    def test_camada_vermelha_tem_2_regioes_desconectadas(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "img.png")
+            make_test_image(path)  # dois quadrados vermelhos desconectados
+            _svg, metrics = analyze_image_with_metrics(path, AnalyzeParams(colors=2))
+
+            reddish = [l for l in metrics["layers"] if int(l["color"][1:3], 16) > 150 and int(l["color"][5:7], 16) < 100]
+            self.assertEqual(len(reddish), 1, f"esperava 1 camada avermelhada: {metrics}")
+            self.assertGreaterEqual(reddish[0]["regionCount"], 2, f"regionCount não capturou os 2 quadrados: {reddish[0]}")
+
+    def test_metricas_por_camada_sao_plausiveis(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "img.png")
+            make_test_image(path)
+            _svg, metrics = analyze_image_with_metrics(path, AnalyzeParams(colors=2))
+            for layer in metrics["layers"]:
+                self.assertGreater(layer["areaPct"], 0, layer)
+                self.assertLess(layer["areaPct"], 100, layer)
+                self.assertGreater(layer["meanWidthPx"], 0, layer)
+                self.assertGreaterEqual(layer["maxWidthPx"], layer["meanWidthPx"] * 0.5, layer)
+                self.assertGreaterEqual(layer["elongation"], 1.0, layer)
+                self.assertTrue(0 <= layer["principalAngleDeg"] < 180, layer)
+
+    def test_analyze_image_sem_metrics_continua_funcionando(self):
+        # compat: analyze_image (usado pelo resto do pipeline) descarta metrics
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "img.png")
+            make_test_image(path)
+            svg = analyze_image(path, AnalyzeParams(colors=2))
+            self.assertIsInstance(svg, str)
+            self.assertIn("<svg", svg)
 
     def test_deterministico(self):
         with tempfile.TemporaryDirectory() as tmp:
