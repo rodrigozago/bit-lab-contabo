@@ -76,6 +76,124 @@ function roundNum(n: number): string {
   return Number(n.toFixed(3)).toString();
 }
 
+/**
+ * Rotaciona todas as coordenadas de um atributo "d" de path SVG em torno de
+ * (cx, cy). Ao contrário de `scalePathData` (que escala x e y de forma
+ * independente), rotação MISTURA x e y — não dá pra tratar cada eixo
+ * separadamente, então esta função reprocessa o path token a token,
+ * convertendo tudo pra coordenadas ABSOLUTAS (mais simples de raciocinar
+ * que preservar comandos relativos através de uma rotação):
+ *   - H/V (só têm 1 eixo) viram L (a rotação deixa de ser paralela ao eixo);
+ *   - M com múltiplos pares de coordenada: pares extras são LINETO implícito
+ *     (regra do spec SVG) — tratados como L, não como M adicional;
+ *   - A (arco): o ponto final rotaciona normalmente; `x-axis-rotation` do
+ *     arco precisa somar o ângulo de rotação (rx/ry e os flags não mudam —
+ *     rotação pura preserva os raios).
+ * Usada pra embutir a rotação de uma parte (definida no editor/tldraw) nas
+ * coordenadas antes de exportar — o Ink/Stitch ignora atributos/transform
+ * customizados, então a rotação PRECISA estar no "d" em si.
+ */
+export function rotatePathData(d: string, angleDeg: number, cx: number, cy: number): string {
+  const normalizedAngle = ((angleDeg % 360) + 360) % 360;
+  if (normalizedAngle === 0) return d;
+
+  const rad = (normalizedAngle * Math.PI) / 180;
+  const cos = Math.cos(rad), sin = Math.sin(rad);
+  const rotatePoint = (x: number, y: number): [number, number] => {
+    const dx = x - cx, dy = y - cy;
+    return [cx + dx * cos - dy * sin, cy + dx * sin + dy * cos];
+  };
+
+  const tokens = d.match(/[MLHVCSQTAZmlhvcsqtaz]|-?\d*\.?\d+(?:[eE][+-]?\d+)?/g) ?? [];
+  const out: string[] = [];
+  let i = 0;
+  let currentCmd = "";   // letra crua do "d" original (maiúscula=absoluto, minúscula=relativo)
+  let effectiveCmd = ""; // letra usada NESTE grupo (M vira L nos pares extras implícitos)
+  let curX = 0, curY = 0;
+  let startX = 0, startY = 0; // início do subpath atual, pra Z
+
+  while (i < tokens.length) {
+    const tok = tokens[i]!;
+    const isNewCommand = /^[MLHVCSQTAZ]$/i.test(tok);
+    if (isNewCommand) {
+      currentCmd = tok;
+      effectiveCmd = tok;
+      i++;
+      if (currentCmd.toUpperCase() === "Z") {
+        out.push("Z");
+        curX = startX;
+        curY = startY;
+        continue;
+      }
+    }
+
+    const upper = effectiveCmd.toUpperCase();
+    const isRelative = currentCmd !== currentCmd.toUpperCase();
+    const wasFreshM = isNewCommand && upper === "M";
+
+    if (upper === "H") {
+      const raw = parseFloat(tokens[i]!); i++;
+      const absX = isRelative ? curX + raw : raw;
+      const [rx, ry] = rotatePoint(absX, curY);
+      out.push("L", roundNum(rx), roundNum(ry));
+      curX = absX;
+    } else if (upper === "V") {
+      const raw = parseFloat(tokens[i]!); i++;
+      const absY = isRelative ? curY + raw : raw;
+      const [rx, ry] = rotatePoint(curX, absY);
+      out.push("L", roundNum(rx), roundNum(ry));
+      curY = absY;
+    } else if (upper === "A") {
+      const rx = parseFloat(tokens[i]!); i++;
+      const ry = parseFloat(tokens[i]!); i++;
+      const xAxisRotation = parseFloat(tokens[i]!); i++;
+      const largeArc = tokens[i]!; i++;
+      const sweep = tokens[i]!; i++;
+      const rawX = parseFloat(tokens[i]!); i++;
+      const rawY = parseFloat(tokens[i]!); i++;
+      const absX = isRelative ? curX + rawX : rawX;
+      const absY = isRelative ? curY + rawY : rawY;
+      const [ex, ey] = rotatePoint(absX, absY);
+      const newXAxisRotation = (xAxisRotation + normalizedAngle) % 360;
+      out.push(
+        "A", roundNum(rx), roundNum(ry), roundNum(newXAxisRotation),
+        largeArc, sweep, roundNum(ex), roundNum(ey)
+      );
+      curX = absX;
+      curY = absY;
+    } else {
+      // M, L, T: 1 ponto | C: 3 pontos | S, Q: 2 pontos — todos "x y" puros
+      const pointCount = upper === "C" ? 3 : upper === "S" || upper === "Q" ? 2 : 1;
+      const rotated: Array<[number, number]> = [];
+      let lastAbsX = curX, lastAbsY = curY;
+      for (let p = 0; p < pointCount; p++) {
+        const rawX = parseFloat(tokens[i]!); i++;
+        const rawY = parseFloat(tokens[i]!); i++;
+        // relativo é sempre em relação ao ponto de ANTES do comando inteiro,
+        // não ao ponto intermediário dentro do mesmo comando (regra do spec)
+        const absX = isRelative ? curX + rawX : rawX;
+        const absY = isRelative ? curY + rawY : rawY;
+        rotated.push(rotatePoint(absX, absY));
+        lastAbsX = absX;
+        lastAbsY = absY;
+      }
+      out.push(upper);
+      for (const [rx, ry] of rotated) out.push(roundNum(rx), roundNum(ry));
+      curX = lastAbsX;
+      curY = lastAbsY;
+    }
+
+    if (wasFreshM) {
+      startX = curX;
+      startY = curY;
+      // pares extras depois do primeiro par de um M são LINETO implícito
+      effectiveCmd = isRelative ? "l" : "L";
+    }
+  }
+
+  return out.join(" ");
+}
+
 /** Reescala todas as coordenadas de um atributo "d" de path SVG. */
 export function scalePathData(d: string, scale: number, offsetX: number, offsetY: number): string {
   const tokens = d.match(/[MLHVCSQTAZ]|-?\d*\.?\d+(?:[eE][+-]?\d+)?/gi) ?? [];

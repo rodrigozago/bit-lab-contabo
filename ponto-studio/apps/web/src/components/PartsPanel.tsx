@@ -8,8 +8,13 @@ import { SidebarGroup, SidebarGroupContent, SidebarGroupLabel } from "@/componen
 import { setShapesHidden, isHidden } from "@/utils/canvasShapes.ts";
 
 const STITCH_LABEL: Record<StitchType, string> = {
-  satin: "Cetim",
   tatami: "Tatami",
+  contour: "Contorno",
+  meander: "Meandro",
+  circular: "Circular",
+  // "satin" é alias legado — mecanicamente sempre foi contour_fill, nunca
+  // cetim de verdade (ver StitchParams em packages/shared). Mostra igual.
+  satin: "Contorno",
   running: "Corrido",
 };
 

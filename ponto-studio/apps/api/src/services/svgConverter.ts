@@ -1,5 +1,5 @@
-import { HOOP_PX_PER_MM, type EmbroideryProject, type EmbroideryElement, type CanvasSize, type StitchType } from "@ponto-studio/shared";
-import { parseViewBoxDimensions, computeContainTransform, scalePathData, type Dimensions } from "./svgTransform.js";
+import { HOOP_PX_PER_MM, type EmbroideryProject, type EmbroideryElement, type CanvasSize, type StitchParams } from "@ponto-studio/shared";
+import { parseViewBoxDimensions, computeContainTransform, scalePathData, rotatePathData, type Dimensions } from "./svgTransform.js";
 
 /**
  * Converte um EmbroideryProject em SVG compatível com pyembroidery/Ink/Stitch.
@@ -17,7 +17,6 @@ export function convertProjectToSvg(project: EmbroideryProject): string {
 <svg
   xmlns="http://www.w3.org/2000/svg"
   xmlns:inkstitch="http://inkstitch.org/namespace"
-  xmlns:ponto="https://ponto.studio/ns"
   width="${canvas.widthMm}mm"
   height="${canvas.heightMm}mm"
   viewBox="0 0 ${canvas.widthMm} ${canvas.heightMm}"
@@ -136,14 +135,21 @@ function extractAndAnnotatePaths(el: EmbroideryElement, canvas: CanvasSize): str
       })()
     : null;
 
-  // Rotação vai POR PATH (ponto:rotation*) — o worker lê só atributos de
-  // <path> (svg2paths2 ignora transform/viewBox, inclusive em <g>) e aplica
-  // Path.rotated() antes de gerar os pontos.
-  const rotAttrs = rotationAttrs(el, elementBounds);
+  // Rotação embutida DIRETO nas coordenadas do "d" (não como atributo custom
+  // tipo "ponto:rotation") — o Ink/Stitch ignora qualquer atributo que não
+  // reconheça (confirmado: não dá erro nem aviso, só não faz nada), então a
+  // rotação PRECISA estar na geometria em si. Rotaciona em torno do centro do
+  // bbox salvo pelo editor (bbox NÃO-rotacionado — coincide com o centro de
+  // rotação do shape no tldraw). Aplicada DEPOIS do contain-fit pro canvas
+  // (mesmo espaço de coordenadas — mm — que o bbox/centro já estão).
+  const angleDeg = ((el.rotation ?? 0) * 180) / Math.PI;
+  const centerX = (elementBounds?.x ?? 0) + (elementBounds?.width ?? 0) / 2;
+  const centerY = (elementBounds?.y ?? 0) + (elementBounds?.height ?? 0) / 2;
 
   const paths = extractPathParts(svg).map(({ cleanAttrs, d }) => {
     const scaledD = transform ? scalePathData(d, transform.scale, transform.offsetX, transform.offsetY) : d;
-    return `<path ${cleanAttrs} d="${escapeXml(scaledD)}" fill="${el.color}" stroke="none" ${stitchAttrs}${rotAttrs} />`;
+    const finalD = rotatePathData(scaledD, angleDeg, centerX, centerY);
+    return `<path ${cleanAttrs} d="${escapeXml(finalD)}" fill="${el.color}" stroke="none" ${stitchAttrs} />`;
   });
 
   if (paths.length === 0) {
@@ -152,24 +158,6 @@ function extractAndAnnotatePaths(el: EmbroideryElement, canvas: CanvasSize): str
   }
 
   return `<g id="${el.id}">\n    ${paths.join("\n    ")}\n  </g>`;
-}
-
-/**
- * Atributos `ponto:rotation*` do elemento: rotação em graus + centro (em mm,
- * centro do bbox salvo pelo editor — que guarda o retângulo NÃO rotacionado,
- * então o centro aqui coincide com o centro de rotação do shape no tldraw).
- * Emitidos por <path> porque o worker não enxerga atributos de <g>.
- */
-function rotationAttrs(
-  el: EmbroideryElement,
-  elementBounds: (Dimensions & { x: number; y: number }) | null
-): string {
-  const rotation = el.rotation ?? 0;
-  if (rotation === 0) return "";
-  const centerX = (elementBounds?.x ?? 0) + (elementBounds?.width ?? 0) / 2;
-  const centerY = (elementBounds?.y ?? 0) + (elementBounds?.height ?? 0) / 2;
-  const angleDeg = +((rotation * 180) / Math.PI).toFixed(4);
-  return ` ponto:rotation="${angleDeg}" ponto:rotation_cx="${+centerX.toFixed(3)}" ponto:rotation_cy="${+centerY.toFixed(3)}"`;
 }
 
 /**
@@ -184,8 +172,7 @@ export function buildElementPreviewSvg(el: EmbroideryElement, canvas: CanvasSize
   const viewBox = extractViewBox(svg) ?? `0 0 ${canvas.widthMm} ${canvas.heightMm}`;
 
   const unitsPerMm = dims && canvas.widthMm > 0 ? dims.width / canvas.widthMm : 1;
-  const lineDistanceUnits = +(densityToMm(el.stitch.density, el.stitch.type) * unitsPerMm).toFixed(3);
-  const stitchAttrs = buildStitchAttributes(el, lineDistanceUnits);
+  const stitchAttrs = buildStitchAttributes(el, unitsPerMm);
 
   const paths = extractPathParts(svg).map(
     ({ cleanAttrs, d }) =>
@@ -208,93 +195,111 @@ function elementToSvgPath(el: EmbroideryElement): string {
   const rawD = el.svgPath || "M 0 0";
   // shapes desenhadas no tldraw (retângulo/elipse/desenho livre) guardam "d"
   // em page-px — mesma conversão pra mm usada em extractAndAnnotatePaths.
-  const d = scalePathData(rawD, 1 / HOOP_PX_PER_MM, 0, 0);
-  const rotAttrs = rotationAttrs(el, parseElementBoundsMm(el.svgPath));
+  const scaledD = scalePathData(rawD, 1 / HOOP_PX_PER_MM, 0, 0);
+
+  // Rotação embutida nas coordenadas (ver extractAndAnnotatePaths) — mesmo
+  // bbox/centro do próprio svgPath, já em mm.
+  const bounds = parseElementBoundsMm(el.svgPath);
+  const angleDeg = ((el.rotation ?? 0) * 180) / Math.PI;
+  const centerX = (bounds?.x ?? 0) + (bounds?.width ?? 0) / 2;
+  const centerY = (bounds?.y ?? 0) + (bounds?.height ?? 0) / 2;
+  const d = rotatePathData(scaledD, angleDeg, centerX, centerY);
 
   return `<g id="${el.id}">
     <path
       d="${escapeXml(d)}"
       fill="${el.color}"
       stroke="none"
-      ${stitchAttrs}${rotAttrs}
+      ${stitchAttrs}
     />
   </g>`;
 }
 
 /**
- * Atributos inkstitch:* do ponto — nomes e formato de valor CONFERIDOS
- * empiricamente contra o binário real do Ink/Stitch v3.2.2 (worker.py roda
- * o binário via subprocess, não um motor caseiro — ver inkstitch_runner.py):
- *   - valores são SEMPRE número puro, SEM sufixo "mm" — Ink/Stitch faz
- *     `float(attr)` direto; "0.4mm" falha o parse e ele volta pro default
- *     dele (silencioso, sem erro) — testado: line_distance/underlay/
- *     max_stitch_length com nome ANTIGO ou com sufixo "mm" eram 100%
- *     ignorados (contagem de pontos idêntica variando o valor);
- *   - o nome do parâmetro é `row_spacing_mm` (não `line_distance`) pro
- *     espaçamento entre linhas do preenchimento (fill_stitch.py);
- *   - `fill_underlay` (não `underlay`) é o toggle de underlay — e o DEFAULT
- *     do Ink/Stitch é `true`, então precisa emitir `false` explícito quando
- *     o usuário desliga (omitir o atributo não desliga nada);
- *   - `max_stitch_length_mm` (não `max_stitch_length`) é o comprimento
- *     máximo do ponto ao longo da linha;
- *   - `running_stitch_length_mm` (não `running_stitch_length`) já estava
- *     quase certo, só faltava o sufixo `_mm` no NOME do atributo.
- * `lineDistanceOverride` (preview): mesmo valor mas nas unidades do viewBox
- * em vez de mm (ver buildElementPreviewSvg) — Ink/Stitch não sabe a diferença,
- * só lê o número; o preview aceita essa aproximação pra não distorcer o
- * desenho sobreposto no canvas.
+ * Padrão de textura do meander (um dos 75 "tiles" bundlados no binário do
+ * Ink/Stitch, em /opt/inkstitch/tiles/ — nomes crípticos tipo "N4-21c", sem
+ * nome amigável). Sem seletor na UI por ora (Fase 1); todo elemento meander
+ * usa este mesmo padrão. Confirmado válido empiricamente.
  */
-function buildStitchAttributes(el: EmbroideryElement, lineDistanceOverride?: number): string {
-  const { type, angle, underlay, pullCompensationMm } = el.stitch;
-  const isPreview = lineDistanceOverride !== undefined;
-  const rowSpacing = lineDistanceOverride ?? densityToMm(el.stitch.density, type);
-  let base = `inkstitch:angle="${angle}"`;
+const DEFAULT_MEANDER_PATTERN = "N4-21c";
 
-  // STI-3: underlay e pull compensation só fazem sentido em preenchimentos
-  // (satin/tatami); running é uma linha de contorno, sem tração lateral.
-  if (type !== "running") {
-    base += ` inkstitch:fill_underlay="${underlay ? "true" : "false"}"`;
-    if (pullCompensationMm && pullCompensationMm > 0) {
-      base += ` inkstitch:pull_compensation_mm="${pullCompensationMm}"`;
-    }
-  }
-
-  // Comprimento máx. do ponto AO LONGO da linha (tatami/satin) — distinto do
-  // espaçamento entre linhas. Só no export (mm reais): no preview as
-  // coordenadas estão em unidades do viewBox e o default do Ink/Stitch serve.
-  const maxLen = !isPreview && type !== "running" ? ` inkstitch:max_stitch_length_mm="3"` : "";
-
-  switch (type) {
-    case "satin":
-      // contour_fill → zigue-zague borda-a-borda no worker (STI-2); preview e
-      // export usam o mesmo método pro que se vê bater com o que se borda.
-      return `${base} inkstitch:fill_method="contour_fill" inkstitch:row_spacing_mm="${rowSpacing}"${maxLen}`;
-    case "tatami":
-      return `${base} inkstitch:fill_method="tatami_fill" inkstitch:row_spacing_mm="${rowSpacing}"${maxLen}`;
-    case "running":
-      return `${base} inkstitch:stroke_method="running_stitch" inkstitch:running_stitch_length_mm="${rowSpacing}"`;
-    default:
-      return base;
-  }
+/** density (0–1 da UI) → valor real, por faixa. Ranges calibrados nos defaults do Ink/Stitch. */
+function densityToRange(density: number, [min, max]: readonly [number, number]): number {
+  return +(max - density * (max - min)).toFixed(2);
 }
+// espaçamento entre linhas (row_spacing_mm) — tatami/contour/circular; default Ink/Stitch 0.25mm
+const ROW_SPACING_RANGE_MM = [0.25, 1.0] as const;
+// comprimento do ponto corrido (running_stitch_length_mm); default Ink/Stitch 2.5mm
+const RUNNING_LENGTH_RANGE_MM = [1.5, 3.5] as const;
+// escala do padrão do meandro (%), invertida: densidade alta = padrão menor = mais cobertura
+const MEANDER_SCALE_RANGE_PERCENT = [50, 200] as const;
 
 /**
- * density (0–1, slider da UI) → mm, por tipo de ponto. Faixas calibradas nos
- * defaults do Ink/Stitch:
- *   - tatami: espaçamento entre linhas 1.0→0.25mm (default 0.25; a faixa
- *     antiga 3.0→0.3 deixava o meio do slider com vãos visíveis e fazia o
- *     underlay aparecer através do preenchimento — efeito "duas agulhas");
- *   - satin: passo do zigue-zague 0.8→0.2mm (default Ink/Stitch 0.4);
- *   - running: comprimento do ponto 3.5→1.5mm (default 2.5).
+ * Atributos inkstitch:* do ponto, por tipo — nomes/formato de valor
+ * CONFERIDOS EMPIRICAMENTE contra o binário real do Ink/Stitch v3.2.2 (não
+ * por suposição — ver docs/MOTOR-BORDADO-INKSTITCH.md, Fase 0/1). Cada
+ * `fill_method` só lê um SUBCONJUNTO dos parâmetros: `angle` e
+ * `pull_compensation_mm` só existem pra `auto_fill` (tatami); `contour_fill`
+ * não lê `angle` nem `pull_compensation_mm`; `meander_fill` não lê
+ * `row_spacing_mm`/`max_stitch_length_mm`; `circular_fill` não lê
+ * `max_stitch_length_mm`. Valores são SEMPRE número puro, sem sufixo "mm".
+ *
+ * `unitsPerMm`: só usado no preview (`buildElementPreviewSvg`), que mantém o
+ * viewBox original do SVG (sem reescala) — converte os valores em mm pras
+ * unidades desse viewBox. Não afeta atributos já adimensionais (percentual,
+ * contour_strategy etc.) nem `max_stitch_length_mm` (o worker usa o default
+ * dele no preview).
  */
-function densityToMm(density: number, type: StitchType = "tatami"): number {
-  const ranges: Record<StitchType, [min: number, max: number]> = {
-    tatami: [0.25, 1.0],
-    satin: [0.2, 0.8],
-    running: [1.5, 3.5],
-  };
-  const [min, max] = ranges[type] ?? ranges.tatami;
-  return +(max - density * (max - min)).toFixed(2);
+function buildStitchAttributes(el: EmbroideryElement, unitsPerMm?: number): string {
+  const stitch = el.stitch;
+  const isPreview = unitsPerMm !== undefined;
+  const toViewBoxUnits = (mm: number) => (unitsPerMm ? +(mm * unitsPerMm).toFixed(3) : mm);
+  const underlayAttr = (on: boolean | undefined) => `inkstitch:fill_underlay="${on ? "true" : "false"}"`;
+
+  switch (stitch.type) {
+    case "tatami": {
+      const rowSpacing = toViewBoxUnits(densityToRange(stitch.density, ROW_SPACING_RANGE_MM));
+      let attrs = `inkstitch:fill_method="auto_fill" inkstitch:angle="${stitch.angle}" ` +
+        `inkstitch:row_spacing_mm="${rowSpacing}" ${underlayAttr(stitch.underlay)}`;
+      if (!isPreview) attrs += ` inkstitch:max_stitch_length_mm="3"`;
+      if (stitch.pullCompensationMm && stitch.pullCompensationMm > 0) {
+        attrs += ` inkstitch:pull_compensation_mm="${stitch.pullCompensationMm}"`;
+      }
+      return attrs;
+    }
+    // "satin" é alias legado — mecanicamente sempre foi contour_fill (nunca
+    // cetim de verdade; ver comentário em StitchParams no packages/shared).
+    case "satin":
+    case "contour": {
+      const rowSpacing = toViewBoxUnits(densityToRange(stitch.density, ROW_SPACING_RANGE_MM));
+      let attrs = `inkstitch:fill_method="contour_fill" inkstitch:row_spacing_mm="${rowSpacing}" ` +
+        `${underlayAttr(stitch.underlay)}`;
+      if (!isPreview) attrs += ` inkstitch:max_stitch_length_mm="3"`;
+      if (stitch.type === "contour") {
+        if (stitch.contourStrategy) attrs += ` inkstitch:contour_strategy="${stitch.contourStrategy}"`;
+        if (stitch.avoidSelfCrossing) attrs += ` inkstitch:avoid_self_crossing="true"`;
+      }
+      return attrs;
+    }
+    case "meander": {
+      const scalePercent = densityToRange(stitch.density, MEANDER_SCALE_RANGE_PERCENT);
+      let attrs = `inkstitch:fill_method="meander_fill" ` +
+        `inkstitch:meander_pattern="${stitch.pattern ?? DEFAULT_MEANDER_PATTERN}" ` +
+        `inkstitch:meander_scale_percent="${scalePercent}" ${underlayAttr(stitch.underlay)}`;
+      if (stitch.angle) attrs += ` inkstitch:meander_angle="${stitch.angle}"`;
+      return attrs;
+    }
+    case "circular": {
+      const rowSpacing = toViewBoxUnits(densityToRange(stitch.density, ROW_SPACING_RANGE_MM));
+      return `inkstitch:fill_method="circular_fill" inkstitch:row_spacing_mm="${rowSpacing}" ` +
+        `${underlayAttr(stitch.underlay)}`;
+    }
+    case "running": {
+      const stitchLen = toViewBoxUnits(densityToRange(stitch.density, RUNNING_LENGTH_RANGE_MM));
+      return `inkstitch:angle="${stitch.angle}" inkstitch:stroke_method="running_stitch" ` +
+        `inkstitch:running_stitch_length_mm="${stitchLen}"`;
+    }
+  }
 }
 
 function escapeXml(s: string): string {

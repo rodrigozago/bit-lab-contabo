@@ -3,6 +3,7 @@ import {
   parseViewBoxDimensions,
   computeContainTransform,
   scalePathData,
+  rotatePathData,
 } from "./svgTransform.js";
 
 describe("parseViewBoxDimensions", () => {
@@ -84,5 +85,67 @@ describe("scalePathData", () => {
     expect(scalePathData("M 0 0 A 30 50 45 1 0 100 100", 0.5, 5, 5)).toBe(
       "M 5 5 A 15 25 45 1 0 55 55"
     );
+  });
+});
+
+describe("rotatePathData", () => {
+  it("sem rotação (0°), devolve o d original intocado", () => {
+    expect(rotatePathData("M 0 0 L 10 0 L 10 10 Z", 0, 5, 5)).toBe("M 0 0 L 10 0 L 10 10 Z");
+    // 360° é equivalente a 0°
+    expect(rotatePathData("M 0 0 L 10 0", 360, 5, 5)).toBe("M 0 0 L 10 0");
+  });
+
+  it("rotaciona um triângulo 90° em torno do seu centro", () => {
+    // triângulo M(0,0) L(10,0) L(10,10), centro (5,5) — rotação 90° leva
+    // cada vértice pro próximo (sentido consistente com svgpathtools.rotated:
+    // x' = cx + dx·cos − dy·sin, y' = cy + dx·sin + dy·cos)
+    expect(rotatePathData("M 0 0 L 10 0 L 10 10 Z", 90, 5, 5)).toBe(
+      "M 10 0 L 10 10 L 0 10 Z"
+    );
+  });
+
+  it("H e V viram L (rotação não preserva linha horizontal/vertical)", () => {
+    // M(0,0) H10 → segmento horizontal (0,0)-(10,0); rotacionado 90° em torno
+    // da origem vira segmento vertical (0,0)-(0,10)
+    expect(rotatePathData("M 0 0 H 10", 90, 0, 0)).toBe("M 0 0 L 0 10");
+    expect(rotatePathData("M 0 0 V 10", 90, 0, 0)).toBe("M 0 0 L -10 0");
+  });
+
+  it("comandos relativos (minúsculos) são convertidos e rotacionados corretamente", () => {
+    // m(10,10) l(5,0): segmento horizontal de comprimento 5 a partir de (10,10)
+    // rotacionado 90° em torno da origem — vira um segmento VERTICAL
+    const result = rotatePathData("m 10 10 l 5 0", 90, 0, 0);
+    expect(result).toBe("M -10 10 L -10 15");
+  });
+
+  it("M com pares extras trata os extras como LINETO implícito", () => {
+    // M(0,0) seguido de (10,0) sem repetir a letra — o 2º par é um L implícito
+    expect(rotatePathData("M 0 0 10 0", 90, 0, 0)).toBe("M 0 0 L 0 10");
+  });
+
+  it("curva C: todos os pontos de controle e o final rotacionam junto", () => {
+    // segmento reto pra facilitar conferência manual: C com pontos colineares
+    const result = rotatePathData("M 0 0 C 10 0 20 0 30 0", 90, 0, 0);
+    expect(result).toBe("M 0 0 C 0 10 0 20 0 30");
+  });
+
+  it("Z fecha de volta ao ponto de início (já rotacionado) e reseta o estado interno", () => {
+    // depois do Z, um comando relativo deve calcular a partir do INÍCIO do
+    // subpath (0,0 original), não do último ponto antes do Z
+    const result = rotatePathData("M 0 0 L 10 0 Z l 0 5", 90, 0, 0);
+    // M(0,0)->(0,0); L(10,0)->(0,10); Z fecha; l(0,5) relativo ao (0,0)
+    // original -> ponto absoluto (0,5) -> rotacionado (-5,0)
+    expect(result).toBe("M 0 0 L 0 10 Z L -5 0");
+  });
+
+  it("arco (A): ponto final rotaciona e x-axis-rotation soma o ângulo; raios e flags intocados", () => {
+    expect(rotatePathData("M 0 0 A 30 50 45 1 0 100 100", 90, 0, 0)).toBe(
+      "M 0 0 A 30 50 135 1 0 -100 100"
+    );
+  });
+
+  it("rotação em torno de um centro não-origem desloca corretamente", () => {
+    // ponto (10,10) rotacionado 180° em torno de (5,5) deve virar (0,0)
+    expect(rotatePathData("M 10 10", 180, 5, 5)).toBe("M 0 0");
   });
 });

@@ -1,18 +1,107 @@
 // ─── Domain Types ────────────────────────────────────────────────────────────
 
-export type StitchType = "satin" | "tatami" | "running";
+/**
+ * Tipos de ponto suportados (motor = Ink/Stitch real, rodado via subprocess —
+ * ver workers/embroidery/inkstitch_runner.py). Cada `type` aqui corresponde a
+ * um `fill_method`/`stroke_method` do Ink/Stitch; os campos de cada variante
+ * espelham só os parâmetros que o Ink/Stitch DE FATO lê pra aquele método —
+ * confirmado empiricamente rodando o binário real (não por suposição: vários
+ * nomes "óbvios" tinham nome errado e eram ignorados em silêncio, ver
+ * docs/MOTOR-BORDADO-INKSTITCH.md seção 3.1/Fase 1).
+ */
+export type StitchType = "tatami" | "contour" | "meander" | "circular" | "satin" | "running";
 
-export interface StitchParams {
-  type: StitchType;
-  /** 0.0 = esparso → 1.0 = denso */
+/** Tatami — preenchimento uniforme (Ink/Stitch: `auto_fill`). O mais comum pra áreas grandes. */
+export interface TatamiStitchParams {
+  type: "tatami";
+  /** 0.0 = esparso → 1.0 = denso (vira `row_spacing_mm`) */
   density: number;
-  /** ângulo em graus, 0–180 */
+  /** ângulo das linhas de varredura, 0–180° */
   angle: number;
   /** passada de base (perpendicular, esparsa) antes do preenchimento — estabiliza o tecido */
   underlay?: boolean;
   /** compensação de puxão em mm (0–0.5) — estica cada linha nas pontas pra compensar a tração do fio */
   pullCompensationMm?: number;
 }
+
+/**
+ * Contorno — segue o contorno da forma de fora pra dentro (Ink/Stitch:
+ * `contour_fill`). Era o que a UI antiga chamava de "Cetim"/"satin" — nunca
+ * foi cetim de verdade (isso é `SatinColumn`, geometria de 2 trilhos, ainda
+ * não implementada — ver Fase 3 do doc). `angle` e `pullCompensationMm`
+ * NÃO se aplicam (confirmado: o Ink/Stitch ignora esses dois pra este método).
+ */
+export interface ContourStitchParams {
+  type: "contour";
+  /** 0.0 = esparso → 1.0 = denso (vira `row_spacing_mm`) */
+  density: number;
+  /** 0 = de fora pra dentro, 1 = espiral simples, 2 = espiral dupla */
+  contourStrategy?: 0 | 1 | 2;
+  /** evita que a linha de costura cruze a si mesma (mais lento de gerar) */
+  avoidSelfCrossing?: boolean;
+  underlay?: boolean;
+}
+
+/**
+ * Meandro — textura leve e decorativa, tipo labirinto (Ink/Stitch:
+ * `meander_fill`). Bom pra fundos/áreas grandes sem precisar de cobertura
+ * densa. `row_spacing_mm`/`maxStitchLength`/`pullCompensationMm` NÃO se
+ * aplicam (confirmado: esse método nem lê esses campos).
+ */
+export interface MeanderStitchParams {
+  type: "meander";
+  /** 0.0 = esparso → 1.0 = denso (vira `meander_scale_percent`, invertido: densidade alta = padrão menor) */
+  density: number;
+  /** id do padrão de textura (tile do Ink/Stitch) — fixo por ora, sem seletor na UI (75 opções sem nome amigável) */
+  pattern?: string;
+  /** ângulo do padrão, 0–180° */
+  angle?: number;
+  underlay?: boolean;
+}
+
+/**
+ * Circular — espiral que preenche a partir do centro da forma (Ink/Stitch:
+ * `circular_fill`). `angle`/`maxStitchLength`/`pullCompensationMm` NÃO se
+ * aplicam. Ponto-alvo customizado (fora do centro) não é suportado ainda —
+ * exigiria o sistema de "commands" visuais do Ink/Stitch (elemento SVG à
+ * parte); sempre usa o centro geométrico da forma por enquanto.
+ */
+export interface CircularStitchParams {
+  type: "circular";
+  /** 0.0 = esparso → 1.0 = denso (vira `row_spacing_mm`) */
+  density: number;
+  underlay?: boolean;
+}
+
+/**
+ * @deprecated Alias legado de `contour` — nunca foi cetim de verdade
+ * (mapeava pra `contour_fill` desde sempre). Mantido só pra não quebrar
+ * dados salvos antes desta migração; a UI trata como "Contorno" e não
+ * oferece mais "satin" como opção nova. Cetim real (2 trilhos) é Fase 3.
+ */
+export interface SatinStitchParams {
+  type: "satin";
+  density: number;
+  angle: number;
+  underlay?: boolean;
+  pullCompensationMm?: number;
+}
+
+/** Corrido — contorno/detalhe fino, ponto simples seguindo a linha (Ink/Stitch: `running_stitch`). */
+export interface RunningStitchParams {
+  type: "running";
+  /** 0.0 = pontos longos → 1.0 = pontos curtos (vira `running_stitch_length_mm`, invertido) */
+  density: number;
+  angle: number;
+}
+
+export type StitchParams =
+  | TatamiStitchParams
+  | ContourStitchParams
+  | MeanderStitchParams
+  | CircularStitchParams
+  | SatinStitchParams
+  | RunningStitchParams;
 
 /**
  * Uma "parte" do bordado — a unidade única do editor (antes havia dois conceitos

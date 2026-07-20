@@ -6,24 +6,36 @@ import type { AnalyzeLayerMetrics, AnalyzeMetrics, StitchParams } from "@ponto-s
  * (tatami/0.6/45° pra tudo) cada parte nasce com parâmetros derivados da
  * geometria real da camada (métricas da análise, ver AnalyzeLayerMetrics).
  *
- * Regras (digitalização clássica):
- *  - traço mais fino que ~1.2mm não sustenta nem cetim → ponto corrido;
- *  - coluna fina (1.2–8mm) e alongada → cetim com ângulo PERPENDICULAR ao
- *    eixo principal (o zigue-zague atravessa a coluna), underlay center-walk
- *    quando a coluna passa de 3mm, pull compensation leve;
- *  - resto (áreas) → tatami; underlay quando a área é grande; o ângulo
- *    alterna 45°/135° entre camadas pra distorção de tração não acumular
- *    toda na mesma direção.
+ * Regras (motor = Ink/Stitch real; `contour`/`meander` não suportam `angle`
+ * direcional — confirmado rodando o binário, ver docs/MOTOR-BORDADO-INKSTITCH.md
+ * Fase 1 — por isso a sugestão pra colunas alongadas usa TATAMI com o ângulo
+ * apontado na direção certa, não mais um "cetim" que nunca existiu de
+ * verdade — cetim real de 2 trilhos é Fase 3):
+ *  - traço mais fino que ~1.2mm não sustenta preenchimento → ponto corrido;
+ *  - coluna fina (1.2–8mm) e alongada → tatami com ângulo PERPENDICULAR ao
+ *    eixo principal (linhas atravessam a coluna, parecido com o efeito de um
+ *    cetim), underlay quando passa de 3mm;
+ *  - forma arredondada (pouco alongada) de área pequena/média → circular
+ *    (espiral a partir do centro fica bem em formas tipo bolinha/pétala);
+ *  - resto (áreas grandes/irregulares) → tatami; underlay quando a área é
+ *    grande; o ângulo alterna 45°/135° entre camadas pra distorção de tração
+ *    não acumular toda na mesma direção.
+ *  - `contour`/`meander` ficam de fora da sugestão automática por ora — sem
+ *    um sinal geométrico claro de "quando usar", o usuário escolhe manual.
  */
 
 /** Traço mais fino que isso (mm) vira ponto corrido. */
-export const MIN_SATIN_WIDTH_MM = 1.2;
-/** Coluna mais larga que isso (mm) não é cetim — vai de tatami. */
-export const MAX_SATIN_WIDTH_MM = 8;
+export const MIN_RUNNING_WIDTH_MM = 1.2;
+/** Coluna mais larga que isso (mm) não conta mais como "coluna alongada". */
+export const MAX_COLUMN_WIDTH_MM = 8;
 /** Alongamento (razão dos eixos principais) mínimo pra tratar como coluna. */
-export const MIN_SATIN_ELONGATION = 2.5;
-/** Cetim mais largo que isso (mm) pede underlay center-walk. */
-export const SATIN_UNDERLAY_MIN_WIDTH_MM = 3;
+export const MIN_COLUMN_ELONGATION = 2.5;
+/** Coluna mais larga que isso (mm) pede underlay. */
+export const COLUMN_UNDERLAY_MIN_WIDTH_MM = 3;
+/** Alongamento MÁXIMO pra tratar a forma como "arredondada" (candidata a circular). */
+export const MAX_ROUND_ELONGATION = 1.4;
+/** Área (mm²) máxima pra sugerir circular (formas grandes ficam de tatami). */
+export const MAX_ROUND_AREA_MM2 = 400;
 /** Área (mm²) a partir da qual o tatami pede underlay. */
 export const TATAMI_UNDERLAY_MIN_AREA_MM2 = 100;
 
@@ -46,18 +58,25 @@ export function suggestStitchParams(
   const imageAreaMm2 = (imageMetrics.imageWidth * imageMetrics.imageHeight) / (pxPerMm * pxPerMm);
   const areaMm2 = (metrics.areaPct / 100) * imageAreaMm2;
 
-  if (widthMm < MIN_SATIN_WIDTH_MM) {
+  if (widthMm < MIN_RUNNING_WIDTH_MM) {
     return { type: "running", density: 0.5, angle: 0 };
   }
 
-  if (widthMm < MAX_SATIN_WIDTH_MM && metrics.elongation > MIN_SATIN_ELONGATION) {
+  if (widthMm < MAX_COLUMN_WIDTH_MM && metrics.elongation > MIN_COLUMN_ELONGATION) {
     return {
-      type: "satin",
-      density: 0.6,
-      // zigue-zague atravessa a coluna: perpendicular ao eixo principal
+      type: "tatami",
+      density: 0.7,
+      // linhas atravessam a coluna: perpendicular ao eixo principal
       angle: clampAngle((metrics.principalAngleDeg + 90) % 180),
-      ...(widthMm > SATIN_UNDERLAY_MIN_WIDTH_MM ? { underlay: true } : {}),
-      pullCompensationMm: 0.15,
+      ...(widthMm > COLUMN_UNDERLAY_MIN_WIDTH_MM ? { underlay: true } : {}),
+    };
+  }
+
+  if (metrics.elongation < MAX_ROUND_ELONGATION && areaMm2 > 0 && areaMm2 < MAX_ROUND_AREA_MM2) {
+    return {
+      type: "circular",
+      density: 0.6,
+      ...(areaMm2 > TATAMI_UNDERLAY_MIN_AREA_MM2 ? { underlay: true } : {}),
     };
   }
 

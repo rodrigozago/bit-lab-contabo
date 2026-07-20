@@ -5,7 +5,8 @@
 > Marque os checkpoints `[ ]` → `[x]` conforme for implementando.
 
 **Última atualização:** 2026-07-20
-**Status geral:** 🟢 Fase 0 CONCLUÍDA — export/preview/stitch_data já rodam pelo binário real do Ink/Stitch. Próximo passo: Fase 1.
+**Status geral:** 🟢 Fase 0 + Fase 1 CONCLUÍDAS — motor real (Ink/Stitch) rodando com 5 tipos de ponto
+(Tatami/Contour/Meander/Circular/Running), UI por tipo, heurística de sugestão, rotação real. Próximo: Fase 2 (Stroke).
 
 ---
 
@@ -21,11 +22,17 @@
   o Ink/Stitch faz toda a **matemática do ponto**.
 - **Fase 0 concluída em 2026-07-20**: o motor caseiro foi REMOVIDO (não só desativado) — `worker.py`
   hoje só chama `run_inkstitch` (subprocess) e lê o resultado de volta com pyembroidery. Ver Seção 3.1
-  pros **5 problemas não-óbvios** encontrados e corrigidos (leitura obrigatória antes de mexer na Fase 1+).
+  pros **5 problemas não-óbvios** encontrados e corrigidos (leitura obrigatória antes de mexer na Fase 2+).
+- **Fase 1 concluída em 2026-07-20**: `StitchParams` virou união discriminada com 6 tipos (tatami/contour/
+  meander/circular/satin-legado/running); rotação agora é embutida DIRETO nas coordenadas do path (não
+  mais um atributo custom ignorado pelo Ink/Stitch); UI (`PropertiesPanel`) mostra só os controles válidos
+  por tipo; heurística estendida com `circular` pra formas arredondadas. Ver Seção 5.1 pros achados
+  críticos (nomes de atributo ERRADOS descobertos via teste empírico, incluindo que `tatami_fill` nunca
+  foi um `fill_method` válido — o nome certo é `auto_fill`).
 
 ### Checklist de alto nível
 - [x] **Fase 0** — Runner do Ink/Stitch no worker (fundação; validado headless) ✅ 2026-07-20
-- [ ] **Fase 1** — Schema de params + Fills (Tatami, Contour, Meander, Circular) + UI + heurística
+- [x] **Fase 1** — Schema de params + Fills (Tatami, Contour, Meander, Circular) + UI + heurística ✅ 2026-07-20
 - [ ] **Fase 2** — Stroke (running/bean/zigzag/ripple)
 - [ ] **Fase 3** — Satin Column (extração de trilhos)
 - [ ] **Fase 4** — Demais fills (Guided, Linear Gradient, Tartan, Cross Stitch)
@@ -122,7 +129,7 @@ Ink/Stitch é **GPLv3**. Rodar como **processo separado (subprocess)** é "mera 
 
 ---
 
-## 3. Estado atual do código (pós Fase 0 — 2026-07-20)
+## 3. Estado atual do código (pós Fase 0 + Fase 1 — 2026-07-20)
 
 - **`workers/embroidery/worker.py`** — REESCRITO do zero, motor caseiro 100% REMOVIDO (não só desligado).
   Hoje só tem: `pattern_to_preview_svg`, `pattern_to_stitch_json`, `_svg_viewbox`, `_pattern_from_bytes`
@@ -147,25 +154,29 @@ Ink/Stitch é **GPLv3**. Rodar como **processo separado (subprocess)** é "mera 
 - **`workers/embroidery/analyze.py`** — inalterado, ainda usado por `process_analyze_job`
   (`analyze_image_with_metrics`, `_layer_metrics`). ⚠️ **vtracer segfaulta no Python 3.14/Windows local**
   (pré-existente, confirmado não-relacionado à migração) → análise só roda no **Docker (Linux)**.
-- **`apps/api/src/services/svgConverter.ts`** — `buildStitchAttributes` **corrigida** pros nomes/formato
-  REAIS do Ink/Stitch (ver 3.1.3 — os nomes antigos eram TODOS ignorados silenciosamente):
-  `inkstitch:row_spacing_mm` (não `line_distance`), `inkstitch:fill_underlay="true"/"false"` sempre
-  explícito (não `underlay`, e o default do Ink/Stitch é `true` — omitir não desliga nada),
-  `inkstitch:max_stitch_length_mm` (não `max_stitch_length`), `inkstitch:running_stitch_length_mm` (só
-  faltava o `_mm`). **Valores são sempre número puro, SEM sufixo "mm"** — `pull_compensation_mm` e
-  `angle` já estavam certos. Rotação continua saindo como `ponto:rotation*` (ignorado pelo Ink/Stitch —
-  rotação está SILENCIOSAMENTE QUEBRADA hoje; é o item 1.3 da Fase 1, não adiar mais).
-  ⚠️ **`satin` hoje mapeia pra `contour_fill`**, que no Ink/Stitch real é um FILL genuíno (anéis
-  concêntricos), **não** uma coluna de cetim de verdade (isso é `SatinColumn`, elemento/geometria
-  diferente — 2 trilhos, ver Fase 3). Escolha antiga era só o nome mais parecido disponível; manter até
-  a Fase 3 implementar cetim de verdade.
-- **`packages/shared/src/index.ts`** — inalterado nesta fase: `EmbroideryElement`/`StitchParams`
-  (`{ type: "satin"|"tatami"|"running", density, angle, underlay?, pullCompensationMm? }`), mais
-  `name/hidden/groupId/groupName/rotation/stitchSuggested` e `AnalyzeMetrics`/`AnalyzeLayerMetrics`.
-  Vira união discriminada na Fase 1 (checkpoint 1.1).
-- **`apps/web/src/components/PropertiesPanel.tsx`** — inalterado, UI dos params por parte (3 tipos hoje).
-- **`apps/web/src/utils/stitchHeuristics.ts`** — inalterado, sugere tipo/densidade/ângulo a partir das métricas.
-- **`apps/web/src/store/projectStore.ts`** — inalterado, `addElement` (default stitch tatami 0.6/45).
+- **`apps/api/src/services/svgConverter.ts`** — `buildStitchAttributes` reescrita com um `switch` por
+  `stitch.type`, emitindo só os atributos que cada `fill_method` REALMENTE lê (ver 5.1 — `angle`/
+  `pull_compensation_mm` não existem pra contour/meander/circular; `row_spacing_mm`/`max_stitch_length_mm`
+  não existem pra meander). Nomes/formato dos atributos: `inkstitch:row_spacing_mm` (não `line_distance`),
+  `inkstitch:fill_underlay="true"/"false"` sempre explícito (default do Ink/Stitch é `true`),
+  `inkstitch:max_stitch_length_mm`, `inkstitch:running_stitch_length_mm`. **Valores sempre número puro,
+  sem sufixo "mm"**. Tatami usa `fill_method="auto_fill"` (não `"tatami_fill"` — nunca foi um valor
+  válido, ver 5.1.1). Rotação embutida DIRETO nas coordenadas do `d` via `rotatePathData` (nova em
+  `svgTransform.ts`) — `ponto:rotation*`/`xmlns:ponto` foram REMOVIDOS (o Ink/Stitch nunca leu esses
+  atributos custom). `satin` continua mapeando pra `contour_fill` (nunca foi cetim de verdade — ver Fase 3).
+- **`packages/shared/src/index.ts`** — `StitchParams` é uma **união discriminada** com 6 membros:
+  `TatamiStitchParams`, `ContourStitchParams`, `MeanderStitchParams`, `CircularStitchParams`,
+  `SatinStitchParams` (`@deprecated`, alias de contour), `RunningStitchParams`. Cada um só tem os campos
+  que o Ink/Stitch de fato lê pra aquele `fill_method` (ver tabela em 5.1.2).
+- **`apps/web/src/components/PropertiesPanel.tsx`** — reescrito: seletor com 5 opções (sem "satin" como
+  escolha nova), controles condicionais por tipo (`stitch.type === "x" && (...)`), `buildStitchForType`
+  migra campos compatíveis ao trocar de tipo.
+- **`apps/web/src/utils/stitchHeuristics.ts`** — heurística atualizada: coluna alongada → tatami com
+  ângulo perpendicular (não mais "satin"); nova regra de forma arredondada → circular.
+- **`apps/web/src/components/PartsPanel.tsx`** — `STITCH_LABEL` com rótulos pros 4 novos tipos + "satin"
+  mostrado como "Contorno".
+- **`apps/web/src/store/projectStore.ts`** — inalterado (default `{type:"tatami", density:0.6, angle:45}`
+  já é uma `TatamiStitchParams` válida).
 - **`apps/web/src/utils/svgLayers.ts`** — inalterado, `splitSvgByColor` (separa o SVG da análise por cor).
 
 ### 3.1 Achados críticos da Fase 0 (leitura obrigatória — nada disso está documentado em lugar nenhum do Ink/Stitch)
@@ -294,35 +305,100 @@ Rodado com SVG real gerado por `convertProjectToSvg` (2 elementos: tatami roxo +
 
 ---
 
-## 5. Fase 1 — Schema de params + Fills (Tatami, Contour, Meander, Circular)
+## 5. Fase 1 — Schema de params + Fills (Tatami, Contour, Meander, Circular) — ✅ CONCLUÍDA 2026-07-20
 
 ### Checkpoints
-- [ ] **1.1** `packages/shared/src/index.ts`: transformar `StitchParams` numa **união discriminada por
-      `type`**, cada fill com seus campos espelhando os `inkstitch:*` do Ink/Stitch:
-  - `tatami`: `angle`, `rowSpacing` (derivado do `density`), `maxStitchLength`, `staggers`, `skipLast`,
-    `underlay`, `expand`, `pullCompensation`.
-  - `contour`: `contourStrategy` (`inner_to_outer` etc.), `avoidSelfCrossing`, `spacing`, `maxStitchLength`, `underlay`.
-  - `meander`: `meanderScale`/densidade, `maxStitchLength`.
-  - `circular`: `targetPoint` (default = centro do bbox da parte), `spacing`, `maxStitchLength`.
-  - Manter defaults seguros + **retrocompat** (partes antigas = tatami).
-- [ ] **1.2** `apps/api/src/services/svgConverter.ts`: `buildStitchAttributes` emite os `inkstitch:*`
-      corretos por tipo de fill. Circular: emitir o marcador/param de target (centro por default).
-      Manter `densityToMm` por tipo.
-- [ ] **1.3** **Rotação:** trocar `ponto:rotation*` por **bake da rotação na matriz do `d`** (aplicar a
-      transformação de rotação nas coordenadas do path no `svgConverter.ts`), porque o Ink/Stitch ignora
-      atributos custom. Remover a leitura de `ponto:rotation` do worker (não é mais usado no export).
-- [ ] **1.4** `apps/web/src/components/PropertiesPanel.tsx`: seletor de tipo de ponto com os fills
-      suportados + params por tipo (avançados atrás de accordion). Rótulos amigáveis pra leigos.
-- [ ] **1.5** `apps/web/src/utils/stitchHeuristics.ts` + métricas de `analyze.py`: estender
-      `suggestStitchParams` pra escolher entre os fills (área grande → tatami; forma redonda/anelar →
-      circular; textura leve/decorativa → meander), com **tatami como fallback**. Badge "sugerido" já existe.
-- [ ] **1.6** `apps/web/src/store/projectStore.ts`: default e migração de partes antigas.
+- [x] **1.1** `packages/shared/src/index.ts`: `StitchParams` virou **união discriminada por `type`** com 6
+      membros: `TatamiStitchParams` (angle, density, underlay?, pullCompensationMm?), `ContourStitchParams`
+      (density, contourStrategy?, avoidSelfCrossing?, underlay? — **sem** angle/pullCompensationMm),
+      `MeanderStitchParams` (density, pattern?, angle?, underlay? — **sem** row_spacing/max_stitch_length),
+      `CircularStitchParams` (density, underlay? — **sem** angle/maxStitchLength), `SatinStitchParams`
+      (`@deprecated` alias legado, mecanicamente idêntico a contour, mantido só pra dados salvos antigos),
+      `RunningStitchParams` (density, angle). Sem "target point" custom pro circular (exigiria o sistema
+      de "commands" visuais do Ink/Stitch — fora do escopo, usa sempre o centroide).
+- [x] **1.2** `apps/api/src/services/svgConverter.ts`: `buildStitchAttributes` reescrita com um `switch`
+      por tipo, emitindo só os atributos que aquele `fill_method` REALMENTE lê (ver 5.1 — vários eram
+      emitidos à toa antes). `densityToRange` substituiu `densityToMm` (mais genérica, recebe o range
+      como tupla). `DEFAULT_MEANDER_PATTERN = "N4-21c"` (um dos 75 tiles bundlados, sem nome amigável).
+- [x] **1.3** Rotação: `rotatePathData(d, angleDeg, cx, cy)` nova em `svgTransform.ts` — rotaciona as
+      coordenadas do `d` de verdade (H/V viram L, M com pares extras vira LINETO implícito, arco soma o
+      ângulo no `x-axis-rotation`). 9 testes unitários cobrindo cada caso, mais 2 testes de integração no
+      `svgConverter.test.ts` com valores conferidos à mão. `ponto:rotation*`/`xmlns:ponto` REMOVIDOS por
+      completo (o Ink/Stitch nunca leu esses atributos — rotação estava silenciosamente quebrada desde a
+      Fase 0 até este fix).
+- [x] **1.4** `PropertiesPanel.tsx` reescrito: seletor com 5 opções (Tatami/Contorno/Circular/Meandro/
+      Corrido — "satin" não é mais oferecido como escolha nova, um elemento legado com `type:"satin"` é
+      tratado como "Contorno" em toda a tela). Ângulo só aparece pra tatami/running (os únicos que o
+      Ink/Stitch lê). Avançado mostra: tatami→underlay+pull compensation; contour→underlay+direção do
+      contorno (3 opções)+evitar auto-cruzamento; meander→underlay+ângulo do padrão; circular→underlay;
+      running→nada. `buildStitchForType` migra os campos compatíveis ao trocar de tipo.
+- [x] **1.5** `stitchHeuristics.ts`: heurística ATUALIZADA — coluna alongada agora sugere **tatami** com
+      ângulo perpendicular (não mais "satin", que nunca teve zigue-zague real e não lê `angle` mesmo);
+      nova regra "forma arredondada + área pequena/média (< 400mm²) → circular". `contour`/`meander`
+      ficam de fora da sugestão automática (sem sinal geométrico claro pra decidir — usuário escolhe manual).
+- [x] **1.6** `projectStore.ts`/`Editor.tsx`: **nenhuma mudança necessária** — o default (`{type:"tatami",
+      density:0.6, angle:45}`) já era uma `TatamiStitchParams` válida, e dados antigos com `type:"satin"`
+      fluem em runtime normalmente (JS não impõe a união) com o tratamento de compat já feito na UI (1.4).
 
-### Verificação da Fase 1
-- Trocar o tipo de ponto de uma parte nas Propriedades e reexportar → o simulador reflete o método
-  (tatami vs contour vs meander vs circular).
-- Testes vitest: `svgConverter` emite os `inkstitch:*` certos por tipo; tipos `shared` compilam; UI.
-- `stitchHeuristics.test.ts` estendido pros novos tipos.
+### 5.1 Achados críticos da Fase 1 (leitura obrigatória antes de mexer em Fase 2+)
+
+**1. `inkstitch:fill_method="tatami_fill"` NUNCA foi um valor válido** — o nome real do fill "tatami" no
+   Ink/Stitch é **`auto_fill`**. Confirmado empiricamente: gerando o mesmo desenho com `fill_method=
+   "tatami_fill"` vs `fill_method="auto_fill"`, a contagem de pontos e a bbox saem **idênticas** — ou
+   seja, o valor desconhecido "tatami_fill" caía num fallback silencioso pro default (`auto_fill`) desde
+   a Fase 0. Funcionava por sorte (o default JÁ era o que queríamos), mas o nome estava errado. **Fix**:
+   `buildStitchAttributes` agora emite `auto_fill` explicitamente.
+
+**2. Cada `fill_method` só lê um SUBCONJUNTO de parâmetros — testado um por um, não por suposição**
+   (via `select_items` no código-fonte do Ink/Stitch E confirmado rodando o binário comparando geometria
+   resultante com valores bem diferentes):
+   | Parâmetro | tatami (auto_fill) | contour_fill | meander_fill | circular_fill |
+   |---|---|---|---|---|
+   | `angle` | ✅ lido | ❌ ignorado | ❌ ignorado (usa `meander_angle` à parte) | ❌ ignorado |
+   | `row_spacing_mm` | ✅ | ✅ | ❌ **ignorado** (confirmado: preenchimento idêntico com/sem) | ✅ |
+   | `max_stitch_length_mm` | ✅ | ✅ | ❌ ignorado | ❌ ignorado |
+   | `fill_underlay` | ✅ | ✅ | ✅ | ✅ (universal, sem gating) |
+   | `pull_compensation_mm` | ✅ | ❌ **ignorado** (testado: bbox idêntica com/sem) | ❌ | ❌ |
+   Conclusão prática: **nosso código antigo emitia `pull_compensation_mm` pro tipo "satin" (→contour_fill)
+   desde sempre e isso NUNCA teve efeito nenhum** — no-op silencioso, igual o bug do `tatami_fill`.
+
+**3. `contour_strategy` e `meander_pattern` — valores confirmados**: `contour_strategy` aceita `"0"`
+   (de fora pra dentro), `"1"` (espiral simples), `"2"` (espiral dupla) como STRING do índice numérico
+   (não o nome em inglês). `meander_pattern` é o NOME DE PASTA de um dos 75 tiles bundlados em
+   `/opt/inkstitch/tiles/*/tile.json` (ex.: `"N4-21c"`, confirmado válido) — sem nome amigável nenhum
+   (campo `description` de todos os `tile.json` testados vinha vazio), por isso não tem seletor visual
+   na Fase 1 (mostrar 75 códigos crípticos pra quem não sabe digitalizar seria pior que não oferecer).
+
+**4. `circular_fill` não tem atributo de "ponto-alvo" simples.** O centro customizado do Ink/Stitch é lido
+   via `self.get_command('target_point')` — um elemento visual "command" do próprio Ink/Stitch (símbolo +
+   linha conectora no SVG), não um atributo `inkstitch:target_x/y`. Implementar isso exigiria replicar o
+   formato desses "commands" (fora do escopo da Fase 1) — por ora, `circular_fill` sempre usa
+   `shape.centroid` (comportamento default do próprio Ink/Stitch quando não acha o command).
+
+**5. `rotatePathData` é bem mais complexo que `scalePathData`** (que já existia) porque rotação MISTURA
+   x e y — não dá pra tratar cada eixo independentemente. H/V precisam virar L (uma rotação de 90° faz
+   uma linha horizontal deixar de ser horizontal); pares extras depois do primeiro `M` são LINETO
+   implícito por regra do spec SVG (não outro `M`); arcos (`A`) precisam somar o ângulo de rotação ao
+   próprio `x-axis-rotation` do arco, além de rotacionar o ponto final. A mesma convenção de sinal do
+   `svgpathtools.Path.rotated()` do Python (que fazia a rotação no worker antes da Fase 0) foi preservada
+   (`x' = cx + dx·cos − dy·sin`, `y' = cy + dx·sin + dy·cos`) — sem mudança de comportamento visível pro
+   usuário, só de ONDE a rotação acontece (TS em vez de Python, já que o Ink/Stitch não vê `<g transform>`
+   nem atributos custom).
+
+### 5.2 Verificação end-to-end já feita (2026-07-20)
+SVG real gerado por `convertProjectToSvg` com um elemento de CADA tipo (tatami/contour/meander/circular/
+running, canvas 60×60mm), processado via `worker.process_job` de verdade dentro do container:
+- 2492 pontos totais, 5 threads distintas, 4 `COLOR_CHANGE` (entre os 5 blocos) — todos corretos.
+- Contagem e bbox por bloco, todos com geometria real e corretamente posicionada: tatami 661pts,
+  contour 519pts, meander 179pts (menos denso, esperado — é textura leve), circular 687pts, running 431pts.
+- Nenhum tipo gerou 0 pontos ou geometria degenerada.
+
+### Verificação da Fase 1 — ✅ feita
+- `npx pnpm@9.15.4 --filter @ponto-studio/api test` → 42 testes OK (svgTransform 22 + svgConverter 20).
+- `npx pnpm@9.15.4 --filter @ponto-studio/web test` → 67 testes OK (stitchHeuristics 12 + resto inalterado).
+- `tsc --noEmit` limpo em `api` e `web`.
+- **Ainda não testado nesta sessão**: trocar o tipo de ponto pela UI de verdade no browser (Properties
+  Panel) e conferir visualmente; fluxo completo via `docker compose up` clicando "Exportar".
 
 ---
 
@@ -339,24 +415,25 @@ Rodado com SVG real gerado por `convertProjectToSvg` (2 elementos: tatami roxo +
 
 ## 7. Arquivos-chave (resumo)
 
-**Criados na Fase 0 (prontos):**
+**Criados nas Fases 0/1 (prontos):**
 - `workers/embroidery/inkstitch_runner.py` (+ `test_inkstitch_runner.py`) ✅
+- `rotatePathData` em `apps/api/src/services/svgTransform.ts` ✅
 
-**A criar na Fase 1+:**
-- Nenhum arquivo novo previsto — só edições nos existentes abaixo.
+**A criar na Fase 2+:**
+- Nenhum arquivo novo previsto pra Fase 2 (Stroke) — só edições. Fase 3 (Satin Column) provavelmente
+  precisa de um helper novo de extração de rails (geometria — ver Seção 6).
 
-**Modificar na Fase 1:**
-- `apps/api/src/services/svgConverter.ts` — params `inkstitch:*` por tipo de fill (contour/meander/circular
-  além do tatami já corrigido); **bake de rotação no `d`** (rotação está quebrada hoje, ver 3.1/checkpoint 1.3)
-- `packages/shared/src/index.ts` — `StitchParams` união discriminada
+**Fases 0/1 completas — arquivos já modificados (não mexer de novo sem motivo):**
+- `apps/api/src/services/svgConverter.ts` — `buildStitchAttributes` por tipo + rotação embutida no `d`
+- `packages/shared/src/index.ts` — `StitchParams` união discriminada (6 tipos)
 - `apps/web/src/components/PropertiesPanel.tsx` — UI por tipo
-- `apps/web/src/utils/stitchHeuristics.ts` — sugestão entre os fills
-- `apps/web/src/store/projectStore.ts` — default/migração
+- `apps/web/src/utils/stitchHeuristics.ts` — sugestão entre tatami/circular/running
+- `apps/web/src/components/PartsPanel.tsx` — rótulos por tipo
 
 **Já prontos, reusar sem mexer:**
 - `workers/embroidery/inkstitch_runner.py` (`run_inkstitch`), `worker.py` (`pattern_to_stitch_json`,
   `pattern_to_preview_svg`, `_svg_viewbox`, `_pattern_from_bytes`), `analyze.py` (cores + métricas),
-  `splitSvgByColor`.
+  `splitSvgByColor`, `rotatePathData`/`scalePathData` (`svgTransform.ts`).
 
 ---
 
@@ -396,4 +473,5 @@ Rodado com SVG real gerado por `convertProjectToSvg` (2 elementos: tatami roxo +
 | Data | Fase/Checkpoint | O que foi feito | Commit |
 |------|-----------------|-----------------|--------|
 | 2026-07-20 | — | Plano criado (este documento) | — |
-| 2026-07-20 | Fase 0 (0.1–0.7) | Ink/Stitch integrado via subprocess; motor caseiro removido; 5 bugs de compatibilidade achados e corrigidos (ver Seção 3.1); e2e validado com SVG de produção real dentro do container | (não commitado ainda nesta sessão) |
+| 2026-07-20 | Fase 0 (0.1–0.7) | Ink/Stitch integrado via subprocess; motor caseiro removido; 5 bugs de compatibilidade achados e corrigidos (ver Seção 3.1); e2e validado com SVG de produção real dentro do container | ed2958d |
+| 2026-07-20 | Fase 1 (1.1–1.6) | StitchParams união discriminada (6 tipos); atributos inkstitch:* corrigidos por tipo (tatami_fill→auto_fill, pull_compensation/angle removidos de contour/meander/circular); rotação embutida no `d` via `rotatePathData` (novo, com 9 testes); PropertiesPanel reescrito; heurística estendida (circular); e2e validado com os 5 tipos via SVG de produção real | (não commitado ainda nesta sessão) |

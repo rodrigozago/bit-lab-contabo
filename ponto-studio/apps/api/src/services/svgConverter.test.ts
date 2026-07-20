@@ -41,37 +41,77 @@ describe("convertProjectToSvg", () => {
     expect(svg).toContain("<title>Bordado &lt;&quot;especial&quot;&gt; &amp; Cia</title>");
   });
 
-  it("converte elemento com svgPath em <path> com cor e ponto satin", () => {
+  it("converte elemento com svgPath em <path> com cor e ponto satin/contour", () => {
     const svg = convertProjectToSvg(makeProject([makeElement()]));
     // svgPath (10x10 page-px) reescalado pra mm via HOOP_PX_PER_MM=4 → 2.5x2.5
     expect(svg).toContain('d="M 0 0 L 2.5 0 L 2.5 2.5 L 0 2.5 Z"');
     expect(svg).toContain('fill="#ff5733"');
-    expect(svg).toContain('inkstitch:angle="45"');
     expect(svg).toContain('inkstitch:fill_method="contour_fill"');
+    // contour_fill não lê "angle" (confirmado: o Ink/Stitch ignora esse
+    // atributo pra este fill_method) — não deve ser emitido
+    expect(svg).not.toContain("inkstitch:angle");
   });
 
-  it("gera atributos tatami com row_spacing_mm derivado da densidade + max_stitch_length_mm", () => {
+  it("tatami usa fill_method=auto_fill (não 'tatami_fill' — nome inválido, caía em fallback silencioso)", () => {
     const el = makeElement({
       stitch: { type: "tatami", density: 0.6, angle: 30 } satisfies StitchParams,
     });
     const svg = convertProjectToSvg(makeProject([el]));
-    expect(svg).toContain('inkstitch:fill_method="tatami_fill"');
-    // densityToMm (faixa Ink/Stitch 0.25–1.0): 1.0 - 0.6 * (1.0 - 0.25) = 0.55
-    // nomes/formato conferidos empiricamente contra o binário real do
-    // Ink/Stitch: valor SEM sufixo "mm" (ele faz float() puro no atributo).
+    expect(svg).toContain('inkstitch:fill_method="auto_fill"');
+    expect(svg).toContain('inkstitch:angle="30"');
+    // densityToRange (faixa Ink/Stitch 0.25–1.0): 1.0 - 0.6 * (1.0 - 0.25) = 0.55
     expect(svg).toContain('inkstitch:row_spacing_mm="0.55"');
     // comprimento do ponto ao longo da linha é um parâmetro separado
     expect(svg).toContain('inkstitch:max_stitch_length_mm="3"');
   });
 
-  it("satin usa a faixa de zigzag spacing (0.2–0.8mm) e emite max_stitch_length_mm", () => {
-    const el = makeElement({
+  it("satin (legado) e contour usam a MESMA faixa de row_spacing_mm do tatami e emitem max_stitch_length_mm", () => {
+    // satin sempre foi mecanicamente idêntico a contour_fill — unificado
+    const satin = convertProjectToSvg(makeProject([makeElement({
       stitch: { type: "satin", density: 0.6, angle: 45 } satisfies StitchParams,
+    })]));
+    const contour = convertProjectToSvg(makeProject([makeElement({
+      stitch: { type: "contour", density: 0.6 } satisfies StitchParams,
+    })]));
+    // 1.0 - 0.6 * (1.0 - 0.25) = 0.55 (mesma faixa do tatami)
+    expect(satin).toContain('inkstitch:row_spacing_mm="0.55"');
+    expect(satin).toContain('inkstitch:max_stitch_length_mm="3"');
+    expect(contour).toContain('inkstitch:fill_method="contour_fill"');
+    expect(contour).toContain('inkstitch:row_spacing_mm="0.55"');
+    expect(contour).toContain('inkstitch:max_stitch_length_mm="3"');
+  });
+
+  it("contour emite contour_strategy e avoid_self_crossing quando definidos", () => {
+    const el = makeElement({
+      stitch: { type: "contour", density: 0.5, contourStrategy: 2, avoidSelfCrossing: true } satisfies StitchParams,
     });
     const svg = convertProjectToSvg(makeProject([el]));
-    // 0.8 - 0.6 * (0.8 - 0.2) = 0.44
-    expect(svg).toContain('inkstitch:row_spacing_mm="0.44"');
-    expect(svg).toContain('inkstitch:max_stitch_length_mm="3"');
+    expect(svg).toContain('inkstitch:contour_strategy="2"');
+    expect(svg).toContain('inkstitch:avoid_self_crossing="true"');
+  });
+
+  it("meander emite fill_method/pattern/scale_percent e NÃO emite row_spacing_mm/max_stitch_length/angle-base", () => {
+    const el = makeElement({
+      stitch: { type: "meander", density: 0.5 } satisfies StitchParams,
+    });
+    const svg = convertProjectToSvg(makeProject([el]));
+    expect(svg).toContain('inkstitch:fill_method="meander_fill"');
+    expect(svg).toContain('inkstitch:meander_pattern="N4-21c"');
+    // densityToRange (faixa 50-200%, invertida): 200 - 0.5*(200-50) = 125
+    expect(svg).toContain('inkstitch:meander_scale_percent="125"');
+    expect(svg).not.toContain("inkstitch:row_spacing_mm");
+    expect(svg).not.toContain("inkstitch:max_stitch_length_mm");
+  });
+
+  it("circular emite fill_method/row_spacing_mm e NÃO emite max_stitch_length_mm/angle", () => {
+    const el = makeElement({
+      stitch: { type: "circular", density: 0.6 } satisfies StitchParams,
+    });
+    const svg = convertProjectToSvg(makeProject([el]));
+    expect(svg).toContain('inkstitch:fill_method="circular_fill"');
+    expect(svg).toContain('inkstitch:row_spacing_mm="0.55"');
+    expect(svg).not.toContain("inkstitch:max_stitch_length_mm");
+    expect(svg).not.toContain("inkstitch:angle");
   });
 
   it("gera atributos de running stitch", () => {
@@ -98,29 +138,31 @@ describe("convertProjectToSvg", () => {
     expect(convertProjectToSvg(makeProject([on]))).toContain('inkstitch:fill_underlay="true"');
   });
 
-  it("rotação vira ponto:rotation* POR PATH (não transform, que o worker ignora)", () => {
-    // elemento de 2.5×2.5mm em (0,0) rotacionado 90° → centro (1.25, 1.25)
+  it("rotação vira coordenadas ROTACIONADAS no próprio \"d\" (não atributo custom, que o Ink/Stitch ignora)", () => {
+    // quadrado 2.5x2.5mm em (0,0), centro (1.25,1.25), rotacionado 90° —
+    // vira o mesmo quadrado com os vértices deslocados (matemática conferida
+    // em svgTransform.test.ts::rotatePathData)
     const el = makeElement({ rotation: Math.PI / 2 });
     const svg = convertProjectToSvg(makeProject([el]));
-    expect(svg).toContain('ponto:rotation="90"');
-    expect(svg).toContain('ponto:rotation_cx="1.25"');
-    expect(svg).toContain('ponto:rotation_cy="1.25"');
-    expect(svg).toContain('xmlns:ponto="https://ponto.studio/ns"');
+    expect(svg).toContain('d="M 2.5 0 L 2.5 2.5 L 0 2.5 L 0 0 Z"');
     expect(svg).not.toContain("transform=");
+    expect(svg).not.toContain("ponto:rotation");
   });
 
-  it("rotação também é emitida nos paths extraídos do svgContent", () => {
+  it("rotação também é aplicada nos paths extraídos do svgContent", () => {
     const el = makeElement({
       rotation: Math.PI / 4,
       svgContent: `<svg viewBox="0 0 10 10"><path d="M 1 1 Z" fill="#aabbcc"/></svg>`,
     });
     const svg = convertProjectToSvg(makeProject([el]));
-    expect(svg).toContain('ponto:rotation="45"');
+    // ponto (0.25,0.25) [pós contain-fit] rotacionado 45° em torno de (1.25,1.25)
+    expect(svg).toContain('d="M 1.25 -0.164 Z"');
     expect(svg).not.toContain("transform=");
   });
 
-  it("sem rotação, nenhum atributo ponto:rotation é emitido", () => {
+  it("sem rotação, o \"d\" não é alterado pela rotação", () => {
     const svg = convertProjectToSvg(makeProject([makeElement()]));
+    expect(svg).toContain('d="M 0 0 L 2.5 0 L 2.5 2.5 L 0 2.5 Z"');
     expect(svg).not.toContain("ponto:rotation");
   });
 
