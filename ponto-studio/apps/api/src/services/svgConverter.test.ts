@@ -50,25 +50,28 @@ describe("convertProjectToSvg", () => {
     expect(svg).toContain('inkstitch:fill_method="contour_fill"');
   });
 
-  it("gera atributos tatami com line_distance derivado da densidade + max_stitch_length", () => {
+  it("gera atributos tatami com row_spacing_mm derivado da densidade + max_stitch_length_mm", () => {
     const el = makeElement({
       stitch: { type: "tatami", density: 0.6, angle: 30 } satisfies StitchParams,
     });
     const svg = convertProjectToSvg(makeProject([el]));
     expect(svg).toContain('inkstitch:fill_method="tatami_fill"');
     // densityToMm (faixa Ink/Stitch 0.25–1.0): 1.0 - 0.6 * (1.0 - 0.25) = 0.55
-    expect(svg).toContain('inkstitch:line_distance="0.55mm"');
+    // nomes/formato conferidos empiricamente contra o binário real do
+    // Ink/Stitch: valor SEM sufixo "mm" (ele faz float() puro no atributo).
+    expect(svg).toContain('inkstitch:row_spacing_mm="0.55"');
     // comprimento do ponto ao longo da linha é um parâmetro separado
-    expect(svg).toContain('inkstitch:max_stitch_length="3mm"');
+    expect(svg).toContain('inkstitch:max_stitch_length_mm="3"');
   });
 
-  it("satin usa a faixa de zigzag spacing (0.2–0.8mm)", () => {
+  it("satin usa a faixa de zigzag spacing (0.2–0.8mm) e emite max_stitch_length_mm", () => {
     const el = makeElement({
       stitch: { type: "satin", density: 0.6, angle: 45 } satisfies StitchParams,
     });
     const svg = convertProjectToSvg(makeProject([el]));
     // 0.8 - 0.6 * (0.8 - 0.2) = 0.44
-    expect(svg).toContain('inkstitch:line_distance="0.44mm"');
+    expect(svg).toContain('inkstitch:row_spacing_mm="0.44"');
+    expect(svg).toContain('inkstitch:max_stitch_length_mm="3"');
   });
 
   it("gera atributos de running stitch", () => {
@@ -78,7 +81,21 @@ describe("convertProjectToSvg", () => {
     const svg = convertProjectToSvg(makeProject([el]));
     expect(svg).toContain('inkstitch:stroke_method="running_stitch"');
     // faixa do running: 3.5 - 1 * (3.5 - 1.5) = 1.5
-    expect(svg).toContain('inkstitch:running_stitch_length="1.5mm"');
+    expect(svg).toContain('inkstitch:running_stitch_length_mm="1.5"');
+  });
+
+  it("underlay sempre emite fill_underlay explícito (default do Ink/Stitch é true)", () => {
+    // Sem emitir "false" explicitamente quando o usuário desliga, o
+    // Ink/Stitch aplicaria underlay do mesmo jeito (default true) — o
+    // toggle da UI viraria um no-op silencioso.
+    const off = makeElement({
+      stitch: { type: "tatami", density: 0.6, angle: 45, underlay: false } satisfies StitchParams,
+    });
+    const on = makeElement({
+      stitch: { type: "tatami", density: 0.6, angle: 45, underlay: true } satisfies StitchParams,
+    });
+    expect(convertProjectToSvg(makeProject([off]))).toContain('inkstitch:fill_underlay="false"');
+    expect(convertProjectToSvg(makeProject([on]))).toContain('inkstitch:fill_underlay="true"');
   });
 
   it("rotação vira ponto:rotation* POR PATH (não transform, que o worker ignora)", () => {

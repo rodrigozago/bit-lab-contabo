@@ -222,41 +222,57 @@ function elementToSvgPath(el: EmbroideryElement): string {
 }
 
 /**
- * Atributos inkstitch do ponto. Por padrão usa mm (export, que reescala o SVG
- * para o canvas em mm). Se `lineDistanceOverride` for passado (preview), usa
- * esse valor nas unidades do viewBox e força line_distance mesmo no satin —
- * assim o worker tem um espaçamento sensato no espaço de coordenadas original.
+ * Atributos inkstitch:* do ponto — nomes e formato de valor CONFERIDOS
+ * empiricamente contra o binário real do Ink/Stitch v3.2.2 (worker.py roda
+ * o binário via subprocess, não um motor caseiro — ver inkstitch_runner.py):
+ *   - valores são SEMPRE número puro, SEM sufixo "mm" — Ink/Stitch faz
+ *     `float(attr)` direto; "0.4mm" falha o parse e ele volta pro default
+ *     dele (silencioso, sem erro) — testado: line_distance/underlay/
+ *     max_stitch_length com nome ANTIGO ou com sufixo "mm" eram 100%
+ *     ignorados (contagem de pontos idêntica variando o valor);
+ *   - o nome do parâmetro é `row_spacing_mm` (não `line_distance`) pro
+ *     espaçamento entre linhas do preenchimento (fill_stitch.py);
+ *   - `fill_underlay` (não `underlay`) é o toggle de underlay — e o DEFAULT
+ *     do Ink/Stitch é `true`, então precisa emitir `false` explícito quando
+ *     o usuário desliga (omitir o atributo não desliga nada);
+ *   - `max_stitch_length_mm` (não `max_stitch_length`) é o comprimento
+ *     máximo do ponto ao longo da linha;
+ *   - `running_stitch_length_mm` (não `running_stitch_length`) já estava
+ *     quase certo, só faltava o sufixo `_mm` no NOME do atributo.
+ * `lineDistanceOverride` (preview): mesmo valor mas nas unidades do viewBox
+ * em vez de mm (ver buildElementPreviewSvg) — Ink/Stitch não sabe a diferença,
+ * só lê o número; o preview aceita essa aproximação pra não distorcer o
+ * desenho sobreposto no canvas.
  */
 function buildStitchAttributes(el: EmbroideryElement, lineDistanceOverride?: number): string {
   const { type, angle, underlay, pullCompensationMm } = el.stitch;
   const isPreview = lineDistanceOverride !== undefined;
-  const lineDistance = lineDistanceOverride ?? densityToMm(el.stitch.density, type);
-  const suffix = isPreview ? "" : "mm";
+  const rowSpacing = lineDistanceOverride ?? densityToMm(el.stitch.density, type);
   let base = `inkstitch:angle="${angle}"`;
 
   // STI-3: underlay e pull compensation só fazem sentido em preenchimentos
   // (satin/tatami); running é uma linha de contorno, sem tração lateral.
   if (type !== "running") {
-    if (underlay) base += ` inkstitch:underlay="true"`;
+    base += ` inkstitch:fill_underlay="${underlay ? "true" : "false"}"`;
     if (pullCompensationMm && pullCompensationMm > 0) {
       base += ` inkstitch:pull_compensation_mm="${pullCompensationMm}"`;
     }
   }
 
-  // Comprimento máx. do ponto AO LONGO da linha (tatami) — distinto do
-  // espaçamento entre linhas. Só no export (mm): no preview as coordenadas
-  // estão em unidades do viewBox e o worker usa o default interno.
-  const maxLen = !isPreview && type === "tatami" ? ` inkstitch:max_stitch_length="3mm"` : "";
+  // Comprimento máx. do ponto AO LONGO da linha (tatami/satin) — distinto do
+  // espaçamento entre linhas. Só no export (mm reais): no preview as
+  // coordenadas estão em unidades do viewBox e o default do Ink/Stitch serve.
+  const maxLen = !isPreview && type !== "running" ? ` inkstitch:max_stitch_length_mm="3"` : "";
 
   switch (type) {
     case "satin":
       // contour_fill → zigue-zague borda-a-borda no worker (STI-2); preview e
       // export usam o mesmo método pro que se vê bater com o que se borda.
-      return `${base} inkstitch:fill_method="contour_fill" inkstitch:line_distance="${lineDistance}${suffix}"`;
+      return `${base} inkstitch:fill_method="contour_fill" inkstitch:row_spacing_mm="${rowSpacing}"${maxLen}`;
     case "tatami":
-      return `${base} inkstitch:fill_method="tatami_fill" inkstitch:line_distance="${lineDistance}${suffix}"${maxLen}`;
+      return `${base} inkstitch:fill_method="tatami_fill" inkstitch:row_spacing_mm="${rowSpacing}"${maxLen}`;
     case "running":
-      return `${base} inkstitch:stroke_method="running_stitch" inkstitch:running_stitch_length="${lineDistance}${suffix}"`;
+      return `${base} inkstitch:stroke_method="running_stitch" inkstitch:running_stitch_length_mm="${rowSpacing}"`;
     default:
       return base;
   }
