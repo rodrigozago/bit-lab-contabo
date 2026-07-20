@@ -59,7 +59,7 @@ export function suggestStitchParams(
   const areaMm2 = (metrics.areaPct / 100) * imageAreaMm2;
 
   if (widthMm < MIN_RUNNING_WIDTH_MM) {
-    return { type: "running", density: 0.5, angle: 0 };
+    return { type: "running", density: 0.5 };
   }
 
   if (widthMm < MAX_COLUMN_WIDTH_MM && metrics.elongation > MIN_COLUMN_ELONGATION) {

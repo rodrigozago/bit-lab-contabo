@@ -21,13 +21,17 @@ const STITCH_OPTIONS: Array<{ value: Exclude<StitchType, "satin">; label: string
   { value: "circular", label: "Circular", desc: "Espiral a partir do centro. Fica bem em formas redondas." },
   { value: "meander", label: "Meandro", desc: "Textura leve e decorativa, tipo labirinto. Bom para fundos e áreas grandes." },
   { value: "running", label: "Corrido", desc: "Contorno e detalhes finos. Ponto básico de linha." },
+  { value: "zigzag", label: "Ziguezague", desc: "Linha larga em zigue-zague, largura constante. Boa para bordas grossas e traços decorativos." },
+  { value: "ripple", label: "Ondulado", desc: "Cópias concêntricas ao redor do centro da forma. Fica bem em texturas tipo onda ou pétala." },
 ];
 
-/** Constrói um StitchParams "limpo" pro novo tipo, preservando density/underlay quando fazem sentido. */
+/** Constrói um StitchParams "limpo" pro novo tipo, preservando os campos em comum quando fazem sentido. */
 function buildStitchForType(current: StitchParams, type: Exclude<StitchType, "satin">): StitchParams {
   const density = current.density;
   const underlay = "underlay" in current ? current.underlay : undefined;
   const angle = "angle" in current && current.angle !== undefined ? current.angle : undefined;
+  const repeats = "repeats" in current ? current.repeats : undefined;
+  const beanStitchRepeats = "beanStitchRepeats" in current ? current.beanStitchRepeats : undefined;
   switch (type) {
     case "tatami":
       return { type: "tatami", density, angle: angle ?? 45, underlay };
@@ -38,7 +42,11 @@ function buildStitchForType(current: StitchParams, type: Exclude<StitchType, "sa
     case "circular":
       return { type: "circular", density, underlay };
     case "running":
-      return { type: "running", density, angle: angle ?? 0 };
+      return { type: "running", density, repeats, beanStitchRepeats };
+    case "zigzag":
+      return { type: "zigzag", density, widthMm: "widthMm" in current ? current.widthMm : 3, repeats };
+    case "ripple":
+      return { type: "ripple", density, repeats, beanStitchRepeats };
   }
 }
 
@@ -123,9 +131,9 @@ export function PropertiesPanel({ element, onChange, onDelete }: Props) {
           <div className="text-center text-sm font-semibold text-primary">{Math.round(stitch.density * 100)}%</div>
         </div>
 
-        {/* Ângulo — só tatami/running leem esse parâmetro no Ink/Stitch;
-            contour/meander(base)/circular ignoram, então nem aparece. */}
-        {(stitch.type === "tatami" || stitch.type === "running") && (
+        {/* Ângulo — só tatami lê esse parâmetro no Ink/Stitch (auto_fill);
+            contour/meander(base)/circular/running/zigzag/ripple ignoram. */}
+        {stitch.type === "tatami" && (
           <div className="flex flex-col gap-1.5">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Ângulo</p>
             <div className="flex items-center gap-2">
@@ -143,17 +151,32 @@ export function PropertiesPanel({ element, onChange, onDelete }: Props) {
           </div>
         )}
 
+        {/* Largura — controla o stroke-width do path, é o que dá a largura do ziguezague */}
+        {stitch.type === "zigzag" && (
+          <div className="flex flex-col gap-1.5">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Largura</p>
+            <div className="flex items-center gap-2">
+              <span className="w-10 shrink-0 text-xs text-muted-foreground">1mm</span>
+              <Slider
+                min={1}
+                max={8}
+                step={0.5}
+                value={[stitch.widthMm]}
+                onValueChange={([v]) => setStitch({ widthMm: v! })}
+              />
+              <span className="w-10 shrink-0 text-xs text-muted-foreground">8mm</span>
+            </div>
+            <div className="text-center text-sm font-semibold text-primary">{stitch.widthMm.toFixed(1)} mm</div>
+          </div>
+        )}
+
         <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
           <CollapsibleTrigger className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
             <ChevronRight className={cn("h-3.5 w-3.5 transition-transform", advancedOpen && "rotate-90")} />
             Avançado
           </CollapsibleTrigger>
           <CollapsibleContent className="mt-2 flex flex-col gap-3">
-            {stitch.type === "running" ? (
-              <p className="text-xs text-muted-foreground">
-                Ponto corrido não tem opções avançadas — é uma linha simples seguindo o contorno.
-              </p>
-            ) : (
+            {stitch.type !== "running" && stitch.type !== "zigzag" && stitch.type !== "ripple" && (
               <>
                 <label className="flex cursor-pointer items-start gap-2 text-sm">
                   <Checkbox
@@ -252,6 +275,90 @@ export function PropertiesPanel({ element, onChange, onDelete }: Props) {
                   </div>
                 )}
               </>
+            )}
+
+            {(stitch.type === "running" || stitch.type === "zigzag" || stitch.type === "ripple") && (
+              <div className="flex flex-col gap-1.5">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Repetições (ida e volta)
+                </p>
+                <div className="flex items-center gap-2">
+                  <span className="w-10 shrink-0 text-xs text-muted-foreground">1x</span>
+                  <Slider
+                    min={1}
+                    max={5}
+                    step={1}
+                    value={[stitch.repeats ?? 1]}
+                    onValueChange={([v]) => setStitch({ repeats: v! })}
+                  />
+                  <span className="w-10 shrink-0 text-xs text-muted-foreground">5x</span>
+                </div>
+                <div className="text-center text-sm font-semibold text-primary">{stitch.repeats ?? 1}x</div>
+              </div>
+            )}
+
+            {stitch.type === "zigzag" && (
+              <div className="flex flex-col gap-1.5">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Compensação de puxão
+                </p>
+                <div className="flex items-center gap-2">
+                  <span className="w-10 shrink-0 text-xs text-muted-foreground">0</span>
+                  <Slider
+                    min={0}
+                    max={0.5}
+                    step={0.05}
+                    value={[stitch.pullCompensationMm ?? 0]}
+                    onValueChange={([v]) => setStitch({ pullCompensationMm: v! })}
+                  />
+                  <span className="w-10 shrink-0 text-xs text-muted-foreground">0.5mm</span>
+                </div>
+                <div className="text-center text-sm font-semibold text-primary">
+                  {(stitch.pullCompensationMm ?? 0).toFixed(2)} mm
+                </div>
+              </div>
+            )}
+
+            {(stitch.type === "running" || stitch.type === "ripple") && (
+              <div className="flex flex-col gap-1.5">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Ponto bean (reforçado)
+                </p>
+                <div className="flex items-center gap-2">
+                  <span className="w-10 shrink-0 text-xs text-muted-foreground">0</span>
+                  <Slider
+                    min={0}
+                    max={3}
+                    step={1}
+                    value={[stitch.beanStitchRepeats ?? 0]}
+                    onValueChange={([v]) => setStitch({ beanStitchRepeats: v! })}
+                  />
+                  <span className="w-10 shrink-0 text-xs text-muted-foreground">3</span>
+                </div>
+                <div className="text-center text-sm font-semibold text-primary">
+                  {stitch.beanStitchRepeats ? `${stitch.beanStitchRepeats}x reforçado` : "desligado"}
+                </div>
+              </div>
+            )}
+
+            {stitch.type === "ripple" && (
+              <div className="flex flex-col gap-1.5">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Número de linhas
+                </p>
+                <div className="flex items-center gap-2">
+                  <span className="w-10 shrink-0 text-xs text-muted-foreground">3</span>
+                  <Slider
+                    min={3}
+                    max={30}
+                    step={1}
+                    value={[stitch.lineCount ?? 10]}
+                    onValueChange={([v]) => setStitch({ lineCount: v! })}
+                  />
+                  <span className="w-10 shrink-0 text-xs text-muted-foreground">30</span>
+                </div>
+                <div className="text-center text-sm font-semibold text-primary">{stitch.lineCount ?? 10}</div>
+              </div>
             )}
           </CollapsibleContent>
         </Collapsible>

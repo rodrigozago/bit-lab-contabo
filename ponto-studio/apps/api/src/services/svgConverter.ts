@@ -1,4 +1,4 @@
-import { HOOP_PX_PER_MM, type EmbroideryProject, type EmbroideryElement, type CanvasSize, type StitchParams } from "@ponto-studio/shared";
+import { HOOP_PX_PER_MM, type EmbroideryProject, type EmbroideryElement, type CanvasSize, type StitchType } from "@ponto-studio/shared";
 import { parseViewBoxDimensions, computeContainTransform, scalePathData, rotatePathData, type Dimensions } from "./svgTransform.js";
 
 /**
@@ -121,7 +121,7 @@ function parseElementBoundsMm(svgPath: string | undefined): (Dimensions & { x: n
  */
 function extractAndAnnotatePaths(el: EmbroideryElement, canvas: CanvasSize): string {
   const svg = el.svgContent ?? "";
-  const stitchAttrs = buildStitchAttributes(el);
+  const { presentation, inkstitch } = buildStitchAttributes(el);
 
   const sourceDims = parseViewBoxDimensions(svg);
   const elementBounds = parseElementBoundsMm(el.svgPath);
@@ -149,7 +149,7 @@ function extractAndAnnotatePaths(el: EmbroideryElement, canvas: CanvasSize): str
   const paths = extractPathParts(svg).map(({ cleanAttrs, d }) => {
     const scaledD = transform ? scalePathData(d, transform.scale, transform.offsetX, transform.offsetY) : d;
     const finalD = rotatePathData(scaledD, angleDeg, centerX, centerY);
-    return `<path ${cleanAttrs} d="${escapeXml(finalD)}" fill="${el.color}" stroke="none" ${stitchAttrs} />`;
+    return `<path ${cleanAttrs} d="${escapeXml(finalD)}" ${presentation} ${inkstitch} />`;
   });
 
   if (paths.length === 0) {
@@ -172,11 +172,11 @@ export function buildElementPreviewSvg(el: EmbroideryElement, canvas: CanvasSize
   const viewBox = extractViewBox(svg) ?? `0 0 ${canvas.widthMm} ${canvas.heightMm}`;
 
   const unitsPerMm = dims && canvas.widthMm > 0 ? dims.width / canvas.widthMm : 1;
-  const stitchAttrs = buildStitchAttributes(el, unitsPerMm);
+  const { presentation, inkstitch } = buildStitchAttributes(el, unitsPerMm);
 
   const paths = extractPathParts(svg).map(
     ({ cleanAttrs, d }) =>
-      `<path ${cleanAttrs} d="${escapeXml(d)}" fill="${el.color}" stroke="none" ${stitchAttrs} />`
+      `<path ${cleanAttrs} d="${escapeXml(d)}" ${presentation} ${inkstitch} />`
   );
 
   return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkstitch="http://inkstitch.org/namespace" viewBox="${viewBox}">
@@ -191,7 +191,7 @@ function extractViewBox(svg: string): string | null {
 }
 
 function elementToSvgPath(el: EmbroideryElement): string {
-  const stitchAttrs = buildStitchAttributes(el);
+  const { presentation, inkstitch } = buildStitchAttributes(el);
   const rawD = el.svgPath || "M 0 0";
   // shapes desenhadas no tldraw (retângulo/elipse/desenho livre) guardam "d"
   // em page-px — mesma conversão pra mm usada em extractAndAnnotatePaths.
@@ -208,9 +208,8 @@ function elementToSvgPath(el: EmbroideryElement): string {
   return `<g id="${el.id}">
     <path
       d="${escapeXml(d)}"
-      fill="${el.color}"
-      stroke="none"
-      ${stitchAttrs}
+      ${presentation}
+      ${inkstitch}
     />
   </g>`;
 }
@@ -223,26 +222,54 @@ function elementToSvgPath(el: EmbroideryElement): string {
  */
 const DEFAULT_MEANDER_PATTERN = "N4-21c";
 
+/**
+ * Tipos que o Ink/Stitch trata como `Stroke` (element.py: `node_to_elements`
+ * cria um `FillStitch` se `fill` for != "none" e um `Stroke` se `stroke` for
+ * != "none" — INDEPENDENTEMENTE um do outro, não é mutuamente exclusivo).
+ * Confirmado empiricamente: um path com `fill="cor" stroke="none"` e
+ * `inkstitch:stroke_method="running_stitch"` gerava 286 pontos; o MESMO path
+ * com `fill="none" stroke="cor"` gerava 48 — os 238 pontos a mais eram um
+ * `auto_fill` FANTASMA (default do Ink/Stitch quando `fill_method` não é
+ * emitido), silenciosamente empilhado por baixo do ponto corrido. Por isso
+ * estes tipos SEMPRE emitem `fill="none" stroke="cor"` (nunca os dois juntos
+ * como os fills de verdade) — ver `buildStitchAttributes`.
+ */
+const STROKE_FAMILY_TYPES: ReadonlySet<StitchType> = new Set(["running", "zigzag", "ripple"]);
+
 /** density (0–1 da UI) → valor real, por faixa. Ranges calibrados nos defaults do Ink/Stitch. */
 function densityToRange(density: number, [min, max]: readonly [number, number]): number {
   return +(max - density * (max - min)).toFixed(2);
 }
 // espaçamento entre linhas (row_spacing_mm) — tatami/contour/circular; default Ink/Stitch 0.25mm
 const ROW_SPACING_RANGE_MM = [0.25, 1.0] as const;
-// comprimento do ponto corrido (running_stitch_length_mm); default Ink/Stitch 2.5mm
+// comprimento do ponto corrido (running_stitch_length_mm); default Ink/Stitch 2.5mm — running e ripple
 const RUNNING_LENGTH_RANGE_MM = [1.5, 3.5] as const;
 // escala do padrão do meandro (%), invertida: densidade alta = padrão menor = mais cobertura
 const MEANDER_SCALE_RANGE_PERCENT = [50, 200] as const;
+// espaçamento do ziguezague pico-a-pico (zigzag_spacing_mm); density=0.5 → 0.4mm (default Ink/Stitch)
+const ZIGZAG_SPACING_RANGE_MM = [0.2, 0.6] as const;
+
+/** Atributos de apresentação (fill/stroke/stroke-width) e inkstitch:* de um elemento. */
+interface StitchSvgAttrs {
+  presentation: string;
+  inkstitch: string;
+}
 
 /**
- * Atributos inkstitch:* do ponto, por tipo — nomes/formato de valor
- * CONFERIDOS EMPIRICAMENTE contra o binário real do Ink/Stitch v3.2.2 (não
- * por suposição — ver docs/MOTOR-BORDADO-INKSTITCH.md, Fase 0/1). Cada
- * `fill_method` só lê um SUBCONJUNTO dos parâmetros: `angle` e
- * `pull_compensation_mm` só existem pra `auto_fill` (tatami); `contour_fill`
+ * Atributos do ponto por tipo — nomes/formato de valor CONFERIDOS
+ * EMPIRICAMENTE contra o binário real do Ink/Stitch v3.2.2 (não por
+ * suposição — ver docs/MOTOR-BORDADO-INKSTITCH.md, Fase 0/1/2). Cada
+ * `fill_method`/`stroke_method` só lê um SUBCONJUNTO dos parâmetros: `angle`
+ * e `pull_compensation_mm` só existem pra `auto_fill` (tatami); `contour_fill`
  * não lê `angle` nem `pull_compensation_mm`; `meander_fill` não lê
  * `row_spacing_mm`/`max_stitch_length_mm`; `circular_fill` não lê
  * `max_stitch_length_mm`. Valores são SEMPRE número puro, sem sufixo "mm".
+ *
+ * `presentation` (fill/stroke) varia por FAMÍLIA, não por tipo: os fills
+ * (tatami/contour/meander/circular/satin) usam `fill=cor stroke="none"`; os
+ * strokes (running/zigzag/ripple) usam `fill="none" stroke=cor` — nunca os
+ * dois juntos, senão o Ink/Stitch cria um FillStitch fantasma por baixo (ver
+ * `STROKE_FAMILY_TYPES`).
  *
  * `unitsPerMm`: só usado no preview (`buildElementPreviewSvg`), que mantém o
  * viewBox original do SVG (sem reescala) — converte os valores em mm pras
@@ -250,11 +277,14 @@ const MEANDER_SCALE_RANGE_PERCENT = [50, 200] as const;
  * contour_strategy etc.) nem `max_stitch_length_mm` (o worker usa o default
  * dele no preview).
  */
-function buildStitchAttributes(el: EmbroideryElement, unitsPerMm?: number): string {
+function buildStitchAttributes(el: EmbroideryElement, unitsPerMm?: number): StitchSvgAttrs {
   const stitch = el.stitch;
   const isPreview = unitsPerMm !== undefined;
   const toViewBoxUnits = (mm: number) => (unitsPerMm ? +(mm * unitsPerMm).toFixed(3) : mm);
   const underlayAttr = (on: boolean | undefined) => `inkstitch:fill_underlay="${on ? "true" : "false"}"`;
+  const presentation = STROKE_FAMILY_TYPES.has(stitch.type)
+    ? `fill="none" stroke="${el.color}"` + (stitch.type === "zigzag" ? ` stroke-width="${toViewBoxUnits(stitch.widthMm)}"` : "")
+    : `fill="${el.color}" stroke="none"`;
 
   switch (stitch.type) {
     case "tatami": {
@@ -265,7 +295,7 @@ function buildStitchAttributes(el: EmbroideryElement, unitsPerMm?: number): stri
       if (stitch.pullCompensationMm && stitch.pullCompensationMm > 0) {
         attrs += ` inkstitch:pull_compensation_mm="${stitch.pullCompensationMm}"`;
       }
-      return attrs;
+      return { presentation, inkstitch: attrs };
     }
     // "satin" é alias legado — mecanicamente sempre foi contour_fill (nunca
     // cetim de verdade; ver comentário em StitchParams no packages/shared).
@@ -279,7 +309,7 @@ function buildStitchAttributes(el: EmbroideryElement, unitsPerMm?: number): stri
         if (stitch.contourStrategy) attrs += ` inkstitch:contour_strategy="${stitch.contourStrategy}"`;
         if (stitch.avoidSelfCrossing) attrs += ` inkstitch:avoid_self_crossing="true"`;
       }
-      return attrs;
+      return { presentation, inkstitch: attrs };
     }
     case "meander": {
       const scalePercent = densityToRange(stitch.density, MEANDER_SCALE_RANGE_PERCENT);
@@ -287,17 +317,39 @@ function buildStitchAttributes(el: EmbroideryElement, unitsPerMm?: number): stri
         `inkstitch:meander_pattern="${stitch.pattern ?? DEFAULT_MEANDER_PATTERN}" ` +
         `inkstitch:meander_scale_percent="${scalePercent}" ${underlayAttr(stitch.underlay)}`;
       if (stitch.angle) attrs += ` inkstitch:meander_angle="${stitch.angle}"`;
-      return attrs;
+      return { presentation, inkstitch: attrs };
     }
     case "circular": {
       const rowSpacing = toViewBoxUnits(densityToRange(stitch.density, ROW_SPACING_RANGE_MM));
-      return `inkstitch:fill_method="circular_fill" inkstitch:row_spacing_mm="${rowSpacing}" ` +
-        `${underlayAttr(stitch.underlay)}`;
+      return {
+        presentation,
+        inkstitch: `inkstitch:fill_method="circular_fill" inkstitch:row_spacing_mm="${rowSpacing}" ${underlayAttr(stitch.underlay)}`,
+      };
     }
     case "running": {
       const stitchLen = toViewBoxUnits(densityToRange(stitch.density, RUNNING_LENGTH_RANGE_MM));
-      return `inkstitch:angle="${stitch.angle}" inkstitch:stroke_method="running_stitch" ` +
-        `inkstitch:running_stitch_length_mm="${stitchLen}"`;
+      let attrs = `inkstitch:stroke_method="running_stitch" inkstitch:running_stitch_length_mm="${stitchLen}"`;
+      if (stitch.repeats && stitch.repeats > 1) attrs += ` inkstitch:repeats="${stitch.repeats}"`;
+      if (stitch.beanStitchRepeats) attrs += ` inkstitch:bean_stitch_repeats="${stitch.beanStitchRepeats}"`;
+      return { presentation, inkstitch: attrs };
+    }
+    case "zigzag": {
+      const spacing = toViewBoxUnits(densityToRange(stitch.density, ZIGZAG_SPACING_RANGE_MM));
+      let attrs = `inkstitch:stroke_method="zigzag_stitch" inkstitch:zigzag_spacing_mm="${spacing}"`;
+      if (stitch.pullCompensationMm && stitch.pullCompensationMm > 0) {
+        attrs += ` inkstitch:stroke_pull_compensation_mm="${stitch.pullCompensationMm}"`;
+      }
+      if (stitch.repeats && stitch.repeats > 1) attrs += ` inkstitch:repeats="${stitch.repeats}"`;
+      return { presentation, inkstitch: attrs };
+    }
+    case "ripple": {
+      const stitchLen = toViewBoxUnits(densityToRange(stitch.density, RUNNING_LENGTH_RANGE_MM));
+      let attrs = `inkstitch:stroke_method="ripple_stitch" inkstitch:running_stitch_length_mm="${stitchLen}"`;
+      if (stitch.lineCount) attrs += ` inkstitch:line_count="${stitch.lineCount}"`;
+      if (stitch.joinStyle !== undefined) attrs += ` inkstitch:join_style="${stitch.joinStyle}"`;
+      if (stitch.repeats && stitch.repeats > 1) attrs += ` inkstitch:repeats="${stitch.repeats}"`;
+      if (stitch.beanStitchRepeats) attrs += ` inkstitch:bean_stitch_repeats="${stitch.beanStitchRepeats}"`;
+      return { presentation, inkstitch: attrs };
     }
   }
 }

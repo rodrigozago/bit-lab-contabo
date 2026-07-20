@@ -9,7 +9,7 @@
  * nomes "óbvios" tinham nome errado e eram ignorados em silêncio, ver
  * docs/MOTOR-BORDADO-INKSTITCH.md seção 3.1/Fase 1).
  */
-export type StitchType = "tatami" | "contour" | "meander" | "circular" | "satin" | "running";
+export type StitchType = "tatami" | "contour" | "meander" | "circular" | "satin" | "running" | "zigzag" | "ripple";
 
 /** Tatami — preenchimento uniforme (Ink/Stitch: `auto_fill`). O mais comum pra áreas grandes. */
 export interface TatamiStitchParams {
@@ -87,12 +87,60 @@ export interface SatinStitchParams {
   pullCompensationMm?: number;
 }
 
-/** Corrido — contorno/detalhe fino, ponto simples seguindo a linha (Ink/Stitch: `running_stitch`). */
+/**
+ * Corrido — contorno/detalhe fino, ponto simples seguindo a linha (Ink/Stitch:
+ * `running_stitch`). Não tem `angle` — o Stroke do Ink/Stitch não lê esse
+ * parâmetro (é exclusivo de `FillStitch`/`auto_fill`); a versão antiga deste
+ * tipo tinha um campo `angle` que nunca teve efeito na costura em si (só
+ * afetava um preenchimento fantasma — ver `STROKE_FAMILY_TYPES` no
+ * `svgConverter.ts` e Seção 5.1/6.1 do doc de progresso).
+ */
 export interface RunningStitchParams {
   type: "running";
   /** 0.0 = pontos longos → 1.0 = pontos curtos (vira `running_stitch_length_mm`, invertido) */
   density: number;
-  angle: number;
+  /** repete o caminho inteiro ida/volta N vezes (Ink/Stitch: `repeats`) */
+  repeats?: number;
+  /** "ponto bean" — repete cada ponto individual N vezes (ponto mais grosso/reforçado; Ink/Stitch: `bean_stitch_repeats`) */
+  beanStitchRepeats?: number;
+}
+
+/**
+ * Ziguezague — linha em zigue-zague de largura constante ao longo do caminho
+ * (Ink/Stitch: `zigzag_stitch`, o "simple satin"). Cetim de verdade (2 trilhos
+ * independentes) ainda não existe — ver Fase 3 do doc de progresso.
+ */
+export interface ZigzagStitchParams {
+  type: "zigzag";
+  /** 0.0 = esparso → 1.0 = denso (vira `zigzag_spacing_mm`, invertido) */
+  density: number;
+  /** largura do ziguezague em mm (vira `stroke-width` do path — é o que o Ink/Stitch lê pra largura) */
+  widthMm: number;
+  /** compensação de puxão em mm, cada lado */
+  pullCompensationMm?: number;
+  /** repete o caminho inteiro ida/volta N vezes (Ink/Stitch: `repeats`) */
+  repeats?: number;
+}
+
+/**
+ * Ondulado — gera cópias concêntricas do próprio traço, encolhendo/crescendo
+ * a partir do centro (Ink/Stitch: `ripple_stitch`, sem linha-guia — usa o
+ * centroide da forma como alvo, comportamento default do Ink/Stitch quando
+ * não há uma linha-guia própria; ver Seção 6.1 do doc). Bom pra texturas
+ * decorativas tipo ondas/pétalas.
+ */
+export interface RippleStitchParams {
+  type: "ripple";
+  /** 0.0 = pontos longos → 1.0 = pontos curtos em cada anel (vira `running_stitch_length_mm`, invertido) */
+  density: number;
+  /** número de cópias concêntricas (Ink/Stitch: `line_count`, default 10) */
+  lineCount?: number;
+  /** estilo de junção nos cantos: 0 = reto, 1 = arredondado (Ink/Stitch: `join_style`) */
+  joinStyle?: 0 | 1;
+  /** repete o caminho inteiro ida/volta N vezes (Ink/Stitch: `repeats`) */
+  repeats?: number;
+  /** "ponto bean" — repete cada ponto individual N vezes (Ink/Stitch: `bean_stitch_repeats`) */
+  beanStitchRepeats?: number;
 }
 
 export type StitchParams =
@@ -101,7 +149,9 @@ export type StitchParams =
   | MeanderStitchParams
   | CircularStitchParams
   | SatinStitchParams
-  | RunningStitchParams;
+  | RunningStitchParams
+  | ZigzagStitchParams
+  | RippleStitchParams;
 
 /**
  * Uma "parte" do bordado — a unidade única do editor (antes havia dois conceitos

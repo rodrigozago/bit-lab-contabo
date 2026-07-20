@@ -5,8 +5,9 @@
 > Marque os checkpoints `[ ]` → `[x]` conforme for implementando.
 
 **Última atualização:** 2026-07-20
-**Status geral:** 🟢 Fase 0 + Fase 1 CONCLUÍDAS — motor real (Ink/Stitch) rodando com 5 tipos de ponto
-(Tatami/Contour/Meander/Circular/Running), UI por tipo, heurística de sugestão, rotação real. Próximo: Fase 2 (Stroke).
+**Status geral:** 🟢 Fase 0 + Fase 1 + Fase 2 CONCLUÍDAS — motor real (Ink/Stitch) rodando com 7 tipos de
+ponto (Tatami/Contour/Meander/Circular/Running/Zigzag/Ripple), UI por tipo, heurística de sugestão, rotação
+real. Próximo: Fase 3 (Satin Column).
 
 ---
 
@@ -29,11 +30,18 @@
   por tipo; heurística estendida com `circular` pra formas arredondadas. Ver Seção 5.1 pros achados
   críticos (nomes de atributo ERRADOS descobertos via teste empírico, incluindo que `tatami_fill` nunca
   foi um `fill_method` válido — o nome certo é `auto_fill`).
+- **Fase 2 concluída em 2026-07-20**: Stroke — `zigzag`/`ripple` novos, `running` ganhou `repeats`/
+  `beanStitchRepeats`. Achado CRÍTICO no início da fase (corrigido, afetava código já commitado da Fase 1):
+  o Ink/Stitch cria `FillStitch` e `Stroke` **independentemente** (por `fill`/`stroke` CSS, não é
+  if/else) — nosso `running` emitia `fill=cor stroke="none"`, o que criava um `auto_fill` FANTASMA por
+  baixo do ponto corrido (confirmado: 286 pontos vs 48 na mesma geometria só trocando `fill`/`stroke`).
+  Ver Seção 6.1 pros detalhes e por que isso também elimina o campo `angle` do `running` (nunca teve
+  efeito real — só afetava o fill fantasma).
 
 ### Checklist de alto nível
 - [x] **Fase 0** — Runner do Ink/Stitch no worker (fundação; validado headless) ✅ 2026-07-20
 - [x] **Fase 1** — Schema de params + Fills (Tatami, Contour, Meander, Circular) + UI + heurística ✅ 2026-07-20
-- [ ] **Fase 2** — Stroke (running/bean/zigzag/ripple)
+- [x] **Fase 2** — Stroke (running/bean/zigzag/ripple) ✅ 2026-07-20
 - [ ] **Fase 3** — Satin Column (extração de trilhos)
 - [ ] **Fase 4** — Demais fills (Guided, Linear Gradient, Tartan, Cross Stitch)
 
@@ -402,10 +410,77 @@ running, canvas 60×60mm), processado via `worker.process_job` de verdade dentro
 
 ---
 
-## 6. Fase 2+ (fast-follow, um a um)
+## 6. Fase 2 — Stroke (running/bean/zigzag/ripple) — ✅ CONCLUÍDA 2026-07-20
 
-- [ ] **Fase 2 — Stroke** (running/bean/zigzag/ripple): emitir o path com `stroke` +
-      `inkstitch:stroke_method` e params; pra uma parte preenchida, aplicar no contorno/centerline.
+### 6.1 Achado crítico (corrigido — afetava código já commitado na Fase 1)
+
+**O Ink/Stitch decide `FillStitch` vs `Stroke` de forma INDEPENDENTE, não mutuamente exclusiva.**
+Fonte: `lib/elements/utils.py::node_to_elements` (v3.2.2):
+```python
+if element.get_style("fill", "black") and not element.get_style('fill-opacity', 1) == "0":
+    elements.append(FillStitch(node))
+if element.get_style("stroke"):
+    ...
+    elements.append(Stroke(node))
+```
+Ou seja: um `<path>` com `fill="cor" stroke="none"` (o padrão que usávamos pra `running` desde a Fase 0)
+tem `fill` truthy (`get_style` só zera pra `"none"`/`"None"`) → SEMPRE cria um `FillStitch` também, com o
+`fill_method` DEFAULT (`auto_fill`/tatami) quando não emitimos esse atributo — um preenchimento fantasma
+por baixo do ponto corrido, com o MESMO fio (mesma cor = sem `COLOR_CHANGE` separando os dois, invisível
+na contagem de blocos por cor).
+
+**Confirmado empiricamente** (metodologia igual à Fase 0/1: SVG mínimo → `run_inkstitch` → `pyembroidery.read`
+→ contar pontos): o mesmo retângulo fino (`inkstitch:stroke_method="running_stitch"`,
+`running_stitch_length_mm="2.5"`) gerava **286 pontos** com `fill="cor" stroke="none"` vs **48 pontos**
+com `fill="none" stroke="cor"` — os 238 pontos a mais eram o `auto_fill` fantasma. Isso reintroduzia
+exatamente o bug original ("parece impressora") em qualquer parte do tipo `running` já exportada nas
+Fases 0/1.
+
+**Fix**: `STROKE_FAMILY_TYPES` em `svgConverter.ts` (`running`/`zigzag`/`ripple`) — esses tipos SEMPRE
+emitem `fill="none" stroke=cor` (nunca os dois juntos); os fills (`tatami`/`contour`/`meander`/`circular`/
+`satin`) continuam `fill=cor stroke="none"`. `buildStitchAttributes` agora devolve `{ presentation, inkstitch }`
+em vez de uma string única, pra separar essa decisão de apresentação dos atributos `inkstitch:*`.
+
+**Consequência pro schema**: o campo `angle` que `RunningStitchParams` tinha desde a Fase 0 foi REMOVIDO —
+`Stroke`/`running_stitch` nunca leu `angle` (é exclusivo de `FillStitch`/`auto_fill`, `lib/elements/fill_stitch.py`);
+o campo só parecia funcionar porque afetava o `auto_fill` fantasma, nunca o ponto corrido em si.
+
+### 6.2 Atributos confirmados por tipo (via `lib/elements/stroke.py`, v3.2.2, + teste empírico)
+
+| Tipo (`stroke_method`) | Atributos emitidos | Confirmado empiricamente |
+|---|---|---|
+| `running` (`running_stitch`) | `running_stitch_length_mm`, `repeats`?, `bean_stitch_repeats`? | repeats=1→29pts, repeats=3→63pts; bean=1→63pts (ambos ~triplicam, igual ao esperado: "ida-volta-ida") |
+| `zigzag` (`zigzag_stitch`) | `zigzag_spacing_mm`, `stroke_pull_compensation_mm`?, `repeats`? + `stroke-width` (CSS, mm) | width=3mm→zigzag 3mm real, width=6mm→6mm real (escala 1:1 com `stroke-width`); spacing=0.4mm→213pts, spacing=0.2mm→413pts (dobra, como esperado) |
+| `ripple` (`ripple_stitch`) | `running_stitch_length_mm`, `line_count`?, `join_style`?, `repeats`?, `bean_stitch_repeats`? | default (line_count=10 implícito)→272pts; line_count=20→532pts; line_count=3→91pts — funciona SEM linha-guia, usa `shape.centroid` (comportamento default do Ink/Stitch, `get_ripple_target()`) |
+
+**`ripple_stitch` sem linha-guia**: o `ripple_stitch` do Ink/Stitch normalmente pode seguir uma "linha-guia"
+(satin guide line, elemento SVG à parte) pra mirar numa forma customizada — isso é a mesma infraestrutura
+de "commands" visuais que também bloqueia o `target_point` do `circular_fill` (ver Seção 5.1, achado #4).
+Sem linha-guia, ele simplesmente gera cópias concêntricas do PRÓPRIO traço ao redor do centroide da forma
+— suficiente pro nosso caso de uso (textura decorativa), evitando replicar o formato de "commands" do
+Ink/Stitch. `scale_axis`/`scale_start`/`scale_end`/`rotate_ripples`/`grid_size_mm`/`reverse_rails` (todos
+exclusivos de ripple GUIADO) ficam de fora do schema por ora.
+
+`stroke-width` (CSS, não `inkstitch:*`) é o único parâmetro de largura do zigzag — vem de
+`self.stroke_width` em `lib/elements/element.py` (`get_style("stroke-width", "1.0")`), lido como número
+puro = mm (mesma convenção do resto do documento: 1 user unit = 1mm).
+
+### Verificação da Fase 2 — ✅ feita
+- Testes empíricos A/B no container (repeats/bean/zigzag width+spacing/ripple line_count) — todos batendo
+  com o comportamento esperado, ver tabela acima.
+- SVG de produção com um elemento de CADA um dos 7 tipos (`convertProjectToSvg` real, canvas 60×90mm),
+  processado via `worker.process_job` dentro do container: **2702 pontos totais, 7 blocos de cor**, todos
+  com geometria não-vazia e bbox na posição esperada (nenhum tipo gerou 0 pontos).
+- `npx pnpm@9.15.4 --filter @ponto-studio/api test` → 47 testes OK (svgTransform 22 + svgConverter 25).
+- `npx pnpm@9.15.4 --filter @ponto-studio/web test` → 67 testes OK (stitchHeuristics 12 + resto inalterado).
+- `tsc --noEmit` limpo em `api` e `web`.
+- **Ainda não testado nesta sessão**: trocar pra zigzag/ripple pela UI de verdade no browser; fluxo
+  completo via `docker compose up` clicando "Exportar".
+
+---
+
+## 7. Fase 3+ (fast-follow, um a um)
+
 - [ ] **Fase 3 — Satin Column**: gerar geometria de coluna (2 trilhos + rungs) a partir da forma estreita
       (extração de rails via retângulo de área mínima / eixo médio — **geometria**, não algoritmo de ponto)
       e entregar ao Ink/Stitch; **fallback pra tatami** quando a extração falhar.
@@ -413,21 +488,23 @@ running, canvas 60×60mm), processado via `worker.process_job` de verdade dentro
 
 ---
 
-## 7. Arquivos-chave (resumo)
+## 8. Arquivos-chave (resumo)
 
 **Criados nas Fases 0/1 (prontos):**
 - `workers/embroidery/inkstitch_runner.py` (+ `test_inkstitch_runner.py`) ✅
 - `rotatePathData` em `apps/api/src/services/svgTransform.ts` ✅
 
-**A criar na Fase 2+:**
-- Nenhum arquivo novo previsto pra Fase 2 (Stroke) — só edições. Fase 3 (Satin Column) provavelmente
-  precisa de um helper novo de extração de rails (geometria — ver Seção 6).
+**Fase 2 (Stroke) não precisou de arquivo novo** — só edições nos mesmos arquivos da Fase 1. **Fase 3**
+(Satin Column) provavelmente precisa de um helper novo de extração de rails (geometria — ver Seção 7).
 
-**Fases 0/1 completas — arquivos já modificados (não mexer de novo sem motivo):**
-- `apps/api/src/services/svgConverter.ts` — `buildStitchAttributes` por tipo + rotação embutida no `d`
-- `packages/shared/src/index.ts` — `StitchParams` união discriminada (6 tipos)
+**Fases 0/1/2 completas — arquivos já modificados (não mexer de novo sem motivo):**
+- `apps/api/src/services/svgConverter.ts` — `buildStitchAttributes` por tipo + rotação embutida no `d` +
+  `STROKE_FAMILY_TYPES` (fill vs stroke por família, não por tipo individual)
+- `packages/shared/src/index.ts` — `StitchParams` união discriminada (8 tipos: tatami/contour/meander/
+  circular/satin-legado/running/zigzag/ripple)
 - `apps/web/src/components/PropertiesPanel.tsx` — UI por tipo
-- `apps/web/src/utils/stitchHeuristics.ts` — sugestão entre tatami/circular/running
+- `apps/web/src/utils/stitchHeuristics.ts` — sugestão entre tatami/circular/running (zigzag/ripple ficam
+  de fora da sugestão automática, igual contour/meander — sem heurística clara de "quando usar")
 - `apps/web/src/components/PartsPanel.tsx` — rótulos por tipo
 
 **Já prontos, reusar sem mexer:**
@@ -437,7 +514,7 @@ running, canvas 60×60mm), processado via `worker.process_job` de verdade dentro
 
 ---
 
-## 8. Workflow-alvo (visão do produto)
+## 9. Workflow-alvo (visão do produto)
 
 1. Importar imagem → motor gera SVG por cor, **fundindo cores semelhantes** (já existe:
    `analyze.py` + `splitSvgByColor`).
@@ -448,7 +525,7 @@ running, canvas 60×60mm), processado via `worker.process_job` de verdade dentro
 
 ---
 
-## 9. Como verificar tudo (ambiente)
+## 10. Como verificar tudo (ambiente)
 
 - **Docker é obrigatório** pra validar o motor: o Ink/Stitch só roda no Linux do container, e o vtracer
   (análise) segfaulta no Python 3.14/Windows local. Sem o Docker Desktop no ar, só dá pra rodar
@@ -468,10 +545,11 @@ running, canvas 60×60mm), processado via `worker.process_job` de verdade dentro
 
 ---
 
-## 10. Log de progresso
+## 11. Log de progresso
 
 | Data | Fase/Checkpoint | O que foi feito | Commit |
 |------|-----------------|-----------------|--------|
 | 2026-07-20 | — | Plano criado (este documento) | — |
 | 2026-07-20 | Fase 0 (0.1–0.7) | Ink/Stitch integrado via subprocess; motor caseiro removido; 5 bugs de compatibilidade achados e corrigidos (ver Seção 3.1); e2e validado com SVG de produção real dentro do container | ed2958d |
-| 2026-07-20 | Fase 1 (1.1–1.6) | StitchParams união discriminada (6 tipos); atributos inkstitch:* corrigidos por tipo (tatami_fill→auto_fill, pull_compensation/angle removidos de contour/meander/circular); rotação embutida no `d` via `rotatePathData` (novo, com 9 testes); PropertiesPanel reescrito; heurística estendida (circular); e2e validado com os 5 tipos via SVG de produção real | (não commitado ainda nesta sessão) |
+| 2026-07-20 | Fase 1 (1.1–1.6) | StitchParams união discriminada (6 tipos); atributos inkstitch:* corrigidos por tipo (tatami_fill→auto_fill, pull_compensation/angle removidos de contour/meander/circular); rotação embutida no `d` via `rotatePathData` (novo, com 9 testes); PropertiesPanel reescrito; heurística estendida (circular); e2e validado com os 5 tipos via SVG de produção real | c1198c8 |
+| 2026-07-20 | Fase 2 (2.0–2.4) | Achado crítico corrigido: fill fantasma em stroke-family (FillStitch+Stroke não são mutuamente exclusivos no Ink/Stitch); `running` perdeu `angle` (nunca teve efeito real) e ganhou `repeats`/`beanStitchRepeats`; tipos novos `zigzag` e `ripple`; `buildStitchAttributes` devolve `{presentation, inkstitch}`; PropertiesPanel com controles novos; e2e validado com os 7 tipos via SVG de produção real (2702 pontos, 7 blocos, todos com geometria) | (não commitado ainda nesta sessão) |

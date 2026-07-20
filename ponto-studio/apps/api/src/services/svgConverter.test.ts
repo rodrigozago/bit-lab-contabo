@@ -114,14 +114,81 @@ describe("convertProjectToSvg", () => {
     expect(svg).not.toContain("inkstitch:angle");
   });
 
-  it("gera atributos de running stitch", () => {
+  it("running usa fill=none/stroke=cor (nunca fill=cor — vira auto_fill fantasma por baixo do stroke)", () => {
     const el = makeElement({
-      stitch: { type: "running", density: 1, angle: 0 } satisfies StitchParams,
+      color: "#123456",
+      stitch: { type: "running", density: 1 } satisfies StitchParams,
     });
     const svg = convertProjectToSvg(makeProject([el]));
     expect(svg).toContain('inkstitch:stroke_method="running_stitch"');
     // faixa do running: 3.5 - 1 * (3.5 - 1.5) = 1.5
     expect(svg).toContain('inkstitch:running_stitch_length_mm="1.5"');
+    expect(svg).toContain('fill="none"');
+    expect(svg).toContain('stroke="#123456"');
+    expect(svg).not.toContain('fill="#123456"');
+    expect(svg).not.toContain("inkstitch:angle");
+    expect(svg).not.toContain("inkstitch:repeats");
+    expect(svg).not.toContain("inkstitch:bean_stitch_repeats");
+  });
+
+  it("running emite repeats e bean_stitch_repeats quando definidos", () => {
+    const el = makeElement({
+      stitch: { type: "running", density: 0.5, repeats: 3, beanStitchRepeats: 2 } satisfies StitchParams,
+    });
+    const svg = convertProjectToSvg(makeProject([el]));
+    expect(svg).toContain('inkstitch:repeats="3"');
+    expect(svg).toContain('inkstitch:bean_stitch_repeats="2"');
+  });
+
+  it("zigzag emite stroke_method/zigzag_spacing_mm/stroke-width e usa fill=none/stroke=cor", () => {
+    const el = makeElement({
+      color: "#654321",
+      stitch: { type: "zigzag", density: 0.5, widthMm: 3 } satisfies StitchParams,
+    });
+    const svg = convertProjectToSvg(makeProject([el]));
+    expect(svg).toContain('inkstitch:stroke_method="zigzag_stitch"');
+    // faixa zigzag (0.2-0.6): 0.6 - 0.5*(0.6-0.2) = 0.4 (default do Ink/Stitch)
+    expect(svg).toContain('inkstitch:zigzag_spacing_mm="0.4"');
+    expect(svg).toContain('stroke-width="3"');
+    expect(svg).toContain('fill="none"');
+    expect(svg).toContain('stroke="#654321"');
+    expect(svg).not.toContain("inkstitch:stroke_pull_compensation_mm");
+  });
+
+  it("zigzag emite stroke_pull_compensation_mm e repeats quando definidos", () => {
+    const el = makeElement({
+      stitch: { type: "zigzag", density: 0.5, widthMm: 3, pullCompensationMm: 0.2, repeats: 2 } satisfies StitchParams,
+    });
+    const svg = convertProjectToSvg(makeProject([el]));
+    expect(svg).toContain('inkstitch:stroke_pull_compensation_mm="0.2"');
+    expect(svg).toContain('inkstitch:repeats="2"');
+  });
+
+  it("ripple emite stroke_method/running_stitch_length_mm e usa fill=none/stroke=cor", () => {
+    const el = makeElement({
+      color: "#00aaff",
+      stitch: { type: "ripple", density: 1 } satisfies StitchParams,
+    });
+    const svg = convertProjectToSvg(makeProject([el]));
+    expect(svg).toContain('inkstitch:stroke_method="ripple_stitch"');
+    expect(svg).toContain('inkstitch:running_stitch_length_mm="1.5"');
+    expect(svg).toContain('fill="none"');
+    expect(svg).toContain('stroke="#00aaff"');
+    expect(svg).not.toContain("inkstitch:line_count");
+    expect(svg).not.toContain("inkstitch:join_style");
+  });
+
+  it("ripple emite line_count/join_style/repeats/bean_stitch_repeats quando definidos", () => {
+    const el = makeElement({
+      stitch: {
+        type: "ripple", density: 0.5, lineCount: 15, joinStyle: 1, repeats: 2, beanStitchRepeats: 1,
+      } satisfies StitchParams,
+    });
+    const svg = convertProjectToSvg(makeProject([el]));
+    expect(svg).toContain('inkstitch:line_count="15"');
+    expect(svg).toContain('inkstitch:join_style="1"');
+    expect(svg).toContain('inkstitch:repeats="2"');
+    expect(svg).toContain('inkstitch:bean_stitch_repeats="1"');
   });
 
   it("underlay sempre emite fill_underlay explícito (default do Ink/Stitch é true)", () => {

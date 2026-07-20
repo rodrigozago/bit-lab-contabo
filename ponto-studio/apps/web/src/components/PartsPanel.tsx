@@ -16,6 +16,8 @@ const STITCH_LABEL: Record<StitchType, string> = {
   // cetim de verdade (ver StitchParams em packages/shared). Mostra igual.
   satin: "Contorno",
   running: "Corrido",
+  zigzag: "Ziguezague",
+  ripple: "Ondulado",
 };
 
 function partLabel(el: EmbroideryElement): string {
