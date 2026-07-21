@@ -7,16 +7,22 @@ import type {
 } from "@ponto-studio/shared";
 import { convertProjectToSvg } from "../services/svgConverter.js";
 import { enqueueJob, getJob } from "../services/jobQueue.js";
+import { registerRequireSession, ownerId } from "../services/requireSession.js";
 import * as projectsRepo from "../services/projectsRepo.js";
 
 export async function exportRoutes(app: FastifyInstance) {
+  registerRequireSession(app);
+
   // POST /api/export/svg — exportação síncrona: devolve o SVG do projeto
   // para download direto, sem depender do worker Python/Redis.
   app.post<{ Body: { projectId: string } }>(
     "/svg",
     async (req, reply) => {
       const project = await projectsRepo.get(req.body.projectId);
-      if (!project) {
+      // 404 (não 403) quando não é do dono — evita vazar existência, mesmo
+      // padrão de projects.ts. Antes NÃO havia checagem: qualquer projectId
+      // exportava o desenho de qualquer usuário (IDOR).
+      if (!project || project.ownerId !== ownerId(req)) {
         return reply.status(404).send({ ok: false, error: "Project not found" });
       }
       const svgContent = convertProjectToSvg(project);
@@ -35,7 +41,7 @@ export async function exportRoutes(app: FastifyInstance) {
       const { projectId, format } = req.body;
 
       const project = await projectsRepo.get(projectId);
-      if (!project) {
+      if (!project || project.ownerId !== ownerId(req)) {
         reply.status(404);
         return { ok: false, error: "Project not found" };
       }

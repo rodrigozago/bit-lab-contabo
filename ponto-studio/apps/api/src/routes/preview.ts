@@ -10,6 +10,7 @@ import type {
 } from "@ponto-studio/shared";
 import { buildElementPreviewSvg } from "../services/svgConverter.js";
 import { enqueuePreviewJob, getJob } from "../services/jobQueue.js";
+import { registerRequireSession } from "../services/requireSession.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const EXPORTS_DIR = join(__dirname, "..", "..", "exports");
@@ -20,6 +21,11 @@ interface PreviewRequest {
 }
 
 export async function previewRoutes(app: FastifyInstance) {
+  // O element vem do próprio cliente (não busca recurso alheio no servidor),
+  // então não há IDOR aqui — mas exigir sessão trava o abuso do worker por
+  // anônimos (job pesado do Ink/Stitch).
+  registerRequireSession(app);
+
   // POST /api/preview — gera o preview de linhas de ponto de um elemento
   app.post<{ Body: PreviewRequest }>("/", async (req, reply) => {
     const { element, canvas } = req.body;

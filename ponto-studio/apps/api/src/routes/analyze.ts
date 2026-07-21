@@ -6,6 +6,7 @@ import { pipeline } from "stream/promises";
 import { v4 as uuid } from "uuid";
 import type { AnalyzeJobStatus, LocalAnalyzeParams } from "@ponto-studio/shared";
 import { enqueueAnalyzeJob, getJob } from "../services/jobQueue.js";
+import { registerRequireSession } from "../services/requireSession.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const UPLOADS_DIR = join(__dirname, "..", "..", "uploads");
@@ -20,6 +21,10 @@ function fieldNumber(fields: Record<string, unknown>, name: string, fallback: nu
 }
 
 export async function analyzeRoutes(app: FastifyInstance) {
+  // Exige sessão: a análise dispara um job caro (vtracer/k-means) e grava a
+  // imagem em disco — não pode ficar aberto a anônimos.
+  registerRequireSession(app);
+
   // POST /api/analyze/local — análise por processamento digital (sem IA).
   // Salva a imagem em uploads/ (volume compartilhado com o worker) e enfileira
   // um job type:"analyze". O front acompanha via GET /local/:jobId.

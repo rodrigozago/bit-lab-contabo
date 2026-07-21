@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyRequest } from "fastify";
+import type { FastifyInstance } from "fastify";
 import { v4 as uuid } from "uuid";
 import type {
   EmbroideryProject,
@@ -6,30 +6,14 @@ import type {
   UpdateProjectRequest,
   ApiResponse,
 } from "@ponto-studio/shared";
-import { readSession, type SessionUser } from "../services/session.js";
+import { registerRequireSession, ownerId } from "../services/requireSession.js";
 import * as projectsRepo from "../services/projectsRepo.js";
-
-declare module "fastify" {
-  interface FastifyRequest {
-    sessionUser?: SessionUser;
-  }
-}
-
-function ownerId(req: FastifyRequest): string {
-  return req.sessionUser!.sub;
-}
 
 export async function projectsRoutes(app: FastifyInstance) {
   // Projetos são dados sensíveis por usuário — exige sessão em todas as
   // rotas deste plugin (o gate no front já impede chegar aqui deslogado,
   // mas a API não deve confiar só nisso).
-  app.addHook("preHandler", async (req, reply) => {
-    const user = await readSession(req);
-    if (!user) {
-      return reply.status(401).send({ ok: false, error: "não autenticado" });
-    }
-    req.sessionUser = user;
-  });
+  registerRequireSession(app);
 
   // GET /api/projects — só os do usuário logado
   app.get("/", async (req): Promise<ApiResponse<EmbroideryProject[]>> => {

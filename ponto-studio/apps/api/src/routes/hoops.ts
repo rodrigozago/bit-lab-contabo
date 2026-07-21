@@ -1,23 +1,13 @@
-import type { FastifyInstance, FastifyRequest } from "fastify";
+import type { FastifyInstance } from "fastify";
 import { DEFAULT_HOOPS, type ApiResponse, type Hoop } from "@ponto-studio/shared";
-import { readSession } from "../services/session.js";
+import { registerRequireSession, ownerId } from "../services/requireSession.js";
 import * as hoopsRepo from "../services/hoopsRepo.js";
-
-function ownerId(req: FastifyRequest): string {
-  return req.sessionUser!.sub;
-}
 
 const MIN_MM = 10;
 const MAX_MM = 600;
 
 export async function hoopsRoutes(app: FastifyInstance) {
-  app.addHook("preHandler", async (req, reply) => {
-    const user = await readSession(req);
-    if (!user) {
-      return reply.status(401).send({ ok: false, error: "não autenticado" });
-    }
-    req.sessionUser = user;
-  });
+  registerRequireSession(app);
 
   // GET /api/hoops — customizados do usuário + padrões (máquinas famosas)
   app.get("/", async (req): Promise<ApiResponse<{ custom: Hoop[]; defaults: Hoop[] }>> => {

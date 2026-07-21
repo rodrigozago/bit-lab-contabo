@@ -7,6 +7,20 @@ const ISSUER = process.env.ISSUER || 'http://localhost:4000'
 const JWKS_PATH = process.env.JWKS_PATH || '/app/data/jwks.json'
 const IS_PROD = process.env.NODE_ENV === 'production'
 
+// Chave que assina os cookies do oidc-provider. Em produção, subir sem uma
+// chave forte e própria = assinar com uma string PÚBLICA do código-fonte, que
+// permite forjar sessão do provider (comprometimento total do SSO). Por isso
+// aborta o boot em vez de cair no default. Ver docs/SEGURANCA-PRE-LANCAMENTO.md
+// item 2 (no ponto-studio) — mesma classe de problema.
+const DEV_SESSION_SECRET = 'dev-secret-troque-em-producao'
+const SESSION_SECRET = process.env.SESSION_SECRET || DEV_SESSION_SECRET
+if (IS_PROD && (!process.env.SESSION_SECRET || SESSION_SECRET === DEV_SESSION_SECRET)) {
+  throw new Error(
+    '[oidc] SESSION_SECRET ausente ou igual ao default de dev em produção — ' +
+    'gere um valor forte (openssl rand -hex 32) e defina no .env antes de subir.'
+  )
+}
+
 /**
  * Provider OIDC real (discovery, JWKS, /auth, /token, /userinfo etc.).
  *
@@ -58,7 +72,9 @@ const configuration = {
   clients,
   jwks: getOrCreateJwks(JWKS_PATH),
   cookies: {
-    keys: [process.env.SESSION_SECRET || 'dev-secret-troque-em-producao'],
+    // array pra permitir rotação futura sem derrubar sessões (a 1ª assina, as
+    // demais só validam). SESSION_SECRET é garantido forte em prod pelo guard acima.
+    keys: [SESSION_SECRET],
   },
   pkce: {
     required: () => true,

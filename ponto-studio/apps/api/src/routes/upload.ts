@@ -5,6 +5,7 @@ import { fileURLToPath } from "url";
 import { pipeline } from "stream/promises";
 import { v4 as uuid } from "uuid";
 import type { ApiResponse } from "@ponto-studio/shared";
+import { registerRequireSession } from "../services/requireSession.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const UPLOADS_DIR = join(__dirname, "..", "..", "uploads");
@@ -18,6 +19,10 @@ interface UploadResult {
 }
 
 export async function uploadRoutes(app: FastifyInstance) {
+  // Exige sessão: gravar arquivos de 10MB no servidor não pode ficar aberto
+  // a anônimos (exaustão de disco).
+  registerRequireSession(app);
+
   // POST /api/upload  — recebe PNG ou SVG
   app.post(
     "/",

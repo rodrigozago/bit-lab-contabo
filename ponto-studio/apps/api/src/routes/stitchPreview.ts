@@ -6,17 +6,21 @@ import { v4 as uuid } from "uuid";
 import type { StitchPattern, StitchPreviewJobStatus } from "@ponto-studio/shared";
 import { convertProjectToSvg } from "../services/svgConverter.js";
 import { enqueueStitchDataJob, getJob } from "../services/jobQueue.js";
+import { registerRequireSession, ownerId } from "../services/requireSession.js";
 import * as projectsRepo from "../services/projectsRepo.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const EXPORTS_DIR = join(__dirname, "..", "..", "exports");
 
 export async function stitchPreviewRoutes(app: FastifyInstance) {
+  registerRequireSession(app);
+
   // POST /api/stitch-preview — gera a sequência de pontos do projeto inteiro,
   // pro player de simulação (EXP-2). Mesmo motor de pontos do export (DST).
   app.post<{ Body: { projectId: string } }>("/", async (req, reply) => {
     const project = await projectsRepo.get(req.body.projectId);
-    if (!project) {
+    // checagem de dono (antes ausente — IDOR): 404 se não for do usuário
+    if (!project || project.ownerId !== ownerId(req)) {
       return reply.status(404).send({ ok: false, error: "Project not found" });
     }
 
