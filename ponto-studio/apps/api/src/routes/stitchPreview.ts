@@ -17,7 +17,16 @@ export async function stitchPreviewRoutes(app: FastifyInstance) {
 
   // POST /api/stitch-preview — gera a sequência de pontos do projeto inteiro,
   // pro player de simulação (EXP-2). Mesmo motor de pontos do export (DST).
-  app.post<{ Body: { projectId: string } }>("/", async (req, reply) => {
+  app.post<{ Body: { projectId: string } }>("/", {
+    schema: {
+      body: {
+        type: "object",
+        required: ["projectId"],
+        additionalProperties: false,
+        properties: { projectId: { type: "string", format: "uuid" } },
+      },
+    },
+  }, async (req, reply) => {
     const project = await projectsRepo.get(req.body.projectId);
     // checagem de dono (antes ausente — IDOR): 404 se não for do usuário
     if (!project || project.ownerId !== ownerId(req)) {

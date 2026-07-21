@@ -34,9 +34,30 @@ export async function projectsRoutes(app: FastifyInstance) {
     }
   );
 
+  const canvasSchema = {
+    type: "object",
+    required: ["widthMm", "heightMm"],
+    properties: {
+      widthMm: { type: "number", minimum: 1, maximum: 2000 },
+      heightMm: { type: "number", minimum: 1, maximum: 2000 },
+    },
+  } as const;
+
   // POST /api/projects
   app.post<{ Body: CreateProjectRequest }>(
     "/",
+    {
+      schema: {
+        body: {
+          type: "object",
+          required: ["name", "canvas"],
+          properties: {
+            name: { type: "string", minLength: 1, maxLength: 200 },
+            canvas: canvasSchema,
+          },
+        },
+      },
+    },
     async (req): Promise<ApiResponse<EmbroideryProject>> => {
       const project = await projectsRepo.create({
         id: uuid(),
@@ -48,9 +69,12 @@ export async function projectsRoutes(app: FastifyInstance) {
     }
   );
 
-  // PUT /api/projects/:id
+  // PUT /api/projects/:id — bodyLimit próprio: um projeto com vários
+  // svgContent passa fácil do default de 1MB do Fastify; 12MB cobre projetos
+  // grandes sem virar vetor de DoS (o rate limit global segura a frequência).
   app.put<{ Params: { id: string }; Body: UpdateProjectRequest }>(
     "/:id",
+    { bodyLimit: 12 * 1024 * 1024 },
     async (req, reply): Promise<ApiResponse<EmbroideryProject>> => {
       const existing = await projectsRepo.get(req.params.id);
       if (!existing || existing.ownerId !== ownerId(req)) {

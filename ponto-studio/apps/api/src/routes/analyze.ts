@@ -28,7 +28,8 @@ export async function analyzeRoutes(app: FastifyInstance) {
   // POST /api/analyze/local — análise por processamento digital (sem IA).
   // Salva a imagem em uploads/ (volume compartilhado com o worker) e enfileira
   // um job type:"analyze". O front acompanha via GET /local/:jobId.
-  app.post("/local", async (req, reply) => {
+  // Rate limit APERTADO: é a rota mais cara (vtracer + k-means).
+  app.post("/local", { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } }, async (req, reply) => {
     const data = await req.file();
     if (!data) {
       return reply.status(400).send({ ok: false, error: "No file uploaded" });

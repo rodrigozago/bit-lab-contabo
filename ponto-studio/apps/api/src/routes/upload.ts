@@ -23,9 +23,10 @@ export async function uploadRoutes(app: FastifyInstance) {
   // a anônimos (exaustão de disco).
   registerRequireSession(app);
 
-  // POST /api/upload  — recebe PNG ou SVG
+  // POST /api/upload  — recebe PNG ou SVG. Rate limit apertado (grava 10MB/req).
   app.post(
     "/",
+    { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } },
     async (req, reply): Promise<ApiResponse<UploadResult>> => {
       const data = await req.file();
       if (!data) {

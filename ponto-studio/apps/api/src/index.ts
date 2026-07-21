@@ -1,6 +1,8 @@
 import Fastify from "fastify";
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
+import helmet from "@fastify/helmet";
+import rateLimit from "@fastify/rate-limit";
 import multipart from "@fastify/multipart";
 import staticFiles from "@fastify/static";
 import { join, dirname } from "path";
@@ -21,7 +23,10 @@ import { readSession } from "./services/session.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const app = Fastify({ logger: { level: "info" } });
+// trustProxy: atrás do nginx da VPS — pro req.ip (usado no rate limit) ser o
+// IP real do cliente, não o do proxy. Só o loopback é exposto, então confiar
+// no proxy local é seguro.
+const app = Fastify({ logger: { level: "info" }, trustProxy: true });
 
 // Persistência de projetos depende do Postgres — diferente do Redis (que é
 // opcional), aqui não faz sentido subir a API sem conseguir ler/gravar dados.
@@ -35,6 +40,25 @@ const corsOrigins = config.isProd
   : [config.publicUrl, /^http:\/\/localhost:\d+$/];
 await app.register(cors, { origin: corsOrigins, credentials: true });
 await app.register(cookie);
+
+// Headers de segurança (docs/SEGURANCA-PRE-LANCAMENTO.md item 8). CSP fica
+// DESLIGADA aqui: a SPA (tldraw) usa blob:/worker:/inline e a CSP certa é
+// mais fácil de acertar no nginx que serve o front — o helmet aqui cobre os
+// demais headers da API (nosniff, frame-ancestors via X-Frame-Options,
+// Referrer-Policy, HSTS quando atrás de https). Ver item 8 do doc: confirmar
+// no nginx se a CSP do front já existe.
+await app.register(helmet, { contentSecurityPolicy: false });
+
+// Rate limit global (freia abuso das rotas caras — análise/upload/export).
+// docs/SEGURANCA-PRE-LANCAMENTO.md item 5. Chaveado por IP (atrás do nginx,
+// o Fastify lê o X-Forwarded-For via trustProxy abaixo).
+await app.register(rateLimit, {
+  global: true,
+  max: 120,
+  timeWindow: "1 minute",
+  allowList: (req) => req.url === "/health",
+});
+
 await app.register(multipart, { limits: { fileSize: 10 * 1024 * 1024 } });
 
 // Gate de sessão pros arquivos estáticos (exports = arquivos de bordado

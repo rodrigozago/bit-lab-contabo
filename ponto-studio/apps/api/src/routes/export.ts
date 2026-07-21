@@ -13,10 +13,18 @@ import * as projectsRepo from "../services/projectsRepo.js";
 export async function exportRoutes(app: FastifyInstance) {
   registerRequireSession(app);
 
+  const projectIdBody = {
+    type: "object",
+    required: ["projectId"],
+    additionalProperties: false,
+    properties: { projectId: { type: "string", format: "uuid" } },
+  } as const;
+
   // POST /api/export/svg — exportação síncrona: devolve o SVG do projeto
   // para download direto, sem depender do worker Python/Redis.
   app.post<{ Body: { projectId: string } }>(
     "/svg",
+    { schema: { body: projectIdBody } },
     async (req, reply) => {
       const project = await projectsRepo.get(req.body.projectId);
       // 404 (não 403) quando não é do dono — evita vazar existência, mesmo
@@ -37,6 +45,19 @@ export async function exportRoutes(app: FastifyInstance) {
   // POST /api/export  — cria job de exportação
   app.post<{ Body: ExportRequest }>(
     "/",
+    {
+      schema: {
+        body: {
+          type: "object",
+          required: ["projectId", "format"],
+          additionalProperties: false,
+          properties: {
+            projectId: { type: "string", format: "uuid" },
+            format: { type: "string", enum: ["DST", "PES", "JEF"] },
+          },
+        },
+      },
+    },
     async (req, reply): Promise<ApiResponse<ExportJob>> => {
       const { projectId, format } = req.body;
 
