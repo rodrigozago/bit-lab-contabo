@@ -439,20 +439,27 @@ describe("convertProjectToSvg", () => {
 describe("buildElementPreviewSvg", () => {
   const canvas = { widthMm: 100, heightMm: 100 };
 
-  it("emite width/height em mm IGUAIS às dimensões do viewBox (1 unidade = 1mm, senão o Ink/Stitch assume 96 DPI e o preview sai fora de escala)", () => {
+  it("roda no TAMANHO REAL da parte (bbox mm do svgPath), não no viewBox em px do svgContent — senão o Ink/Stitch geraria um desenho gigante e daria timeout", () => {
+    // svgPath 400x300 page-px (HOOP_PX_PER_MM=4) → 100x75mm; svgContent com
+    // viewBox em px (200x150) NÃO deve virar o tamanho do documento.
     const el = makeElement({
+      svgPath: "M 0 0 L 400 0 L 400 300 L 0 300 Z",
       svgContent: `<svg viewBox="0 0 200 150"><path d="M 10 10 L 50 50 Z" fill="#123"/></svg>`,
       stitch: { type: "tatami", density: 0.6, angle: 45 } satisfies StitchParams,
     });
     const preview = buildElementPreviewSvg(el, canvas);
-    expect(preview).toContain('width="200mm"');
-    expect(preview).toContain('height="150mm"');
-    expect(preview).toContain('viewBox="0 0 200 150"');
+    expect(preview).toContain('width="100mm"');
+    expect(preview).toContain('height="75mm"');
+    // viewBox começa na ORIGEM (0 0) — o preview sobrepõe o shape 1:1
+    expect(preview).toContain('viewBox="0 0 100 75"');
+    // emite max_stitch_length_mm (modo mm, igual ao export — não modo preview antigo)
+    expect(preview).toContain("inkstitch:max_stitch_length_mm");
   });
 
-  it("sem viewBox no svgContent, cai pras dimensões do canvas (mm)", () => {
+  it("sem svgPath utilizável (legado), cai pro tamanho do canvas (mm)", () => {
     const el = makeElement({
-      svgContent: `<svg><path d="M 1 1 Z" fill="#123"/></svg>`,
+      svgPath: "",
+      svgContent: `<svg viewBox="0 0 200 150"><path d="M 1 1 Z" fill="#123"/></svg>`,
       stitch: { type: "tatami", density: 0.6, angle: 45 } satisfies StitchParams,
     });
     const preview = buildElementPreviewSvg(el, canvas);

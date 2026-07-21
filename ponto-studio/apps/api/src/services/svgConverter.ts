@@ -267,47 +267,53 @@ function extractAndAnnotatePaths(el: EmbroideryElement, canvas: CanvasSize): str
 }
 
 /**
- * Monta o SVG-entrada do PREVIEW de um elemento: paths anotados com inkstitch,
- * mantendo o viewBox ORIGINAL (sem reescala mm) para o preview sobrepor o shape
- * no canvas sem distorção. A densidade (line_distance) é convertida das mm para
- * as unidades do viewBox, para o espaçamento visual bater com o do bordado real.
+ * Monta o SVG-entrada do PREVIEW de um elemento pro Ink/Stitch — rodando no
+ * TAMANHO FÍSICO REAL da parte (bbox em mm do `svgPath`), igual o export
+ * (`convertProjectToSvg`), só que:
+ *  - isolado (só este elemento, posicionado na ORIGEM 0,0 — não no offset dele
+ *    dentro do canvas), com `viewBox="0 0 Wmm Hmm"` do próprio bbox, pra o
+ *    preview de pontos que volta do worker sobrepor o shape 1:1 no canvas;
+ *  - SEM embutir a rotação: o shape de imagem do tldraw já carrega a rotação,
+ *    então o conteúdo do preview fica na orientação base (diferente do export,
+ *    que gera o desenho final achatado e precisa da rotação na geometria).
  *
- * IMPORTANTE — `width`/`height` em mm IGUAIS às dimensões do viewBox: sem isso
- * o Ink/Stitch não sabe o tamanho físico do documento e assume 96 DPI (1
- * unidade = 1px ≈ 0.265mm), gerando os pontos numa escala diferente da que o
- * worker usa pra reconstruir o preview (`pattern_to_preview_svg` divide por
- * SCALE_SVG_TO_EMB=10, i.e. assume 1 unidade = 1mm). O descompasso fazia o
- * preview sair grande e ESTOURAR/cortar o shape no canvas. Declarando
- * width/height mm = dims do viewBox, 1 unidade = 1mm — mesma convenção do
- * caminho de export (`convertProjectToSvg`), que sempre funcionou.
+ * Por que rodar no tamanho real importa: o `viewBox` do `svgContent` está em
+ * PIXELS da imagem analisada (pode ser centenas). Se a gente mandasse esse
+ * viewBox como mm pro Ink/Stitch (width="200mm"...), ele geraria um desenho de
+ * centenas de mm → milhares de pontos → TIMEOUT no worker. Reescalando pro
+ * bbox real (ex.: 25mm), a densidade/contagem de pontos é a mesma do bordado
+ * de verdade e o job roda rápido.
  */
 export function buildElementPreviewSvg(el: EmbroideryElement, canvas: CanvasSize): string {
   const svg = el.svgContent ?? "";
-  const dims = parseViewBoxDimensions(svg);
-  const viewBox = extractViewBox(svg) ?? `0 0 ${canvas.widthMm} ${canvas.heightMm}`;
-  // dimensões do viewBox (3º/4º números) — 1 unidade = 1mm no documento
-  const vbParts = viewBox.trim().split(/[\s,]+/).map(Number);
-  const vbW = dims?.width ?? vbParts[2] ?? canvas.widthMm;
-  const vbH = dims?.height ?? vbParts[3] ?? canvas.heightMm;
+  const sourceDims = parseViewBoxDimensions(svg);
+  const bounds = parseElementBoundsMm(el.svgPath);
+  // tamanho físico da parte, em mm (fallback: canvas inteiro, pra legado sem svgPath)
+  const targetW = bounds?.width ?? canvas.widthMm;
+  const targetH = bounds?.height ?? canvas.heightMm;
 
-  const unitsPerMm = dims && canvas.widthMm > 0 ? dims.width / canvas.widthMm : 1;
-  const { presentation, inkstitch } = buildStitchAttributes(el, unitsPerMm);
+  // contain-fit da geometria de origem no bbox da parte, na ORIGEM (sem o
+  // offset do elemento dentro do canvas — o shape já está posicionado).
+  const fit = sourceDims ? computeContainTransform(sourceDims, { width: targetW, height: targetH }) : null;
 
-  const paths = extractPathParts(svg).map(
-    ({ cleanAttrs, d }) =>
-      `<path ${cleanAttrs} d="${escapeXml(d)}" ${presentation} ${inkstitch} />`
-  );
+  // sem unitsPerMm: o documento já está em mm de verdade, então a densidade
+  // vai em mm direto (mesmo caminho do export — inclusive emite max_stitch_length_mm).
+  const { presentation, inkstitch } = buildStitchAttributes(el);
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkstitch="http://inkstitch.org/namespace" width="${vbW}mm" height="${vbH}mm" viewBox="${viewBox}">
+  const paths = extractPathParts(svg).map(({ cleanAttrs, d }) => {
+    const scaledD = fit ? scalePathData(d, fit.scale, fit.offsetX, fit.offsetY) : d;
+    return `<path ${cleanAttrs} d="${escapeXml(scaledD)}" ${presentation} ${inkstitch} />`;
+  });
+
+  const w = +targetW.toFixed(3);
+  const h = +targetH.toFixed(3);
+  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkstitch="http://inkstitch.org/namespace" width="${w}mm" height="${h}mm" viewBox="0 0 ${w} ${h}">
   <g id="${el.id}">
     ${paths.join("\n    ")}
   </g>
 </svg>`;
 }
 
-function extractViewBox(svg: string): string | null {
-  return /viewBox=["']([^"']+)["']/i.exec(svg)?.[1] ?? null;
-}
 
 function elementToSvgPath(el: EmbroideryElement): string {
   const { presentation, inkstitch } = buildStitchAttributes(el);
