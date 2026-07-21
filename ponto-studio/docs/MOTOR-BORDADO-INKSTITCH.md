@@ -5,9 +5,12 @@
 > Marque os checkpoints `[ ]` → `[x]` conforme for implementando.
 
 **Última atualização:** 2026-07-20
-**Status geral:** 🟢 Fase 0 + Fase 1 + Fase 2 + Fase 3 CONCLUÍDAS — motor real (Ink/Stitch) rodando com 8
-tipos de ponto (Tatami/Contour/Meander/Circular/Running/Zigzag/Ripple/Satin Column), UI por tipo,
-heurística de sugestão, rotação real. Próximo: Fase 4 (Guided/Linear Gradient/Tartan/Cross Stitch).
+**Status geral:** 🟢 Fase 0 + Fase 1 + Fase 2 + Fase 3 + Fase 4 CONCLUÍDAS — motor real (Ink/Stitch)
+rodando com 8 tipos de ponto (Tatami/Contour/Meander/Circular/Running/Zigzag/Ripple/Satin Column), Satin
+Column agora funciona em formas simples E complexas (extração geral de polígono, curvas incluídas), UI
+por tipo, heurística de sugestão, rotação real. **Falta só a validação empírica da Fase 4 no container**
+(Docker caiu no meio da sessão — retomar por aí, ver Seção 13). Depois: Fase 6 (Demais fills) e o item
+ainda sem escopo sobre revisar a segmentação de partes por cor (Seção 9).
 
 ---
 
@@ -43,13 +46,23 @@ heurística de sugestão, rotação real. Próximo: Fase 4 (Guided/Linear Gradie
   porquê e pro achado de que, pra coluna RETA (nosso escopo), Cetim e Ziguezague geram a MESMA geometria —
   o ganho de shipar Cetim agora é `pull_compensation_mm`/`center_walk_underlay` (que `zigzag_stitch` não
   tem) e preparar terreno pra colunas curvas numa fase futura.
+- **Fase 4 concluída em 2026-07-20** (pedido explícito do usuário, logo depois da Fase 3): estende o Satin
+  Column pra formas COMPLEXAS (`svgContent`, importação de imagem) — achata curvas em polilinha
+  (`flattenPathData`, novo), acha o eixo principal via PCA e divide o contorno em 2 trilhos
+  (`extractSatinRails`, novo arquivo `satinRails.ts`). Achado crítico: pontas RETAS (2+ vértices empatados
+  no extremo, ex.: um retângulo) quebravam o split em 1-lado-vs-3-lados — corrigido colapsando o trecho
+  empatado num ponto sintético antes de dividir (`collapseTiedEnds`). Ver Seção 8.1. **Validação empírica
+  no container ainda pendente** — Docker caiu no meio da sessão.
 
 ### Checklist de alto nível
 - [x] **Fase 0** — Runner do Ink/Stitch no worker (fundação; validado headless) ✅ 2026-07-20
 - [x] **Fase 1** — Schema de params + Fills (Tatami, Contour, Meander, Circular) + UI + heurística ✅ 2026-07-20
 - [x] **Fase 2** — Stroke (running/bean/zigzag/ripple) ✅ 2026-07-20
-- [x] **Fase 3** — Satin Column (formas simples; extração geral de polígono fica pra depois) ✅ 2026-07-20
-- [ ] **Fase 4** — Demais fills (Guided, Linear Gradient, Tartan, Cross Stitch)
+- [x] **Fase 3** — Satin Column (formas simples) ✅ 2026-07-20
+- [x] **Fase 4** — Satin Column pra formas complexas (extração geral de polígono) ✅ 2026-07-20 —
+      ⚠️ falta validação empírica no container (Docker caiu no meio da sessão)
+- [ ] **Fase 5** — Revisão: segmentação de partes por cor (ainda sem escopo)
+- [ ] **Fase 6** — Demais fills (Guided, Linear Gradient, Tartan, Cross Stitch)
 
 ---
 
@@ -560,47 +573,118 @@ simples não tem; (2) preparar o terreno pro Fase 3+ (colunas curvas de verdade)
 
 ---
 
-## 8. Fase 4+ (fast-follow)
+## 8. Fase 4 — Satin Column pra formas complexas — ✅ CONCLUÍDA 2026-07-20
 
-- [ ] **Fase 4 — Demais fills**: Guided (com linha-guia), Linear Gradient, Tartan, Cross Stitch.
-- [ ] **Extensão futura do Satin Column**: extração de trilhos pra polígono arbitrário (formas vindas de
-      importação de imagem/IA) — precisa achatar curvas Bezier e reamostrar os 2 lados do contorno pelo
-      mesmo número de pontos por comprimento de arco. Maior risco/esforço do roadmap todo.
+Pedido explícito do usuário logo depois da Fase 3: estender a extração de trilhos (até então só pra
+retângulo/formas simples, ver Seção 7.1) pra polígono ARBITRÁRIO — a forma real de uma parte vinda de
+importação de imagem (`svgContent`, contorno traçado pelo vtracer, potencialmente com curvas).
+
+### 8.1 Pipeline de extração
+
+Três peças novas, encadeadas em `satinColumnFromComplexShape` (`svgConverter.ts`):
+
+1. **`flattenPathData`** (novo, `svgTransform.ts`) — achata um `d` de path SVG numa lista de polilinhas
+   (uma por subcaminho), subdividindo curvas C/S/Q/T/A com resolução FIXA (16 segmentos por curva — não
+   precisa de tolerância adaptativa, a costura já opera na faixa de 0.2–1mm). S/T refletem o ponto de
+   controle da curva anterior (regra do spec SVG) — sem isso, curvas suaves ("smooth") virariam quinas.
+   Arco (`A`) usa a parametrização de extremidade→centro padrão do spec (Appendix F.6.5).
+2. **`extractSatinRails`** (novo, `satinRails.ts`) — dado o polígono achatado:
+   - Acha o eixo principal via PCA 2D (autovetor da matriz de covariância).
+   - Projeta cada vértice no eixo; os extremos (mín/máx) são as 2 "pontas" da coluna.
+   - **Achado crítico, achado testando com um retângulo simples**: quando a ponta é RETA (2+ vértices
+     empatados na mesma projeção extrema — ex.: os 2 cantos de uma ponta reta), pegar só o PRIMEIRO
+     vértice empatado quebra o split em **1 lado vs 3 lados** (todo o resto do contorno vira "o outro
+     trilho"). Fix: `collapseTiedEnds` colapsa cada trecho contíguo empatado (dentro de 2% do comprimento
+     axial) num único ponto sintético (média do trecho) ANTES do split — depois disso, o split funciona
+     tanto pra ponta reta (retângulo) quanto pra ponta única (forma tipo pétala/folha), confirmado nos
+     testes unitários com as 2 formas.
+   - Divide o anel colapsado em 2 cadeias nos 2 pontos-ponta; reamostra as 2 cadeias pro MESMO número de
+     pontos por comprimento de arco (não por índice — os 2 lados podem ter contagens de vértice diferentes).
+   - Gate de qualidade: `length/width < 2` (pouco alongado) ou geometria degenerada → `null`.
+3. **`satinColumnFromComplexShape`** (novo, `svgConverter.ts`) — cola tudo: extrai o único `<path>` do
+   `svgContent` (mais de 1 path → `null`, não dá pra saber qual vira o cetim), aplica o mesmo contain-fit
+   já usado por `extractAndAnnotatePaths`, achata, extrai trilhos, monta os 2 subcaminhos como `d` e aplica
+   `rotatePathData` (mesmo pipeline de rotação das outras fases). Path achatado com MAIS de 1 subcaminho
+   (path composto, tipo letra "O" com buraco) também cai em `null`.
+
+Em QUALQUER falha (poucos pontos, pouco alongado, mais de 1 path/subcaminho) — mesmo fallback pra tatami
+já usado pela Fase 3. A UI (`PropertiesPanel`) não esconde mais "Cetim" pra partes com `svgContent` (fazia
+sentido esconder quando a extração nem existia; agora é só mais uma opção que pode cair no fallback
+silenciosamente pra formas não-elegíveis, mesmo comportamento já aceito pro caso de forma simples).
+
+### Verificação da Fase 4
+- 9 testes unitários novos em `flattenPathData` (retângulo, 2 subcaminhos, H/V, M-implícito, cúbica com
+  ponto médio conferido contra a fórmula de Bézier, quadrática, S com reflexo conferido contra a fórmula,
+  comandos relativos l/c, arco com raio conferido).
+- 5 testes unitários novos em `extractSatinRails`: coluna reta com ponta EMPATADA (retângulo com pontos
+  extras nos lados — o caso que originalmente quebrava), forma de ponta única (pétala), forma pouco
+  alongada (→ null), poucos pontos (→ null), degenerado (→ null).
+- 5 testes novos em `svgConverter.test.ts`: fallback com `svgContent` degenerado, fallback com forma
+  redonda, extração bem-sucedida numa forma alongada de verdade (confere `satin_column="true"`, 2
+  subcaminhos, várias linhas por trilho), fallback com múltiplos `<path>`.
+- `npx pnpm@9.15.4 --filter @ponto-studio/api test` → 68 testes OK (svgTransform 31 + svgConverter 32 +
+  satinRails 5 — novo arquivo).
+- `npx pnpm@9.15.4 --filter @ponto-studio/web test` → 67 testes OK.
+- `tsc --noEmit` limpo em `api` e `web`.
+- Validação empírica no container: SVG de produção com uma forma "lente"/olho ELONGADA e CURVA de verdade
+  (2 curvas cúbicas, não só retas) rodando via `worker.process_job` real — TODO (Docker caiu no meio da
+  sessão; retomar ao continuar, ver Seção 13).
 
 ---
 
-## 9. Arquivos-chave (resumo)
+## 9. Fase 5+ (fast-follow)
+
+- [ ] **Revisão: segmentação de partes por cor** — hoje `analyze.py` separa uma "parte" do bordado por
+      COR (k-means + vtracer, uma camada por cor). O usuário observou que isso pode não ser a melhor
+      abordagem (ex.: duas regiões da mesma cor mas que fazem mais sentido como partes de ponto
+      diferentes, ou uma única forma que merece virar 2+ partes por outro critério que não cor). Ainda
+      **sem pesquisa nem escopo definidos** — é uma questão de arquitetura da ANÁLISE DE IMAGEM
+      (`workers/embroidery/analyze.py` + `apps/web/src/utils/svgLayers.ts`), não do motor de pontos em si;
+      pode fazer mais sentido como um documento de plano separado deste (este aqui é especificamente sobre
+      a migração pro Ink/Stitch). Pedido explícito do usuário em 2026-07-20, ainda não iniciado.
+- [ ] **Fase 6 — Demais fills**: Guided (com linha-guia), Linear Gradient, Tartan, Cross Stitch.
+
+---
+
+## 10. Arquivos-chave (resumo)
 
 **Criados nas Fases 0/1 (prontos):**
 - `workers/embroidery/inkstitch_runner.py` (+ `test_inkstitch_runner.py`) ✅
 - `rotatePathData` em `apps/api/src/services/svgTransform.ts` ✅
 
-**Fase 2 (Stroke) e Fase 3 (Satin Column) não precisaram de arquivo novo** — só edições nos mesmos
-arquivos da Fase 1 (`satinColumnToSvgGroup` é uma função nova, mas dentro do `svgConverter.ts` existente).
-Extração de trilhos pra polígono arbitrário (Fase 3+, ver Seção 8) provavelmente precisa de um helper
-novo de geometria (achatar curvas + reamostrar por comprimento de arco).
+**Fase 2 (Stroke) e Fase 3 (Satin Column formas simples) não precisaram de arquivo novo** — só edições
+nos mesmos arquivos da Fase 1. **Fase 4 criou 2 arquivos novos** (geometria de extração de trilhos):
+- `apps/api/src/services/satinRails.ts` (+ `satinRails.test.ts`) — `extractSatinRails`: PCA, split,
+  colapso de pontas empatadas, reamostragem por arco.
+- `flattenPathData` (dentro do `svgTransform.ts` já existente, não é arquivo novo).
 
-**Fases 0/1/2/3 completas — arquivos já modificados (não mexer de novo sem motivo):**
+**Fases 0/1/2/3/4 completas — arquivos já modificados (não mexer de novo sem motivo):**
 - `apps/api/src/services/svgConverter.ts` — `buildStitchAttributes` por tipo + rotação embutida no `d` +
   `STROKE_FAMILY_TYPES` (fill vs stroke por família, não por tipo individual) + `satinColumnToSvgGroup`
-  (extração de trilhos de bbox retangular) + `elementToSvgGroupByShape` (fallback pra tatami quando
-  `satinColumn` tem `svgContent`)
+  (trilhos de bbox retangular, forma simples) + `satinColumnFromComplexShape` (trilhos de polígono
+  arbitrário via `satinRails.ts`, forma complexa) + `elementToSvgGroupByShape` (fallback pra tatami
+  quando a extração falha em qualquer um dos 2 casos)
+- `apps/api/src/services/svgTransform.ts` — `flattenPathData` (achata curvas em polilinha)
 - `packages/shared/src/index.ts` — `StitchParams` união discriminada (9 tipos: tatami/contour/meander/
   circular/satin-legado/running/zigzag/ripple/satinColumn)
-- `apps/web/src/components/PropertiesPanel.tsx` — UI por tipo; opção "Cetim" some quando `svgContent` existe
+- `apps/web/src/components/PropertiesPanel.tsx` — UI por tipo; "Cetim" NÃO esconde mais pra partes com
+  `svgContent` (extração geral cobre esse caso agora — Fase 4)
 - `apps/web/src/utils/stitchHeuristics.ts` — sugestão entre tatami/circular/running (zigzag/ripple/
   satinColumn ficam de fora da sugestão automática — heurística só roda sobre camadas de imagem
-  analisada, que SEMPRE têm `svgContent`, logo `satinColumn` nunca seria elegível de qualquer forma)
+  analisada, que SEMPRE têm `svgContent`; `satinColumn` poderia em teoria ser elegível agora que a Fase 4
+  suporta `svgContent`, mas ainda não foi adicionado à heurística — sem sinal geométrico claro de "quando
+  sugerir cetim vs. tatami" além do que `MIN_SATIN_ELONGATION` já faz no próprio `extractSatinRails`)
 - `apps/web/src/components/PartsPanel.tsx` — rótulos por tipo
 
 **Já prontos, reusar sem mexer:**
 - `workers/embroidery/inkstitch_runner.py` (`run_inkstitch`), `worker.py` (`pattern_to_stitch_json`,
   `pattern_to_preview_svg`, `_svg_viewbox`, `_pattern_from_bytes`), `analyze.py` (cores + métricas),
-  `splitSvgByColor`, `rotatePathData`/`scalePathData` (`svgTransform.ts`).
+  `splitSvgByColor`, `rotatePathData`/`scalePathData`/`flattenPathData` (`svgTransform.ts`),
+  `extractSatinRails` (`satinRails.ts`).
 
 ---
 
-## 10. Workflow-alvo (visão do produto)
+## 11. Workflow-alvo (visão do produto)
 
 1. Importar imagem → motor gera SVG por cor, **fundindo cores semelhantes** (já existe:
    `analyze.py` + `splitSvgByColor`).
@@ -611,7 +695,7 @@ novo de geometria (achatar curvas + reamostrar por comprimento de arco).
 
 ---
 
-## 11. Como verificar tudo (ambiente)
+## 12. Como verificar tudo (ambiente)
 
 - **Docker é obrigatório** pra validar o motor: o Ink/Stitch só roda no Linux do container, e o vtracer
   (análise) segfaulta no Python 3.14/Windows local. Sem o Docker Desktop no ar, só dá pra rodar
@@ -631,7 +715,7 @@ novo de geometria (achatar curvas + reamostrar por comprimento de arco).
 
 ---
 
-## 12. Log de progresso
+## 13. Log de progresso
 
 | Data | Fase/Checkpoint | O que foi feito | Commit |
 |------|-----------------|-----------------|--------|
@@ -640,3 +724,4 @@ novo de geometria (achatar curvas + reamostrar por comprimento de arco).
 | 2026-07-20 | Fase 1 (1.1–1.6) | StitchParams união discriminada (6 tipos); atributos inkstitch:* corrigidos por tipo (tatami_fill→auto_fill, pull_compensation/angle removidos de contour/meander/circular); rotação embutida no `d` via `rotatePathData` (novo, com 9 testes); PropertiesPanel reescrito; heurística estendida (circular); e2e validado com os 5 tipos via SVG de produção real | c1198c8 |
 | 2026-07-20 | Fase 2 (2.0–2.4) | Achado crítico corrigido: fill fantasma em stroke-family (FillStitch+Stroke não são mutuamente exclusivos no Ink/Stitch); `running` perdeu `angle` (nunca teve efeito real) e ganhou `repeats`/`beanStitchRepeats`; tipos novos `zigzag` e `ripple`; `buildStitchAttributes` devolve `{presentation, inkstitch}`; PropertiesPanel com controles novos; e2e validado com os 7 tipos via SVG de produção real (2702 pontos, 7 blocos, todos com geometria) | 2786631 |
 | 2026-07-20 | Fase 3 (3.1–3.4) | Satin Column real (`satinColumn`), escopo reduzido a formas simples (decisão explícita do usuário) — trilhos extraídos trivialmente do bbox retangular; fallback pra tatami quando há `svgContent`; opção "Cetim" some da UI nesse caso. Achado: coluna reta gera geometria idêntica a zigzag_stitch simples (a diferença só aparece em colunas curvas, fora do escopo). e2e validado com os 8 tipos via SVG de produção real (3018 pontos, 8 blocos, todos com geometria) | c2123c4 |
+| 2026-07-20 | Fase 4 (4.1–4.5) | Satin Column pra formas complexas (pedido explícito do usuário) — `flattenPathData` (novo, achata curvas C/S/Q/T/A em polilinha) + `extractSatinRails` (novo arquivo `satinRails.ts`: PCA, split em 2 trilhos, reamostragem por arco); achado crítico corrigido: pontas RETAS (vértices empatados no extremo) quebravam o split em 1-lado-vs-3-lados, fix via `collapseTiedEnds`. "Cetim" não esconde mais da UI pra partes com `svgContent`. 68 testes API (19 novos: 9 flattenPathData + 5 extractSatinRails + 5 svgConverter) + 67 web, tsc limpo. **Validação empírica no container pendente** (Docker caiu no meio da sessão) | (não commitado ainda nesta sessão) |

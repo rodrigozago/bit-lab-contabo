@@ -217,7 +217,7 @@ describe("convertProjectToSvg", () => {
     expect(svg).toContain('inkstitch:center_walk_underlay="true"');
   });
 
-  it("satinColumn com svgContent (geometria complexa) cai no fallback pra tatami — sem extração de trilhos nesta fase", () => {
+  it("satinColumn com svgContent DEGENERADO (poucos pontos) cai no fallback pra tatami", () => {
     const el = makeElement({
       color: "#ed1c24",
       svgContent: `<svg viewBox="0 0 200 200"><path d="M100 170 L 50 50 Z" fill="#aabbcc"/></svg>`,
@@ -228,6 +228,53 @@ describe("convertProjectToSvg", () => {
     expect(svg).toContain('inkstitch:fill_method="auto_fill"');
     expect(svg).toContain('fill="#ed1c24"');
     expect(svg).toContain('stroke="none"');
+  });
+
+  it("satinColumn com svgContent de forma REDONDA (pouco alongada) também cai no fallback pra tatami", () => {
+    const el = makeElement({
+      svgContent: `<svg viewBox="0 0 20 20"><path d="M 10 0 L 20 3 L 23 10 L 20 17 L 10 20 L 0 17 L -3 10 L 0 3 Z" fill="#aabbcc"/></svg>`,
+      stitch: { type: "satinColumn", density: 0.5 } satisfies StitchParams,
+    });
+    const svg = convertProjectToSvg(makeProject([el]));
+    expect(svg).not.toContain("inkstitch:satin_column");
+    expect(svg).toContain('inkstitch:fill_method="auto_fill"');
+  });
+
+  it("satinColumn com svgContent de forma ALONGADA extrai os 2 trilhos de verdade (Fase 4)", () => {
+    // "escada": retângulo 40x10 com pontos extras nos lados compridos —
+    // mesma forma validada em satinRails.test.ts, aqui via pipeline completo
+    // (extractPathParts -> scalePathData -> flattenPathData -> extractSatinRails -> rotatePathData)
+    const el = makeElement({
+      color: "#336699",
+      svgPath: "M 0 0 L 800 0 L 800 200 L 0 200 Z", // 200x50mm no canvas (HOOP_PX_PER_MM=4)
+      svgContent: `<svg viewBox="0 0 40 10"><path d="M 0 0 L 10 0 L 20 0 L 30 0 L 40 0 L 40 10 L 30 10 L 20 10 L 10 10 L 0 10 Z" fill="#aabbcc"/></svg>`,
+      stitch: { type: "satinColumn", density: 0.5 } satisfies StitchParams,
+    });
+    const svg = convertProjectToSvg(makeProject([el]));
+    expect(svg).toContain('inkstitch:satin_column="true"');
+    expect(svg).not.toContain('inkstitch:fill_method');
+    expect(svg).toContain('fill="none"');
+    expect(svg).toContain('stroke="#336699"');
+    // 2 subcaminhos (M ... M ...) na d final, cada um com vários pontos (L) —
+    // (?<![a-zA-Z]) evita casar o "d=" de dentro de "id=" (mesma pegadinha
+    // já corrigida no regex de extração, ver extractPathParts)
+    const dMatch = /(?<![a-zA-Z])d="([^"]+)"/.exec(svg);
+    expect(dMatch).not.toBeNull();
+    expect((dMatch![1]!.match(/M/g) ?? []).length).toBe(2);
+    expect((dMatch![1]!.match(/L/g) ?? []).length).toBeGreaterThan(4);
+  });
+
+  it("satinColumn com svgContent contendo MAIS DE 1 path cai no fallback pra tatami (não sabe qual vira o cetim)", () => {
+    const el = makeElement({
+      svgContent: `<svg viewBox="0 0 40 10">
+        <path d="M 0 0 L 10 0 L 20 0 L 30 0 L 40 0 L 40 10 L 30 10 L 20 10 L 10 10 L 0 10 Z" fill="#aabbcc"/>
+        <path d="M 1 1 L 2 1 L 2 2 Z" fill="#aabbcc"/>
+      </svg>`,
+      stitch: { type: "satinColumn", density: 0.5 } satisfies StitchParams,
+    });
+    const svg = convertProjectToSvg(makeProject([el]));
+    expect(svg).not.toContain("inkstitch:satin_column");
+    expect(svg).toContain('inkstitch:fill_method="auto_fill"');
   });
 
   it("ripple emite line_count/join_style/repeats/bean_stitch_repeats quando definidos", () => {

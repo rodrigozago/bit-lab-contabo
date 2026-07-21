@@ -1,5 +1,6 @@
 import { HOOP_PX_PER_MM, type EmbroideryProject, type EmbroideryElement, type CanvasSize, type StitchType } from "@ponto-studio/shared";
-import { parseViewBoxDimensions, computeContainTransform, scalePathData, rotatePathData, type Dimensions } from "./svgTransform.js";
+import { parseViewBoxDimensions, computeContainTransform, scalePathData, rotatePathData, flattenPathData, type Dimensions } from "./svgTransform.js";
+import { extractSatinRails, type RailPair } from "./satinRails.js";
 
 /**
  * Converte um EmbroideryProject em SVG compatível com pyembroidery/Ink/Stitch.
@@ -28,16 +29,16 @@ export function convertProjectToSvg(project: EmbroideryProject): string {
 
 function elementToSvgGroup(el: EmbroideryElement, canvas: CanvasSize): string {
   if (el.stitch.type === "satinColumn") {
-    // Extração de trilhos só é conhecida pra formas simples (sem svgContent —
-    // ver comentário de SatinColumnStitchParams no packages/shared). Com
-    // svgContent (geometria de polígono arbitrária) não dá pra extrair 2
-    // trilhos nesta fase — cai pro tatami com a mesma densidade, mantendo a
-    // geometria original (a UI já esconde "Cetim" como opção pra esses casos,
-    // isso aqui é só a rede de segurança pra dados salvos antes dessa checagem).
-    if (!el.svgContent) {
-      const satinSvg = satinColumnToSvgGroup(el);
-      if (satinSvg) return satinSvg;
-    }
+    // Formas simples (sem svgContent): trilhos triviais a partir do bbox
+    // retangular (Fase 3). Formas complexas (svgContent, vindas de
+    // importação de imagem): extração geral de polígono (Fase 4, ver
+    // satinRails.ts) — achata as curvas, acha o eixo principal e divide o
+    // contorno em 2 trilhos. Em QUALQUER dos dois casos a extração pode
+    // falhar (forma pouco alongada, geometria degenerada, path composto com
+    // buracos) — cai pro tatami com a mesma densidade, mantendo a geometria
+    // original.
+    const satinSvg = el.svgContent ? satinColumnFromComplexShape(el, canvas) : satinColumnToSvgGroup(el);
+    if (satinSvg) return satinSvg;
     return elementToSvgGroupByShape({ ...el, stitch: { type: "tatami", density: el.stitch.density, angle: 45 } }, canvas);
   }
   return elementToSvgGroupByShape(el, canvas);
@@ -84,6 +85,60 @@ function satinColumnToSvgGroup(el: EmbroideryElement): string | null {
       ${inkstitch}
     />
   </g>`;
+}
+
+/**
+ * Constrói os 2 trilhos do cetim a partir da geometria REAL de um elemento
+ * com `svgContent` (polígono arbitrário vindo de importação de imagem) —
+ * ver `satinRails.ts` (Fase 4) pro algoritmo (PCA + split + reamostragem).
+ * `null` quando: o SVG tem mais de 1 `<path>` (várias formas/buracos — não
+ * dá pra saber qual vira o cetim), o path achatado vira mais de 1
+ * subcaminho (path composto, mesmo motivo), ou a extração de trilhos falha
+ * (forma pouco alongada/degenerada) — quem chama cai no fallback pra tatami.
+ */
+function satinColumnFromComplexShape(el: EmbroideryElement, canvas: CanvasSize): string | null {
+  const svg = el.svgContent ?? "";
+  const parts = extractPathParts(svg);
+  if (parts.length !== 1) return null;
+
+  const sourceDims = parseViewBoxDimensions(svg);
+  const elementBounds = parseElementBoundsMm(el.svgPath);
+  const transform = sourceDims
+    ? (() => {
+        const target = elementBounds ?? { width: canvas.widthMm, height: canvas.heightMm };
+        const fit = computeContainTransform(sourceDims, target);
+        return elementBounds
+          ? { scale: fit.scale, offsetX: fit.offsetX + elementBounds.x, offsetY: fit.offsetY + elementBounds.y }
+          : fit;
+      })()
+    : null;
+  const scaledD = transform ? scalePathData(parts[0]!.d, transform.scale, transform.offsetX, transform.offsetY) : parts[0]!.d;
+
+  const flattened = flattenPathData(scaledD);
+  if (flattened.length !== 1) return null;
+
+  const rails = extractSatinRails(flattened[0]!);
+  if (!rails) return null;
+
+  const centerX = (elementBounds?.x ?? 0) + (elementBounds?.width ?? 0) / 2;
+  const centerY = (elementBounds?.y ?? 0) + (elementBounds?.height ?? 0) / 2;
+  const angleDeg = ((el.rotation ?? 0) * 180) / Math.PI;
+  const d = rotatePathData(railsToPathData(rails), angleDeg, centerX, centerY);
+  const { presentation, inkstitch } = buildStitchAttributes(el);
+
+  return `<g id="${el.id}">
+    <path
+      d="${escapeXml(d)}"
+      ${presentation}
+      ${inkstitch}
+    />
+  </g>`;
+}
+
+function railsToPathData(rails: RailPair): string {
+  const railToD = (pts: RailPair["rail1"]) =>
+    "M " + pts.map(([x, y], i) => (i === 0 ? `${x} ${y}` : `L ${x} ${y}`)).join(" ");
+  return `${railToD(rails.rail1)} ${railToD(rails.rail2)}`;
 }
 
 /**

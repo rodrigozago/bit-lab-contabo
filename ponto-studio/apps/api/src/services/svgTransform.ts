@@ -194,6 +194,197 @@ export function rotatePathData(d: string, angleDeg: number, cx: number, cy: numb
   return out.join(" ");
 }
 
+const DEFAULT_CURVE_SEGMENTS = 16;
+
+function sampleCubicBezier(
+  x0: number, y0: number, c1: [number, number], c2: [number, number], end: [number, number],
+  segments: number, push: (x: number, y: number) => void
+): void {
+  for (let s = 1; s <= segments; s++) {
+    const t = s / segments;
+    const mt = 1 - t;
+    const x = mt * mt * mt * x0 + 3 * mt * mt * t * c1[0] + 3 * mt * t * t * c2[0] + t * t * t * end[0];
+    const y = mt * mt * mt * y0 + 3 * mt * mt * t * c1[1] + 3 * mt * t * t * c2[1] + t * t * t * end[1];
+    push(x, y);
+  }
+}
+
+function sampleQuadBezier(
+  x0: number, y0: number, ctrl: [number, number], end: [number, number],
+  segments: number, push: (x: number, y: number) => void
+): void {
+  for (let s = 1; s <= segments; s++) {
+    const t = s / segments;
+    const mt = 1 - t;
+    const x = mt * mt * x0 + 2 * mt * t * ctrl[0] + t * t * end[0];
+    const y = mt * mt * y0 + 2 * mt * t * ctrl[1] + t * t * end[1];
+    push(x, y);
+  }
+}
+
+/** Ângulo entre 2 vetores, com sinal (produto vetorial define o sinal) — usado pra parametrização de arco (SVG spec Appendix F.6.5). */
+function signedAngleBetween(ux: number, uy: number, vx: number, vy: number): number {
+  const sign = ux * vy - uy * vx < 0 ? -1 : 1;
+  const dot = Math.max(-1, Math.min(1, (ux * vx + uy * vy) / (Math.hypot(ux, uy) * Math.hypot(vx, vy))));
+  return sign * Math.acos(dot);
+}
+
+/** Amostra um arco elíptico SVG (comando "A") — parametrização de extremidade → centro, conforme SVG spec Appendix F.6.5. */
+function sampleArc(
+  x0: number, y0: number, rxIn: number, ryIn: number, xAxisRotationDeg: number,
+  largeArc: boolean, sweep: boolean, ex: number, ey: number,
+  segments: number, push: (x: number, y: number) => void
+): void {
+  if (rxIn === 0 || ryIn === 0 || (x0 === ex && y0 === ey)) {
+    push(ex, ey);
+    return;
+  }
+  let rx = Math.abs(rxIn), ry = Math.abs(ryIn);
+  const phi = (xAxisRotationDeg * Math.PI) / 180;
+  const cosPhi = Math.cos(phi), sinPhi = Math.sin(phi);
+
+  const dx2 = (x0 - ex) / 2, dy2 = (y0 - ey) / 2;
+  const x1p = cosPhi * dx2 + sinPhi * dy2;
+  const y1p = -sinPhi * dx2 + cosPhi * dy2;
+
+  const lambda = (x1p * x1p) / (rx * rx) + (y1p * y1p) / (ry * ry);
+  if (lambda > 1) {
+    const scale = Math.sqrt(lambda);
+    rx *= scale; ry *= scale;
+  }
+
+  const sign = largeArc === sweep ? -1 : 1;
+  const num = rx * rx * ry * ry - rx * rx * y1p * y1p - ry * ry * x1p * x1p;
+  const den = rx * rx * y1p * y1p + ry * ry * x1p * x1p;
+  const coef = sign * Math.sqrt(Math.max(0, num / den));
+  const cxp = (coef * (rx * y1p)) / ry;
+  const cyp = (coef * -(ry * x1p)) / rx;
+
+  const cx = cosPhi * cxp - sinPhi * cyp + (x0 + ex) / 2;
+  const cy = sinPhi * cxp + cosPhi * cyp + (y0 + ey) / 2;
+
+  const theta1 = signedAngleBetween(1, 0, (x1p - cxp) / rx, (y1p - cyp) / ry);
+  let dTheta = signedAngleBetween((x1p - cxp) / rx, (y1p - cyp) / ry, (-x1p - cxp) / rx, (-y1p - cyp) / ry);
+  if (!sweep && dTheta > 0) dTheta -= 2 * Math.PI;
+  if (sweep && dTheta < 0) dTheta += 2 * Math.PI;
+
+  for (let s = 1; s <= segments; s++) {
+    const theta = theta1 + (dTheta * s) / segments;
+    const x = cx + rx * Math.cos(theta) * cosPhi - ry * Math.sin(theta) * sinPhi;
+    const y = cy + rx * Math.cos(theta) * sinPhi + ry * Math.sin(theta) * cosPhi;
+    push(x, y);
+  }
+}
+
+/**
+ * Achata um atributo "d" de path SVG numa lista de subcaminhos, cada um uma
+ * polilinha de pontos `[x, y]` — curvas (C/S/Q/T/A) são subdivididas com
+ * resolução FIXA (`segmentsPerCurve`), não tolerância adaptativa: pra
+ * extração de trilhos de cetim a costura já opera na faixa de 0.2–1mm, então
+ * não vale a pena uma malha mais fina que isso. Cada "M" inicia um novo
+ * subcaminho; "Z" fecha o atual (soma o ponto inicial de volta) sem abrir um
+ * novo. Mesma convenção de comandos absolutos/relativos de `rotatePathData`
+ * (H/V só têm 1 eixo; pares extras após o primeiro M são LINETO implícito;
+ * S/T refletem o ponto de controle da curva anterior — regra do spec SVG).
+ */
+export function flattenPathData(d: string, segmentsPerCurve = DEFAULT_CURVE_SEGMENTS): Array<Array<[number, number]>> {
+  const tokens = d.match(/[MLHVCSQTAZ]|-?\d*\.?\d+(?:[eE][+-]?\d+)?/gi) ?? [];
+  const subpaths: Array<Array<[number, number]>> = [];
+  let current: Array<[number, number]> = [];
+  let i = 0;
+  let currentCmd = "";
+  let effectiveCmd = "";
+  let curX = 0, curY = 0;
+  let startX = 0, startY = 0;
+  let prevCubicCtrl2: [number, number] | null = null;
+  let prevQuadCtrl: [number, number] | null = null;
+
+  const push = (x: number, y: number) => current.push([x, y]);
+  const readNum = () => { const n = parseFloat(tokens[i]!); i++; return n; };
+
+  while (i < tokens.length) {
+    const tok = tokens[i]!;
+    const isNewCommand = /^[MLHVCSQTAZ]$/i.test(tok);
+    if (isNewCommand) {
+      currentCmd = tok;
+      effectiveCmd = tok;
+      i++;
+      const upperNew = currentCmd.toUpperCase();
+      if (upperNew !== "C" && upperNew !== "S") prevCubicCtrl2 = null;
+      if (upperNew !== "Q" && upperNew !== "T") prevQuadCtrl = null;
+      if (upperNew === "Z") {
+        if (current.length) push(startX, startY);
+        curX = startX; curY = startY;
+        if (current.length) { subpaths.push(current); current = []; }
+        continue;
+      }
+      if (upperNew === "M" && current.length) {
+        subpaths.push(current);
+        current = [];
+      }
+    }
+
+    const upper = effectiveCmd.toUpperCase();
+    const isRelative = currentCmd !== currentCmd.toUpperCase();
+    const wasFreshM = isNewCommand && upper === "M";
+    const absPoint = (rawX: number, rawY: number): [number, number] =>
+      isRelative ? [curX + rawX, curY + rawY] : [rawX, rawY];
+
+    if (upper === "M" || upper === "L" || upper === "T") {
+      const [ax, ay] = absPoint(readNum(), readNum());
+      if (upper === "T") {
+        const ctrl: [number, number] = prevQuadCtrl ? [2 * curX - prevQuadCtrl[0], 2 * curY - prevQuadCtrl[1]] : [curX, curY];
+        sampleQuadBezier(curX, curY, ctrl, [ax, ay], segmentsPerCurve, push);
+        prevQuadCtrl = ctrl;
+      } else {
+        push(ax, ay);
+      }
+      curX = ax; curY = ay;
+    } else if (upper === "H") {
+      const ax = isRelative ? curX + readNum() : readNum();
+      push(ax, curY); curX = ax;
+    } else if (upper === "V") {
+      const ay = isRelative ? curY + readNum() : readNum();
+      push(curX, ay); curY = ay;
+    } else if (upper === "C") {
+      const c1 = absPoint(readNum(), readNum());
+      const c2 = absPoint(readNum(), readNum());
+      const end = absPoint(readNum(), readNum());
+      sampleCubicBezier(curX, curY, c1, c2, end, segmentsPerCurve, push);
+      prevCubicCtrl2 = c2;
+      curX = end[0]; curY = end[1];
+    } else if (upper === "S") {
+      const c2 = absPoint(readNum(), readNum());
+      const end = absPoint(readNum(), readNum());
+      const c1: [number, number] = prevCubicCtrl2 ? [2 * curX - prevCubicCtrl2[0], 2 * curY - prevCubicCtrl2[1]] : [curX, curY];
+      sampleCubicBezier(curX, curY, c1, c2, end, segmentsPerCurve, push);
+      prevCubicCtrl2 = c2;
+      curX = end[0]; curY = end[1];
+    } else if (upper === "Q") {
+      const ctrl = absPoint(readNum(), readNum());
+      const end = absPoint(readNum(), readNum());
+      sampleQuadBezier(curX, curY, ctrl, end, segmentsPerCurve, push);
+      prevQuadCtrl = ctrl;
+      curX = end[0]; curY = end[1];
+    } else if (upper === "A") {
+      const rx = readNum(), ry = readNum(), xRot = readNum();
+      const largeArc = tokens[i]! === "1"; i++;
+      const sweep = tokens[i]! === "1"; i++;
+      const end = absPoint(readNum(), readNum());
+      sampleArc(curX, curY, rx, ry, xRot, largeArc, sweep, end[0], end[1], segmentsPerCurve, push);
+      curX = end[0]; curY = end[1];
+    }
+
+    if (wasFreshM) {
+      startX = curX; startY = curY;
+      effectiveCmd = isRelative ? "l" : "L";
+    }
+  }
+
+  if (current.length) subpaths.push(current);
+  return subpaths;
+}
+
 /** Reescala todas as coordenadas de um atributo "d" de path SVG. */
 export function scalePathData(d: string, scale: number, offsetX: number, offsetY: number): string {
   const tokens = d.match(/[MLHVCSQTAZ]|-?\d*\.?\d+(?:[eE][+-]?\d+)?/gi) ?? [];

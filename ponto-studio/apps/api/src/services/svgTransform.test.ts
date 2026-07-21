@@ -4,6 +4,7 @@ import {
   computeContainTransform,
   scalePathData,
   rotatePathData,
+  flattenPathData,
 } from "./svgTransform.js";
 
 describe("parseViewBoxDimensions", () => {
@@ -147,5 +148,77 @@ describe("rotatePathData", () => {
   it("rotação em torno de um centro não-origem desloca corretamente", () => {
     // ponto (10,10) rotacionado 180° em torno de (5,5) deve virar (0,0)
     expect(rotatePathData("M 10 10", 180, 5, 5)).toBe("M 0 0");
+  });
+});
+
+describe("flattenPathData", () => {
+  it("retângulo (M/L/Z) vira 1 subcaminho com os 4 vértices + fechamento no início", () => {
+    const result = flattenPathData("M 0 0 L 10 0 L 10 5 L 0 5 Z");
+    expect(result).toEqual([[[0, 0], [10, 0], [10, 5], [0, 5], [0, 0]]]);
+  });
+
+  it("dois M sem Z viram 2 subcaminhos separados", () => {
+    const result = flattenPathData("M 0 0 L 10 0 M 0 5 L 10 5");
+    expect(result).toEqual([[[0, 0], [10, 0]], [[0, 5], [10, 5]]]);
+  });
+
+  it("H/V viram pontos no eixo certo", () => {
+    const result = flattenPathData("M 0 0 H 10 V 5");
+    expect(result).toEqual([[[0, 0], [10, 0], [10, 5]]]);
+  });
+
+  it("M com pares extras (LINETO implícito) vira pontos extra no mesmo subcaminho", () => {
+    const result = flattenPathData("M 0 0 5 0 10 0");
+    expect(result).toEqual([[[0, 0], [5, 0], [10, 0]]]);
+  });
+
+  it("curva cúbica (C) é subdividida com resolução fixa e o ponto médio bate com a fórmula de Bézier", () => {
+    // M 0,0 C 0,10 10,10 10,0 — "corcova" simétrica; t=0.5 -> (5, 7.5) (fórmula cúbica exata)
+    const [subpath] = flattenPathData("M 0 0 C 0 10 10 10 10 0", 16);
+    expect(subpath).toHaveLength(1 + 16); // ponto do M + 16 amostras da curva
+    expect(subpath![0]).toEqual([0, 0]); // ponto inicial (do M)
+    expect(subpath![subpath!.length - 1]).toEqual([10, 0]); // ponto final da curva
+    const midpoint = subpath![1 + 8 - 1]!; // amostra s=8 de 16 -> t=0.5
+    expect(midpoint[0]).toBeCloseTo(5, 6);
+    expect(midpoint[1]).toBeCloseTo(7.5, 6);
+  });
+
+  it("curva quadrática (Q) começa e termina nos pontos certos", () => {
+    const [subpath] = flattenPathData("M 0 0 Q 5 10 10 0", 10);
+    expect(subpath![0]).toEqual([0, 0]);
+    expect(subpath![subpath!.length - 1]![0]).toBeCloseTo(10, 6);
+    expect(subpath![subpath!.length - 1]![1]).toBeCloseTo(0, 6);
+    // ponto médio (t=0.5) de uma quadrática simétrica fica na metade da altura do controle: y=5
+    const midpoint = subpath![1 + 5 - 1]!;
+    expect(midpoint[1]).toBeCloseTo(5, 6);
+  });
+
+  it("S (cúbica suave) reflete o 2º ponto de controle da curva anterior — confere contra a fórmula de Bézier", () => {
+    // C: (0,0)->(10,10), ctrl1=(0,10) ctrl2=(5,10). S reflete ctrl2 em torno do ponto atual (10,10):
+    // c1 = 2*(10,10) - (5,10) = (15,10). Cúbica S: P0=(10,10) C1=(15,10) C2=(20,20) P3=(20,0).
+    // Ponto médio (t=0.5) por substituição direta na fórmula: (16.875, 12.5).
+    const [subpath] = flattenPathData("M 0 0 C 0 10 5 10 10 10 S 20 20 20 0", 20);
+    const sMidpoint = subpath![1 + 20 + 10 - 1]!; // 1 (M) + 20 (C) + amostra s=10/20 (t=0.5) do S
+    expect(sMidpoint[0]).toBeCloseTo(16.875, 6);
+    expect(sMidpoint[1]).toBeCloseTo(12.5, 6);
+  });
+
+  it("comandos relativos (l/c minúsculos) são convertidos pra absoluto corretamente", () => {
+    // l 10,0 a partir de (5,5) -> (15,5); c relativo soma tudo a partir do ponto ANTES do comando
+    const result = flattenPathData("M 5 5 l 10 0 c 0 5 5 5 5 0", 4);
+    const subpath = result[0]!;
+    expect(subpath[0]).toEqual([5, 5]);
+    expect(subpath[1]).toEqual([15, 5]); // ponto final do "l"
+    expect(subpath[subpath.length - 1]![0]).toBeCloseTo(20, 6); // 15+5 (ponto final do "c")
+    expect(subpath[subpath.length - 1]![1]).toBeCloseTo(5, 6);
+  });
+
+  it("arco (A) de meio-círculo aproxima pontos no raio esperado", () => {
+    // meio-círculo de raio 5 entre (-5,0) e (5,0), sweep=1 -> passa por (0,5) no meio
+    const [subpath] = flattenPathData("M -5 0 A 5 5 0 0 1 5 0", 20);
+    const midpoint = subpath![10]!; // amostra do meio (s=10 de 20 -> t=0.5)
+    expect(Math.hypot(midpoint[0], midpoint[1])).toBeCloseTo(5, 3); // raio ~5 (ponto sobre o círculo certo)
+    expect(midpoint[0]).toBeCloseTo(0, 3); // no meio do arco, x fica ~0 (equidistante das pontas)
+    expect(Math.abs(midpoint[1])).toBeGreaterThan(4); // desvia bastante da corda reta (y=0)
   });
 });
