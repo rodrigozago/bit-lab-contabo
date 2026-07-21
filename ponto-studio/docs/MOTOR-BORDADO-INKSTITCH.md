@@ -8,9 +8,13 @@
 **Status geral:** 🟢 Fase 0 + Fase 1 + Fase 2 + Fase 3 + Fase 4 CONCLUÍDAS — motor real (Ink/Stitch)
 rodando com 8 tipos de ponto (Tatami/Contour/Meander/Circular/Running/Zigzag/Ripple/Satin Column), Satin
 Column agora funciona em formas simples E complexas (extração geral de polígono, curvas incluídas), UI
-por tipo, heurística de sugestão, rotação real. **Falta só a validação empírica da Fase 4 no container**
-(Docker caiu no meio da sessão — retomar por aí, ver Seção 13). Depois: Fase 6 (Demais fills) e o item
-ainda sem escopo sobre revisar a segmentação de partes por cor (Seção 9).
+por tipo, heurística de sugestão, rotação real. Validação empírica da Fase 4 no container ficou delegada
+ao teste manual do usuário no dev server (decisão dele em 2026-07-20 — Docker tinha caído; o SVG de teste
+curvo está descrito na Seção 8). Depois: Fase 5 (segmentação de partes,
+sem escopo), Fase 6 (Demais fills), Fase 7 (reorganização de UI — toolbar unificada) e Fase 8 (melhorar
+partes — remover imagem de referência + preview de bordado dentro do tldraw). Fases 7/8 são fora do
+escopo do motor de pontos, registradas a pedido do usuário; mapeamento do estado atual já feito pras 2
+(ver Seção 9).
 
 ---
 
@@ -52,7 +56,7 @@ ainda sem escopo sobre revisar a segmentação de partes por cor (Seção 9).
   (`extractSatinRails`, novo arquivo `satinRails.ts`). Achado crítico: pontas RETAS (2+ vértices empatados
   no extremo, ex.: um retângulo) quebravam o split em 1-lado-vs-3-lados — corrigido colapsando o trecho
   empatado num ponto sintético antes de dividir (`collapseTiedEnds`). Ver Seção 8.1. **Validação empírica
-  no container ainda pendente** — Docker caiu no meio da sessão.
+  no container delegada ao teste manual do usuário no dev server** (decisão dele em 2026-07-20).
 
 ### Checklist de alto nível
 - [x] **Fase 0** — Runner do Ink/Stitch no worker (fundação; validado headless) ✅ 2026-07-20
@@ -60,9 +64,13 @@ ainda sem escopo sobre revisar a segmentação de partes por cor (Seção 9).
 - [x] **Fase 2** — Stroke (running/bean/zigzag/ripple) ✅ 2026-07-20
 - [x] **Fase 3** — Satin Column (formas simples) ✅ 2026-07-20
 - [x] **Fase 4** — Satin Column pra formas complexas (extração geral de polígono) ✅ 2026-07-20 —
-      ⚠️ falta validação empírica no container (Docker caiu no meio da sessão)
+      validação empírica delegada ao teste manual do usuário no dev server
 - [ ] **Fase 5** — Revisão: segmentação de partes por cor (ainda sem escopo)
 - [ ] **Fase 6** — Demais fills (Guided, Linear Gradient, Tartan, Cross Stitch)
+- [ ] **Fase 7** — Reorganização de UI: toolbar unificada (fora do escopo do motor de pontos; mapeamento
+      do estado atual já feito, ver Seção 9)
+- [ ] **Fase 8** — Melhorar partes: remover imagem de referência + preview de bordado dentro do tldraw
+      (fora do escopo do motor de pontos; mapeamento do estado atual já feito, ver Seção 9)
 
 ---
 
@@ -643,6 +651,67 @@ silenciosamente pra formas não-elegíveis, mesmo comportamento já aceito pro c
       pode fazer mais sentido como um documento de plano separado deste (este aqui é especificamente sobre
       a migração pro Ink/Stitch). Pedido explícito do usuário em 2026-07-20, ainda não iniciado.
 - [ ] **Fase 6 — Demais fills**: Guided (com linha-guia), Linear Gradient, Tartan, Cross Stitch.
+- [ ] **Fase 7 — Reorganização de UI: toolbar unificada** — pedido explícito do usuário em 2026-07-20,
+      **fora do escopo do motor de pontos** (é reorganização de layout/UX do editor, não do Ink/Stitch);
+      registrado aqui a pedido do usuário, mas é candidato a virar um documento de plano próprio se crescer.
+      Mapeamento do estado ATUAL (pesquisado em 2026-07-20, ainda não escopado em passos de implementação):
+      - **Sidebar direita hoje** (`Editor.tsx`, dentro do `ResizablePanel` de 24%) empilha TUDO: grupo
+        "Arquivo" (Histórico, Deletar projeto), grupo "Editar" (Importar imagem, Adicionar texto, Exportar
+        bordado), `ShapeActionsPanel.tsx` (agrupar/girar/espelhar/alinhar/distribuir via API do tldraw:
+        `groupShapes`/`rotateShapesBy`/`flipShapes`/`alignShapes`/`distributeShapes`), `PropertiesPanel.tsx`
+        e `PartsPanel.tsx`.
+      - **Toolbar flutuante da esquerda hoje** (`CanvasToolbar.tsx`, componente 100% nosso, não é a
+        `Toolbar` nativa do tldraw — essa está explicitamente desligada em `Editor.tsx`) só tem as
+        ferramentas de desenho: Selecionar/Mover tela/Desenhar/Retângulo/Elipse/Borracha.
+      - **Sidebar esquerda hoje** (`app-sidebar.tsx`, primitiva shadcn/ui `Sidebar`): logo + nav "Meus
+        projetos", bloco "Projeto" (nome + tamanho do bastidor), menu do usuário no rodapé.
+      - **Achado colateral não pedido pelo usuário, mas relevante pra essa fase**: o `MenuPanel` NATIVO do
+        tldraw (menu hambúrguer no canto superior-esquerdo do canvas, com Edit/View/Export/Preferences) e o
+        `StylePanel` nativo continuam ATIVOS — só `Toolbar` e `PageMenu` do tldraw foram nulados em
+        `Editor.tsx`. Isso não parece intencional (resíduo, sem comentário no código explicando) e vai
+        competir visualmente com os controles customizados depois da reorganização — vale decidir junto.
+      - **Alvo pedido pelo usuário**: (1) mover agrupar/alinhar/girar/espelhar/distribuir do
+        `ShapeActionsPanel` (sidebar direita) pra dentro da toolbar flutuante da esquerda, junto das
+        ferramentas de desenho; (2) mover os grupos "Arquivo" e "Editar" da sidebar direita pra sidebar
+        ESQUERDA (`app-sidebar.tsx`), abaixo do bloco "Projeto"; (3) resultado final: sidebar direita só
+        com Propriedades + Partes.
+- [ ] **Fase 8 — Melhorar partes** — pedido explícito do usuário em 2026-07-20, **fora do escopo do motor
+      de pontos** (é UX do editor), registrado aqui a pedido do usuário. Dois itens:
+
+      **8.1 Remover imagem de referência.** Hoje `Editor.tsx::handleImportConfirm` (~linha 354, bloco
+      "Camada 1", linhas 388–403) cria um shape de imagem do tldraw (`AssetRecordType` + `createShape`,
+      `src` = data URL do PNG importado) com `meta.layer = "reference"`, nascendo oculto (`opacity: 0,
+      isLocked: true`) — `PartsPanel.tsx` (linhas 67–68, 166–175) tem um checkbox "Foto de referência" pra
+      reexibir. Alvo: não criar mais esse shape (o checkbox correspondente no `PartsPanel` deixa de
+      aparecer, já que `referenceIds` fica sempre vazio). **A decidir**: confirmar que a imagem de
+      referência não é usada em mais nenhum lugar do fluxo (ex.: como pano de fundo durante a análise) antes
+      de remover — pesquisa inicial não achou outro uso, mas vale confirmar na hora de implementar.
+
+      **8.2 Preview do bordado dentro do tldraw.** Hoje existem 2 rotas de preview distintas e nenhuma
+      delas faz o que o usuário quer: `/api/preview` (`buildElementPreviewSvg`, POR ELEMENTO, gera SVG
+      vetorial de pontos reais via Ink/Stitch) está **pronta no backend mas nunca foi conectada a nenhum
+      componente da UI** (código morto do lado do cliente); `/api/stitch-preview` (`convertProjectToSvg`,
+      PROJETO INTEIRO) alimenta o `StitchPlayer.tsx` (canvas com play/pause), mas só aparece dentro do
+      `ExportModal` (modal separado, etapa 1 do fluxo de exportar), nunca dentro do canvas do tldraw.
+      Alvo do usuário: um switch novo no header (`Editor.tsx`, ~linha 578–582, ao lado do toggle de
+      painel direito e do `ModeToggle` — mesma área, sem mais nada lá hoje) liga/desliga um modo de
+      preview; quando ligado, mostra o bordado simulado (linhas de ponto, não só a forma preenchida) DENTRO
+      do canvas, na mesma posição/tamanho do SVG real de cada parte, com os mesmos controles de
+      redimensionar/mover/girar.
+      - **Achado técnico relevante pro design**: o resultado que `/api/preview` já gera é SVG VETORIAL
+        (pontos reais simulados pelo Ink/Stitch), não precisa ser rasterizado — o padrão de shape de
+        imagem já usado no código (`AssetRecordType` + `src` = data URL) aceita um SVG como data URL do
+        mesmo jeito que aceita PNG (é o mesmo mecanismo já usado pro SVG real do bordado ao recarregar o
+        projeto, `Editor.tsx` linhas 318–344). Ou seja: a ideia do usuário de "manter 2 cópias, uma sendo o
+        SVG real e outra podendo ser uma imagem gerada pelo motor" já tem os 2 blocos de LEGO prontos —
+        só falta a orquestração (chamar `/api/preview` por elemento, trocar qual shape fica visível/ativo).
+      - **Pontos em aberto a decidir na implementação** (não pesquisados/decididos ainda): (a) como
+        sincronizar edições feitas na cópia "preview" de volta pro `EmbroideryElement` real — o listener de
+        sync em `Editor.tsx` hoje assume 1 shape por `elementId`, então precisa decidir se as 2 cópias
+        sempre compartilham posição/tamanho, ou se só uma fica "ativa" (recebendo interação) por vez,
+        trocando no toggle; (b) gerar o preview via Ink/Stitch real não é instantâneo (é um subprocess,
+        igual toda a Fase 0-4) — pra um preview que atualiza enquanto o usuário edita, precisa de job
+        assíncrono com debounce, não recomputar a cada frame.
 
 ---
 
@@ -724,4 +793,4 @@ nos mesmos arquivos da Fase 1. **Fase 4 criou 2 arquivos novos** (geometria de e
 | 2026-07-20 | Fase 1 (1.1–1.6) | StitchParams união discriminada (6 tipos); atributos inkstitch:* corrigidos por tipo (tatami_fill→auto_fill, pull_compensation/angle removidos de contour/meander/circular); rotação embutida no `d` via `rotatePathData` (novo, com 9 testes); PropertiesPanel reescrito; heurística estendida (circular); e2e validado com os 5 tipos via SVG de produção real | c1198c8 |
 | 2026-07-20 | Fase 2 (2.0–2.4) | Achado crítico corrigido: fill fantasma em stroke-family (FillStitch+Stroke não são mutuamente exclusivos no Ink/Stitch); `running` perdeu `angle` (nunca teve efeito real) e ganhou `repeats`/`beanStitchRepeats`; tipos novos `zigzag` e `ripple`; `buildStitchAttributes` devolve `{presentation, inkstitch}`; PropertiesPanel com controles novos; e2e validado com os 7 tipos via SVG de produção real (2702 pontos, 7 blocos, todos com geometria) | 2786631 |
 | 2026-07-20 | Fase 3 (3.1–3.4) | Satin Column real (`satinColumn`), escopo reduzido a formas simples (decisão explícita do usuário) — trilhos extraídos trivialmente do bbox retangular; fallback pra tatami quando há `svgContent`; opção "Cetim" some da UI nesse caso. Achado: coluna reta gera geometria idêntica a zigzag_stitch simples (a diferença só aparece em colunas curvas, fora do escopo). e2e validado com os 8 tipos via SVG de produção real (3018 pontos, 8 blocos, todos com geometria) | c2123c4 |
-| 2026-07-20 | Fase 4 (4.1–4.5) | Satin Column pra formas complexas (pedido explícito do usuário) — `flattenPathData` (novo, achata curvas C/S/Q/T/A em polilinha) + `extractSatinRails` (novo arquivo `satinRails.ts`: PCA, split em 2 trilhos, reamostragem por arco); achado crítico corrigido: pontas RETAS (vértices empatados no extremo) quebravam o split em 1-lado-vs-3-lados, fix via `collapseTiedEnds`. "Cetim" não esconde mais da UI pra partes com `svgContent`. 68 testes API (19 novos: 9 flattenPathData + 5 extractSatinRails + 5 svgConverter) + 67 web, tsc limpo. **Validação empírica no container pendente** (Docker caiu no meio da sessão) | (não commitado ainda nesta sessão) |
+| 2026-07-20 | Fase 4 (4.1–4.5) | Satin Column pra formas complexas (pedido explícito do usuário) — `flattenPathData` (novo, achata curvas C/S/Q/T/A em polilinha) + `extractSatinRails` (novo arquivo `satinRails.ts`: PCA, split em 2 trilhos, reamostragem por arco); achado crítico corrigido: pontas RETAS (vértices empatados no extremo) quebravam o split em 1-lado-vs-3-lados, fix via `collapseTiedEnds`. "Cetim" não esconde mais da UI pra partes com `svgContent`. 68 testes API (19 novos: 9 flattenPathData + 5 extractSatinRails + 5 svgConverter) + 67 web, tsc limpo. Validação empírica no container delegada ao teste manual do usuário no dev server (Docker tinha caído; decisão do usuário) | be5ddab |
