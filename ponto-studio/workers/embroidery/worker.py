@@ -44,6 +44,34 @@ logging.basicConfig(
 )
 log = logging.getLogger("embroidery-worker")
 
+# Rollbar (rastreio de erros): só liga com ROLLBAR_SERVER_TOKEN. Sem token (ou
+# sem o pacote instalado) vira no-op, então rodar local não quebra. Ver
+# docs/SEGURANCA-PRE-LANCAMENTO.md item 6.
+_rollbar = None
+_rollbar_token = os.environ.get("ROLLBAR_SERVER_TOKEN")
+if _rollbar_token:
+    try:
+        import rollbar as _rollbar
+
+        _rollbar.init(
+            _rollbar_token,
+            environment=os.environ.get("ROLLBAR_ENV", "production"),
+            handler="blocking",
+        )
+    except Exception:  # noqa: BLE001 — sem Rollbar não pode derrubar o worker
+        log.exception("Falha ao iniciar o Rollbar — seguindo sem rastreio de erros")
+        _rollbar = None
+
+
+def report_error() -> None:
+    """Manda a exceção atual pro Rollbar, se configurado (no-op sem token)."""
+    if _rollbar is not None:
+        try:
+            _rollbar.report_exc_info()
+        except Exception:  # noqa: BLE001
+            log.exception("Falha ao reportar erro pro Rollbar")
+
+
 REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379")
 JOBS_QUEUE = "embroidery:jobs"
 RESULTS_CHANNEL = "embroidery:results"
@@ -242,6 +270,7 @@ def process_job(r: redis.Redis, job_data: dict[str, Any]) -> None:
 
     except Exception as exc:
         log.exception("Job %s falhou", job_id)
+        report_error()
         _publish_error(r, job_id, str(exc))
 
 
@@ -285,6 +314,7 @@ def process_analyze_job(r: redis.Redis, job_data: dict[str, Any]) -> None:
 
     except Exception as exc:
         log.exception("Análise %s falhou", job_id)
+        report_error()
         _publish_error(r, job_id, str(exc))
 
 
@@ -317,6 +347,7 @@ def process_preview_job(r: redis.Redis, job_data: dict[str, Any]) -> None:
         r.publish(RESULTS_CHANNEL, json.dumps({"jobId": job_id, "status": "done", "outputFile": output_file}))
     except Exception as exc:
         log.exception("Preview %s falhou", job_id)
+        report_error()
         _publish_error(r, job_id, str(exc))
 
 
@@ -356,6 +387,7 @@ def process_stitch_data_job(r: redis.Redis, job_data: dict[str, Any]) -> None:
         r.publish(RESULTS_CHANNEL, json.dumps({"jobId": job_id, "status": "done", "outputFile": output_file}))
     except Exception as exc:
         log.exception("Stitch data %s falhou", job_id)
+        report_error()
         _publish_error(r, job_id, str(exc))
 
 
@@ -417,6 +449,7 @@ def main() -> None:
             break
         except Exception as exc:
             log.exception("Erro inesperado no loop principal: %s", exc)
+            report_error()
             time.sleep(1)
 
 

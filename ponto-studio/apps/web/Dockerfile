@@ -17,6 +17,14 @@ COPY tsconfig.base.json ./
 WORKDIR /app/packages/shared
 RUN node_modules/.bin/tsc -p tsconfig.json
 
+# Token client do Rollbar precisa estar presente NO BUILD (Vite bakeia as
+# VITE_* no bundle). Vazio = Rollbar desligado no front. Ver
+# docs/SEGURANCA-PRE-LANCAMENTO.md item 6.
+ARG VITE_ROLLBAR_CLIENT_TOKEN=""
+ARG VITE_BUILD_SHA="dev"
+ENV VITE_ROLLBAR_CLIENT_TOKEN=$VITE_ROLLBAR_CLIENT_TOKEN
+ENV VITE_BUILD_SHA=$VITE_BUILD_SHA
+
 # Typecheck + build do frontend com os binários locais do web
 WORKDIR /app/apps/web
 RUN node_modules/.bin/tsc -p tsconfig.json --noEmit

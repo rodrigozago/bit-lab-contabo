@@ -20,6 +20,7 @@ import { startCleanup } from "./services/cleanup.js";
 import { migrate } from "./db.js";
 import { config } from "./config.js";
 import { readSession } from "./services/session.js";
+import { initRollbar } from "./services/rollbar.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -27,6 +28,18 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // IP real do cliente, não o do proxy. Só o loopback é exposto, então confiar
 // no proxy local é seguro.
 const app = Fastify({ logger: { level: "info" }, trustProxy: true });
+
+// Rollbar (no-op sem ROLLBAR_SERVER_TOKEN). Reporta os erros que o Fastify
+// captura, com contexto da requisição (sem PII sensível — o sub identifica).
+const rollbar = initRollbar();
+if (rollbar) {
+  app.setErrorHandler((err, req, reply) => {
+    rollbar.error(err, req as never, { route: req.url, sub: req.sessionUser?.sub });
+    app.log.error({ err, url: req.url }, "erro na requisição");
+    const status = err.statusCode ?? 500;
+    reply.status(status).send({ ok: false, error: status >= 500 ? "erro interno" : err.message });
+  });
+}
 
 // Persistência de projetos depende do Postgres — diferente do Redis (que é
 // opcional), aqui não faz sentido subir a API sem conseguir ler/gravar dados.

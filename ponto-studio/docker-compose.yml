@@ -52,6 +52,7 @@ services:
       OIDC_CLIENT_SECRET: "${PONTO_STUDIO_OIDC_SECRET}"
       EXPORTS_TTL_HOURS: "${EXPORTS_TTL_HOURS:-24}"
       UPLOADS_TTL_HOURS: "${UPLOADS_TTL_HOURS:-24}"
+      ROLLBAR_SERVER_TOKEN: "${ROLLBAR_SERVER_TOKEN:-}"
     volumes:
       - exports:/app/apps/api/exports
       - uploads:/app/apps/api/uploads
@@ -72,6 +73,7 @@ services:
       REDIS_URL: "redis://redis:6379"
       EXPORTS_DIR: "/exports"
       UPLOADS_DIR: "/uploads"
+      ROLLBAR_SERVER_TOKEN: "${ROLLBAR_SERVER_TOKEN:-}"
     volumes:
       - exports:/exports
       # análise local lê a imagem enviada pela API (somente leitura)
@@ -87,6 +89,9 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+      args:
+        # token client do Rollbar bakeado no bundle em build time (público)
+        VITE_ROLLBAR_CLIENT_TOKEN: "${VITE_ROLLBAR_CLIENT_TOKEN:-}"
     ports:
       # nginx da VPS (bit-lab-agents/nginx) faz proxy_pass para cá, igual ao
       # padrão usado por studio.bit-lab.tech (porta 3002)

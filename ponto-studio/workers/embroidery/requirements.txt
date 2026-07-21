@@ -3,3 +3,4 @@ redis>=5.0.1
 opencv-python-headless>=4.9.0
 numpy>=1.26.0
 vtracer>=0.6.11
+rollbar>=1.0.0

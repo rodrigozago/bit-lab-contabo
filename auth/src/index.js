@@ -6,6 +6,7 @@ const authRoutes = require('./routes/auth')
 const adminRoutes = require('./routes/admin')
 const interactionRoutes = require('./routes/interaction')
 const oidc = require('./oidc')
+const { rollbar } = require('./rollbar')
 
 const PORT = Number(process.env.PORT || 4000)
 
@@ -40,6 +41,7 @@ async function main() {
       error_description: err.error_description,
       stack: err.stack,
     })
+    if (rollbar) rollbar.error(err, req)
     if (res.headersSent) return next(err)
     const status = err.status || err.statusCode || 500
     res.status(status).type('html').send(
