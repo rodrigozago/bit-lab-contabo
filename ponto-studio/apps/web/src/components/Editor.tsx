@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import {
   Tldraw,
   AssetRecordType,
+  createShapeId,
   type Editor as TldrawEditor,
   type TLComponents,
   type TLShape,
@@ -14,7 +15,7 @@ import { PanelRight, Eye } from "lucide-react";
 import { HOOP_PX_PER_MM, type CanvasSize, type EmbroideryElement, type EmbroideryProject } from "@ponto-studio/shared";
 import { useProjectStore, type SaveStatus } from "../store/projectStore.ts";
 import { api } from "../api/client.ts";
-import { rectToSvgPath } from "../utils/geometry.ts";
+import { rectToSvgPath, parseRectSvgPath } from "../utils/geometry.ts";
 import { splitSvgByColor, splitSvgIntoRegions, recolorSvg } from "../utils/svgLayers.ts";
 import { findShapeByElementId, setShapesHidden } from "../utils/canvasShapes.ts";
 import { findLayerMetrics, suggestStitchParams } from "../utils/stitchHeuristics.ts";
@@ -323,48 +324,71 @@ export function Editor({ project, onProjectChange }: Props) {
 
     if (initialSvgLoaded.current || !localProject) return;
 
-    const initialElement = localProject.elements.find(el => el.svgContent);
-    if (initialElement?.svgContent) {
-      // marca antes do async — StrictMode monta duas vezes e duplicaria o shape
+    // Recria no canvas TODAS as partes salvas (não só a primeira), cada uma na
+    // POSIÇÃO/TAMANHO persistidos no svgPath (antes o load ignorava o svgPath
+    // e jogava tudo no centro do viewport a 100×100 — as partes reabriam no
+    // lugar errado). Recolore com el.color (a cor pode ter mudado depois da
+    // importação e o svgContent guarda a cor antiga). Só partes com svgContent
+    // (importadas/texto) viram shape de imagem; shapes desenhados à mão sem
+    // svgContent seguem fora deste caminho, como antes.
+    const savedElements = localProject.elements.filter((el) => el.svgContent);
+    if (savedElements.length > 0) {
+      // marca antes do async — StrictMode monta duas vezes e duplicaria os shapes
       initialSvgLoaded.current = true;
-      const loadInitialSvg = async () => {
-        const svgBlob = new Blob([initialElement.svgContent!], { type: "image/svg+xml" });
-        const svgDataUrl = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = reject;
-          reader.readAsDataURL(svgBlob);
-        });
+      const vp = editor.getViewportPageBounds();
+      const rotatedAfter: Array<{ id: TLShapeId; rotation: number }> = [];
 
-        const svgAssetId = AssetRecordType.createId();
-        editor.createAssets([{
-          id: svgAssetId, type: "image", typeName: "asset",
-          props: { name: "bordado.svg", src: svgDataUrl, w: 100, h: 100, mimeType: "image/svg+xml", isAnimated: false },
-          meta: {},
-        }]);
+      const loadSavedElements = async () => {
+        for (const el of savedElements) {
+          const recolored = recolorSvg(el.svgContent!, el.color);
+          const dataUrl = await svgToDataUrl(recolored);
 
-        const vp = editor.getViewportPageBounds();
-        // Respeita a visibilidade e rotação persistidas da parte ao recriar o shape
-        const hidden = !!initialElement.hidden;
-        const rotation = initialElement.rotation ?? 0;
-        editor.createShape({
-          type: "image",
-          x: vp.x + (vp.w - 100) / 2, y: vp.y + (vp.h - 100) / 2,
-          opacity: hidden ? 0 : 1,
-          isLocked: hidden,
-          rotation,
-          props: { assetId: svgAssetId, w: 100, h: 100 },
-          // sem referência associada (elemento legado recarregado) — ainda
-          // assim ganha um importGroupId próprio pra aparecer como grupo
-          // no painel de partes.
-          meta: {
-            layer: 'embroidery', elementId: initialElement.id,
-            importGroupId: crypto.randomUUID(), importGroupName: "Bordado",
-            ...(hidden ? { prevOpacity: 1 } : {}),
-          },
-        } as Parameters<typeof editor.createShape>[0]);
+          // Posição/tamanho reais do svgPath; fallback (legado sem svgPath
+          // utilizável) = centro do viewport a 100×100.
+          const rect = parseRectSvgPath(el.svgPath) ?? {
+            x: vp.x + (vp.w - 100) / 2, y: vp.y + (vp.h - 100) / 2, w: 100, h: 100,
+          };
+          const hidden = !!el.hidden;
+          const rotation = el.rotation ?? 0;
+
+          const assetId = AssetRecordType.createId();
+          editor.createAssets([{
+            id: assetId, type: "image", typeName: "asset",
+            props: { name: "bordado.svg", src: dataUrl, w: rect.w, h: rect.h, mimeType: "image/svg+xml", isAnimated: false },
+            meta: {},
+          }]);
+
+          const shapeId = createShapeId();
+          editor.createShape({
+            id: shapeId,
+            type: "image",
+            // x/y = canto do retângulo NÃO-rotacionado (o svgPath é sempre o
+            // rect não-rotacionado centrado no centro de rotação — ver o
+            // listener de sync). A rotação em torno do CENTRO é aplicada depois
+            // via rotateShapesBy, mesma semântica da rotação feita pelo usuário.
+            x: rect.x, y: rect.y,
+            opacity: hidden ? 0 : 1,
+            isLocked: hidden,
+            props: { assetId, w: rect.w, h: rect.h },
+            meta: {
+              layer: "embroidery", elementId: el.id,
+              importGroupId: el.groupId ?? crypto.randomUUID(),
+              importGroupName: el.groupName ?? "Bordado",
+              ...(hidden ? { prevOpacity: 1 } : {}),
+            },
+          } as Parameters<typeof editor.createShape>[0]);
+
+          if (rotation !== 0) rotatedAfter.push({ id: shapeId, rotation });
+        }
+
+        // Rotaciona as partes rotacionadas em torno do próprio centro (o
+        // rotateShapesBy usa o centro do bounds = mesma âncora da rotação do
+        // usuário), agora que já estão no lugar/tamanho certos.
+        for (const { id, rotation } of rotatedAfter) {
+          editor.rotateShapesBy([id], rotation);
+        }
       };
-      loadInitialSvg().catch((err) => {
+      loadSavedElements().catch((err) => {
         toast.error(
           `Erro ao carregar o desenho do projeto: ${err instanceof Error ? err.message : "erro desconhecido"}`
         );
