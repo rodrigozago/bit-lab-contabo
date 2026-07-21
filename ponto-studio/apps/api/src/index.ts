@@ -16,6 +16,8 @@ import { authRoutes } from "./routes/auth.js";
 import { startResultListener } from "./services/jobQueue.js";
 import { startCleanup } from "./services/cleanup.js";
 import { migrate } from "./db.js";
+import { config } from "./config.js";
+import { readSession } from "./services/session.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -25,9 +27,27 @@ const app = Fastify({ logger: { level: "info" } });
 // opcional), aqui não faz sentido subir a API sem conseguir ler/gravar dados.
 await migrate();
 
-await app.register(cors, { origin: true, credentials: true });
+// CORS fixado na origem do app (não reflete qualquer Origin) — ver
+// docs/SEGURANCA-PRE-LANCAMENTO.md item 4. Em dev, libera as portas locais
+// do Vite/preview além do publicUrl.
+const corsOrigins = config.isProd
+  ? [config.publicUrl]
+  : [config.publicUrl, /^http:\/\/localhost:\d+$/];
+await app.register(cors, { origin: corsOrigins, credentials: true });
 await app.register(cookie);
 await app.register(multipart, { limits: { fileSize: 10 * 1024 * 1024 } });
+
+// Gate de sessão pros arquivos estáticos (exports = arquivos de bordado
+// gerados; uploads = imagens do usuário). Os nomes são UUIDs, mas antes
+// qualquer um com a URL baixava o arquivo — agora exige sessão. Ver
+// docs/SEGURANCA-PRE-LANCAMENTO.md item 7. (Não amarra por dono ainda —
+// os nomes UUID não são enumeráveis; amarrar arquivo→dono é fast-follow.)
+app.addHook("onRequest", async (req, reply) => {
+  if (req.url.startsWith("/exports/") || req.url.startsWith("/uploads/")) {
+    const user = await readSession(req);
+    if (!user) return reply.status(401).send({ ok: false, error: "não autenticado" });
+  }
+});
 
 // Serve exports (arquivos de bordado gerados)
 await app.register(staticFiles, {

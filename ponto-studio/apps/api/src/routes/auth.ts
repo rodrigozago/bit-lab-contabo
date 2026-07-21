@@ -28,7 +28,8 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const { sub, email, isAdmin, returnTo } = await finishAuth(params);
-    req.log.info({ sub, email, isAdmin }, "login OIDC concluído");
+    // sem e-mail no log (PII) — sub já identifica o usuário se precisar cruzar
+    req.log.info({ sub, isAdmin }, "login OIDC concluído");
 
     await createSession(reply, { sub, email, isAdmin });
     return reply.redirect(safeReturnTo(returnTo));
