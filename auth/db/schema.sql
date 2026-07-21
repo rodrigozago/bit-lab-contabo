@@ -43,3 +43,20 @@ CREATE TABLE IF NOT EXISTS access_requests (
 -- pode acumular à vontade, só a pendente precisa ser única).
 CREATE UNIQUE INDEX IF NOT EXISTS access_requests_pending_unique
   ON access_requests (user_id, app_id) WHERE status = 'pending';
+
+-- Trilha de auditoria das ações de admin (criar/deletar usuário, resetar
+-- senha, conceder/revogar acesso). Sem isto não há como investigar uma conta
+-- comprometida ou acesso indevido. Ver
+-- ponto-studio/docs/SEGURANCA-PRE-LANCAMENTO.md item 11. actor_id não é FK
+-- (ON DELETE) de propósito: o log tem que sobreviver à remoção do ator.
+CREATE TABLE IF NOT EXISTS audit_log (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  actor_id UUID,
+  actor_email TEXT,
+  action TEXT NOT NULL,
+  target TEXT,
+  detail JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS audit_log_created_at ON audit_log (created_at DESC);

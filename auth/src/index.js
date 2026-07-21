@@ -15,7 +15,13 @@ async function main() {
   await bootstrap()
 
   const app = express()
-  app.set('trust proxy', true) // atrás do nginx da VPS — pra req.ip/rate-limit funcionarem certo
+  // Confia no proxy pra req.ip/rate-limit lerem o X-Forwarded-For. `true`
+  // (confia em qualquer hop) é o correto AQUI: o nginx chega no container pela
+  // rede do docker (não loopback), então 'loopback'/IP fixo quebraria o
+  // req.ip. É seguro porque só o loopback do host é exposto (nginx da VPS na
+  // frente) — ninguém de fora injeta XFF direto no container. Ver
+  // ponto-studio/docs/SEGURANCA-PRE-LANCAMENTO.md item 15.
+  app.set('trust proxy', true)
 
   app.use(cookieParser())
 

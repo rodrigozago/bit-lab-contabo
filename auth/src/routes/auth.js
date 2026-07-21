@@ -38,8 +38,12 @@ router.post('/login', express.urlencoded({ extended: false }), async (req, res) 
   const { email, password, redirect } = req.body
   const ip = req.ip || 'unknown'
 
-  const okRate = await checkLimit(`login:${ip}:${(email || '').toLowerCase()}`, 10, 15 * 60)
-  if (!okRate) {
+  // Dois limites: por (IP+email) contra brute-force numa conta específica, E
+  // por IP puro contra um atacante que ROTACIONA o e-mail pra escapar do
+  // limite por conta. Ver ponto-studio/docs/SEGURANCA-PRE-LANCAMENTO.md item 17.
+  const okPerAccount = await checkLimit(`login:${ip}:${(email || '').toLowerCase()}`, 10, 15 * 60)
+  const okPerIp = await checkLimit(`login-ip:${ip}`, 50, 15 * 60)
+  if (!okPerAccount || !okPerIp) {
     return res.status(429).type('html').send(renderLogin({
       error: 'Muitas tentativas — tente de novo em alguns minutos.', redirect,
     }))

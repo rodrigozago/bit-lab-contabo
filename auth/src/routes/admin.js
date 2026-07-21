@@ -3,6 +3,7 @@ const usersModel = require('../models/users')
 const appsModel = require('../models/apps')
 const appAccessModel = require('../models/appAccess')
 const accessRequestsModel = require('../models/accessRequests')
+const auditLog = require('../models/auditLog')
 const { requireSession, requireAdmin } = require('../middleware')
 const { renderAdmin } = require('../views/admin')
 
@@ -30,7 +31,9 @@ router.post('/api/users', async (req, res) => {
   const { email, password, isAdmin } = req.body
   if (!email || !password) return res.status(400).json({ error: 'email e senha são obrigatórios' })
   try {
-    res.json(await usersModel.create({ email, password, isAdmin: !!isAdmin }))
+    const created = await usersModel.create({ email, password, isAdmin: !!isAdmin })
+    await auditLog.record(req.user, 'user.create', created.email, { isAdmin: !!isAdmin })
+    res.json(created)
   } catch (err) {
     handlePgError(err, res)
   }
@@ -40,11 +43,13 @@ router.post('/api/users/:id/reset-password', async (req, res) => {
   const { password } = req.body
   if (!password) return res.status(400).json({ error: 'senha é obrigatória' })
   await usersModel.resetPassword(req.params.id, password)
+  await auditLog.record(req.user, 'user.reset_password', req.params.id)
   res.json({ ok: true })
 })
 
 router.delete('/api/users/:id', async (req, res) => {
   await usersModel.remove(req.params.id)
+  await auditLog.record(req.user, 'user.delete', req.params.id)
   res.json({ ok: true })
 })
 
@@ -77,11 +82,13 @@ router.post('/api/access', async (req, res) => {
   const { userId, appId } = req.body
   if (!userId || !appId) return res.status(400).json({ error: 'userId e appId são obrigatórios' })
   await appAccessModel.grant(userId, appId)
+  await auditLog.record(req.user, 'access.grant', userId, { appId })
   res.json({ ok: true })
 })
 
 router.delete('/api/access/:userId/:appId', async (req, res) => {
   await appAccessModel.revoke(req.params.userId, req.params.appId)
+  await auditLog.record(req.user, 'access.revoke', req.params.userId, { appId: req.params.appId })
   res.json({ ok: true })
 })
 
@@ -93,12 +100,14 @@ router.get('/api/access-requests', async (req, res) => {
 router.post('/api/access-requests/:id/approve', async (req, res) => {
   const request = await accessRequestsModel.approve(req.params.id, req.user.userId)
   if (!request) return res.status(404).json({ error: 'solicitação não encontrada ou já decidida' })
+  await auditLog.record(req.user, 'access_request.approve', req.params.id)
   res.json({ ok: true })
 })
 
 router.post('/api/access-requests/:id/reject', async (req, res) => {
   const request = await accessRequestsModel.reject(req.params.id, req.user.userId)
   if (!request) return res.status(404).json({ error: 'solicitação não encontrada ou já decidida' })
+  await auditLog.record(req.user, 'access_request.reject', req.params.id)
   res.json({ ok: true })
 })
 

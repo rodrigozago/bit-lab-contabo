@@ -116,8 +116,11 @@ router.post('/:uid/login', express.urlencoded({ extended: false }), async (req, 
     const { email, password } = req.body
     const ip = req.ip || 'unknown'
 
-    const okRate = await checkLimit(`login:${ip}:${(email || '').toLowerCase()}`, 10, 15 * 60)
-    if (!okRate) {
+    // dois limites (por conta + por IP puro) — mesmo motivo do POST /login em
+    // routes/auth.js (item 17 do SEGURANCA-PRE-LANCAMENTO.md)
+    const okPerAccount = await checkLimit(`login:${ip}:${(email || '').toLowerCase()}`, 10, 15 * 60)
+    const okPerIp = await checkLimit(`login-ip:${ip}`, 50, 15 * 60)
+    if (!okPerAccount || !okPerIp) {
       return res.status(429).type('html').send(loginPage(uid, { error: 'Muitas tentativas — tente de novo em alguns minutos.' }))
     }
 

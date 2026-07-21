@@ -95,6 +95,12 @@ const configuration = {
     return {
       accountId: id,
       async claims() {
+        // ATENÇÃO: email_verified é sempre `true` por design — o signup NÃO
+        // faz verificação de e-mail por link. Nenhum RP deve confiar nesta
+        // claim como garantia de que o e-mail foi confirmado. Se um dia
+        // precisar dessa garantia, implementar verificação no signup e
+        // refletir o valor real aqui. Ver
+        // ponto-studio/docs/SEGURANCA-PRE-LANCAMENTO.md item 10.
         return { sub: id, email: user.email, email_verified: true, is_admin: user.is_admin }
       },
     }
