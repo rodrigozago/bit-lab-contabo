@@ -10,7 +10,7 @@ import {
 } from "@tldraw/tldraw";
 import "@tldraw/tldraw/tldraw.css";
 import type { ImperativePanelHandle } from "react-resizable-panels";
-import { PanelRight } from "lucide-react";
+import { PanelRight, Eye } from "lucide-react";
 import { HOOP_PX_PER_MM, type CanvasSize, type EmbroideryElement, type EmbroideryProject } from "@ponto-studio/shared";
 import { useProjectStore, type SaveStatus } from "../store/projectStore.ts";
 import { api } from "../api/client.ts";
@@ -178,6 +178,18 @@ export function Editor({ project, onProjectChange }: Props) {
   const [showHistory, setShowHistory] = useState(false);
   const [tldrawEditor, setTldrawEditor] = useState<TldrawEditor | null>(null);
   const [selectedShapeIds, setSelectedShapeIds] = useState<TLShapeId[]>([]);
+  // ── Preview de bordado no canvas (Fase 8.2) ──
+  // Ligado, troca o `src` do asset de cada parte pelo SVG de PONTOS gerado
+  // pelo motor real (/api/preview) — o SHAPE é o mesmo (id/meta/bounds/
+  // rotação intactos), então mover/esticar/girar continuam funcionando e o
+  // sync com o EmbroideryElement não muda em nada. Desligado, restaura o src
+  // original (SVG chapado). `previewOriginalSrc` guarda o src real de cada
+  // elemento trocado; `previewGeneration` invalida respostas de jobs que
+  // chegarem depois de o usuário desligar/religar o preview no meio.
+  const [stitchPreviewOn, setStitchPreviewOn] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const previewOriginalSrc = useRef<Map<string, string>>(new Map());
+  const previewGeneration = useRef(0);
   const initialSvgLoaded = useRef(false);
   // Evita reentrância no listener abaixo quando ELE MESMO chama updateShapes
   // pra propagar um resize entre os shapes de um mesmo grupo de import.
@@ -382,10 +394,13 @@ export function Editor({ project, onProjectChange }: Props) {
     const imgX = hoop.x + (hoop.w - canvasW) / 2;
     const imgY = hoop.y + (hoop.h - canvasH) / 2;
 
-    // Liga referência + todas as cores do bordado num grupo: redimensionar
-    // qualquer uma delas redimensiona as outras junto (mantém alinhadas), e
-    // é a mesma chave que o painel de camadas (estilo Photoshop) usa pra
-    // agrupar "Imagem de referência" + "Bordado" numa árvore por importação.
+    // Liga todas as cores do bordado num grupo: redimensionar qualquer uma
+    // delas redimensiona as outras junto (mantém alinhadas). A foto de
+    // referência NÃO vira mais um shape no canvas (Fase 8.1 — nascia oculta e
+    // só confundia; a imagem original continua disponível no modal de import
+    // durante a análise, que é onde ela é útil). O checkbox "Foto de
+    // referência" do PartsPanel some sozinho — depende de shapes com
+    // meta.layer === "reference", que não são mais criados.
     const importGroupId = crypto.randomUUID();
     const existingGroupIds = new Set(
       tldrawEditor.getCurrentPageShapes().map((s) => s.meta?.["importGroupId"]).filter(Boolean)
@@ -393,24 +408,7 @@ export function Editor({ project, onProjectChange }: Props) {
     const baseName = file.name.replace(/\.[^./]+$/, "").trim();
     const importGroupName = baseName || `Bordado ${existingGroupIds.size + 1}`;
 
-    // ── Camada 1: imagem de referência ──
-    const imageAssetId = AssetRecordType.createId();
-    tldrawEditor.createAssets([{
-      id: imageAssetId, type: "image", typeName: "asset",
-      props: { name: file.name, src: previewDataUrl, w: dims.w, h: dims.h, mimeType: "image/png", isAnimated: false },
-      meta: {},
-    }]);
-    // Referência nasce OCULTA por padrão (mesmo truque de isLocked+opacity:0
-    // usado no toggle de visibilidade — prevOpacity guarda o valor de volta
-    // quando o usuário reativar a foto pelo painel de Partes) — o usuário
-    // normalmente só quer ver o bordado, não a foto original por baixo.
-    tldrawEditor.createShape({
-      type: "image", x: imgX, y: imgY, opacity: 0, isLocked: true,
-      props: { assetId: imageAssetId, w: canvasW, h: canvasH },
-      meta: { layer: 'reference', importGroupId, importGroupName, prevOpacity: 0.4 },
-    } as Parameters<typeof tldrawEditor.createShape>[0]);
-
-    // ── Camada 2: áreas do bordado, UMA POR COR ──
+    // ── Áreas do bordado, UMA POR COR ──
     // O SVG da análise é separado por cor: todas as regiões da mesma cor
     // (mesmo desconectadas) viram um único elemento/camada, com configuração
     // de ponto própria. Cada cor ganha um shape empilhado na mesma posição,
@@ -512,33 +510,137 @@ export function Editor({ project, onProjectChange }: Props) {
   // canvas é uma imagem estática (asset gerado uma vez na importação) — se a
   // cor mudou, regenera o asset recolorido pra refletir no canvas também
   // (antes, mudar a cor só afetava o dado, não o que aparecia na tela).
+  /** Asset do shape de imagem vinculado a um elemento (null se não achou). */
+  function getElementAsset(elementId: string) {
+    if (!tldrawEditor) return null;
+    const shape = findShapeByElementId(tldrawEditor, elementId);
+    if (!shape) return null;
+    const assetId = (shape.props as { assetId?: string }).assetId;
+    if (!assetId) return null;
+    const asset = tldrawEditor.getAsset(assetId as Parameters<typeof tldrawEditor.getAsset>[0]);
+    return asset ? { assetId, asset } : null;
+  }
+
+  /** Troca o src de um asset preservando o resto das props (updateAssets NÃO
+   * faz merge profundo — passar só { src } derrubaria w/h/mimeType). */
+  function setAssetSrc(assetId: string, src: string) {
+    if (!tldrawEditor) return;
+    const current = tldrawEditor.getAsset(assetId as Parameters<typeof tldrawEditor.getAsset>[0]);
+    if (!current) return;
+    tldrawEditor.updateAssets([
+      { id: assetId, type: "image", props: { ...current.props, src } },
+    ] as Parameters<typeof tldrawEditor.updateAssets>[0]);
+  }
+
+  /** Pede o SVG de pontos de um elemento ao motor real e espera ficar pronto
+   * (com prazo — sem worker rodando, o job ficaria na fila pra sempre). */
+  async function fetchPreviewSvg(el: EmbroideryElement): Promise<string> {
+    const { jobId } = await api.preview.create({ element: el, canvas: localProject.canvas });
+    const deadline = Date.now() + 90_000;
+    while (Date.now() < deadline) {
+      const job = await api.preview.poll(jobId);
+      if (job.status === "done") {
+        if (!job.svg) throw new Error("Preview terminou sem SVG");
+        return job.svg;
+      }
+      if (job.status === "error") throw new Error(job.errorMessage ?? "Falha ao gerar o preview");
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    throw new Error("Tempo esgotado gerando o preview — o worker está rodando?");
+  }
+
+  /** Gera e aplica o preview de pontos de UM elemento (asset src do shape). */
+  async function applyPreviewToElement(el: EmbroideryElement, generation: number) {
+    const info = getElementAsset(el.id);
+    if (!info) return;
+    const svg = await fetchPreviewSvg(el);
+    if (generation !== previewGeneration.current) return; // preview desligado no meio
+    const dataUrl = await svgToDataUrl(svg);
+    if (generation !== previewGeneration.current) return;
+    // guarda o src REAL só na primeira troca (refreshes subsequentes não
+    // podem sobrescrever o original com um preview anterior)
+    if (!previewOriginalSrc.current.has(el.id)) {
+      previewOriginalSrc.current.set(el.id, (info.asset.props as { src: string }).src);
+    }
+    setAssetSrc(info.assetId, dataUrl);
+  }
+
+  async function toggleStitchPreview() {
+    if (!tldrawEditor) return;
+
+    if (stitchPreviewOn) {
+      previewGeneration.current++;
+      setStitchPreviewOn(false);
+      setPreviewLoading(false);
+      for (const [elementId, src] of previewOriginalSrc.current) {
+        const info = getElementAsset(elementId);
+        if (info) setAssetSrc(info.assetId, src);
+      }
+      previewOriginalSrc.current.clear();
+      return;
+    }
+
+    // Só elementos com svgContent têm preview (a rota exige; formas simples
+    // desenhadas à mão são shapes nativos do tldraw, sem asset pra trocar).
+    const candidates = localProject.elements.filter((e) => e.svgContent);
+    if (candidates.length === 0) {
+      toast.info("Nenhuma parte com desenho importado pra pré-visualizar.");
+      return;
+    }
+
+    setStitchPreviewOn(true);
+    setPreviewLoading(true);
+    const generation = ++previewGeneration.current;
+    const results = await Promise.allSettled(
+      candidates.map((el) => applyPreviewToElement(el, generation))
+    );
+    if (generation !== previewGeneration.current) return;
+    setPreviewLoading(false);
+    const failed = results.filter((r) => r.status === "rejected").length;
+    if (failed > 0) {
+      toast.error(
+        `Preview de bordado falhou pra ${failed} parte${failed > 1 ? "s" : ""} — o worker está rodando?`
+      );
+    }
+  }
+
   async function handlePropertiesChange(elementId: string, patch: Partial<EmbroideryElement>) {
     // editar o ponto manualmente substitui a sugestão da heurística
     if (patch.stitch) patch = { ...patch, stitchSuggested: false };
     updateElement(elementId, patch);
-    if (!patch.color || !tldrawEditor) return;
+    if (!tldrawEditor) return;
 
+    const el = localProject.elements.find((e) => e.id === elementId);
+    if (!el?.svgContent) return;
+    // `localProject` deste closure ainda não viu o updateElement — aplica o
+    // patch em cima pra gerar preview/recolor com o estado novo.
+    const merged = { ...el, ...patch } as EmbroideryElement;
+
+    // Preview ligado: cor E tipo/densidade de ponto mudam o desenho dos
+    // pontos — regenera o preview desta parte (e atualiza o src REAL salvo,
+    // pro toggle off restaurar já com a cor nova).
+    if (stitchPreviewOn && (patch.color || patch.stitch)) {
+      try {
+        if (patch.color) {
+          const recolored = recolorSvg(merged.svgContent!, patch.color);
+          previewOriginalSrc.current.set(elementId, await svgToDataUrl(recolored));
+        }
+        await applyPreviewToElement(merged, previewGeneration.current);
+      } catch (err) {
+        toast.error(
+          `Erro ao atualizar o preview: ${err instanceof Error ? err.message : "erro desconhecido"}`
+        );
+      }
+      return;
+    }
+
+    if (!patch.color) return;
     try {
-      const el = localProject.elements.find((e) => e.id === elementId);
-      if (!el?.svgContent) return;
-
-      const recolored = recolorSvg(el.svgContent, patch.color);
+      const recolored = recolorSvg(merged.svgContent!, patch.color);
       const dataUrl = await svgToDataUrl(recolored);
-      const shape = tldrawEditor
-        .getCurrentPageShapes()
-        .find((s: TLShape) => s.meta?.["elementId"] === elementId);
-      if (!shape) return;
-
-      const assetId = (shape.props as { assetId: string }).assetId;
-      // updateAssets NÃO faz merge profundo de `props` — passar só { src }
-      // sobrescreve o objeto inteiro e derruba w/h/mimeType (ValidationError:
-      // props.w esperado number, veio undefined). Busca o asset atual e
-      // mescla manualmente antes de atualizar.
-      const currentAsset = tldrawEditor.getAsset(assetId as Parameters<typeof tldrawEditor.getAsset>[0]);
-      if (!currentAsset) return;
-      tldrawEditor.updateAssets([
-        { id: assetId, type: "image", props: { ...currentAsset.props, src: dataUrl } },
-      ] as Parameters<typeof tldrawEditor.updateAssets>[0]);
+      const info = getElementAsset(elementId);
+      if (!info) return;
+      setAssetSrc(info.assetId, dataUrl);
     } catch (err) {
       // o dado já foi salvo (updateElement); só o redesenho no canvas falhou
       toast.error(
@@ -594,6 +696,19 @@ export function Editor({ project, onProjectChange }: Props) {
             {/* Ações (importar/exportar/histórico/deletar) migraram pras seções
                 do painel direito — a topbar fica só com contexto + toggles. */}
             <div className="ml-auto flex items-center gap-2">
+              <Button
+                variant={stitchPreviewOn ? "secondary" : "ghost"}
+                size="icon"
+                className={stitchPreviewOn ? "size-7 text-primary" : "size-7"}
+                onClick={() => void toggleStitchPreview()}
+                title={stitchPreviewOn ? "Desligar preview do bordado" : "Ver preview do bordado (pontos reais)"}
+                aria-pressed={stitchPreviewOn}
+                disabled={previewLoading}
+              >
+                {previewLoading
+                  ? <div className="size-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  : <Eye />}
+              </Button>
               <Button variant="ghost" size="icon" className="size-7" onClick={toggleRightPanel} title="Mostrar/ocultar painel direito">
                 <PanelRight />
               </Button>

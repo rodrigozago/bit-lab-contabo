@@ -11,9 +11,8 @@ Column agora funciona em formas simples E complexas (extração geral de polígo
 por tipo, heurística de sugestão, rotação real. Validação empírica da Fase 4 no container ficou delegada
 ao teste manual do usuário no dev server (decisão dele em 2026-07-20 — Docker tinha caído; o SVG de teste
 curvo está descrito na Seção 8). Depois: Fase 5 (segmentação de partes,
-sem escopo), Fase 6 (Demais fills) e Fase 8 (melhorar partes — remover imagem de referência + preview
-de bordado dentro do tldraw; fora do escopo do motor de pontos, mapeamento do estado atual já feito, ver
-Seção 9). Fase 7 (reorganização de UI — toolbar unificada) foi CONCLUÍDA em 2026-07-20.
+sem escopo) e Fase 6 (Demais fills). Fases 7 (toolbar unificada) e 8 (melhorar partes — sem imagem de
+referência + preview de bordado no canvas) foram CONCLUÍDAS em 2026-07-20.
 
 ---
 
@@ -68,8 +67,8 @@ Seção 9). Fase 7 (reorganização de UI — toolbar unificada) foi CONCLUÍDA 
 - [ ] **Fase 6** — Demais fills (Guided, Linear Gradient, Tartan, Cross Stitch)
 - [x] **Fase 7** — Reorganização de UI: toolbar unificada ✅ 2026-07-20 (validação visual delegada ao
       teste manual do usuário no dev server)
-- [ ] **Fase 8** — Melhorar partes: remover imagem de referência + preview de bordado dentro do tldraw
-      (fora do escopo do motor de pontos; mapeamento do estado atual já feito, ver Seção 9)
+- [x] **Fase 8** — Melhorar partes: remover imagem de referência + preview de bordado dentro do tldraw
+      ✅ 2026-07-20 (validação visual delegada ao teste manual do usuário no dev server)
 
 ---
 
@@ -683,8 +682,21 @@ silenciosamente pra formas não-elegíveis, mesmo comportamento já aceito pro c
         ferramentas de desenho; (2) mover os grupos "Arquivo" e "Editar" da sidebar direita pra sidebar
         ESQUERDA (`app-sidebar.tsx`), abaixo do bloco "Projeto"; (3) resultado final: sidebar direita só
         com Propriedades + Partes.
-- [ ] **Fase 8 — Melhorar partes** — pedido explícito do usuário em 2026-07-20, **fora do escopo do motor
-      de pontos** (é UX do editor), registrado aqui a pedido do usuário. Dois itens:
+- [x] **Fase 8 — Melhorar partes** ✅ 2026-07-20 — IMPLEMENTADA no mesmo dia (ver log, Seção 13).
+      Como foi feita: **8.1** o bloco "Camada 1" do `handleImportConfirm` foi removido — nenhum shape com
+      `meta.layer="reference"` é mais criado; o checkbox "Foto de referência" do PartsPanel some sozinho
+      (era dirigido por `referenceIds`, agora sempre vazio). **8.2** botão-olho novo no header liga o modo
+      preview: pra cada parte com `svgContent`, chama `/api/preview` (a rota por elemento que estava
+      pronta e nunca conectada) e TROCA o `src` do asset do MESMO shape pelo SVG de pontos — decisão de
+      design importante: não são 2 shapes/cópias (como o pedido original sugeria), é o mesmo shape com
+      outro asset, então posição/tamanho/rotação/sync com o EmbroideryElement continuam funcionando sem
+      NENHUMA mudança no listener de sync; desligar restaura o src original. Mudar cor/tipo de ponto com
+      preview ligado regenera o preview daquela parte. Guardas: `previewGeneration` invalida jobs que
+      chegam depois de desligar; polling com prazo de 90s (sem worker rodando o job ficaria na fila pra
+      sempre); partes sem `svgContent` (formas desenhadas à mão, shapes nativos sem asset) ficam de fora.
+      tsc limpo + 67 testes web; validação visual delegada ao dev server do usuário (o preview REAL exige
+      worker+Redis rodando). Texto original do pedido (mantido pra referência): pedido explícito do
+      usuário em 2026-07-20, **fora do escopo do motor de pontos** (é UX do editor). Dois itens:
 
       **8.1 Remover imagem de referência.** Hoje `Editor.tsx::handleImportConfirm` (~linha 354, bloco
       "Camada 1", linhas 388–403) cria um shape de imagem do tldraw (`AssetRecordType` + `createShape`,
@@ -803,3 +815,4 @@ nos mesmos arquivos da Fase 1. **Fase 4 criou 2 arquivos novos** (geometria de e
 | 2026-07-20 | Fase 3 (3.1–3.4) | Satin Column real (`satinColumn`), escopo reduzido a formas simples (decisão explícita do usuário) — trilhos extraídos trivialmente do bbox retangular; fallback pra tatami quando há `svgContent`; opção "Cetim" some da UI nesse caso. Achado: coluna reta gera geometria idêntica a zigzag_stitch simples (a diferença só aparece em colunas curvas, fora do escopo). e2e validado com os 8 tipos via SVG de produção real (3018 pontos, 8 blocos, todos com geometria) | c2123c4 |
 | 2026-07-20 | Fase 4 (4.1–4.5) | Satin Column pra formas complexas (pedido explícito do usuário) — `flattenPathData` (novo, achata curvas C/S/Q/T/A em polilinha) + `extractSatinRails` (novo arquivo `satinRails.ts`: PCA, split em 2 trilhos, reamostragem por arco); achado crítico corrigido: pontas RETAS (vértices empatados no extremo) quebravam o split em 1-lado-vs-3-lados, fix via `collapseTiedEnds`. "Cetim" não esconde mais da UI pra partes com `svgContent`. 68 testes API (19 novos: 9 flattenPathData + 5 extractSatinRails + 5 svgConverter) + 67 web, tsc limpo. Validação empírica no container delegada ao teste manual do usuário no dev server (Docker tinha caído; decisão do usuário) | be5ddab |
 | 2026-07-20 | Fase 7 (7.1–7.3) | Reorganização de UI: CanvasToolbar absorveu agrupar/desagrupar/girar/espelhar (botões-ícone) + alinhar/distribuir (DropdownMenu lateral); ShapeActionsPanel.tsx removido; grupos Editar/Arquivo migraram pra sidebar esquerda (app-sidebar.tsx, prop projectActions); painel direito só Partes+Propriedades; resíduos nativos do tldraw (MenuPanel/StylePanel/ActionsMenu/QuickActions) desligados. tsc limpo + 67 testes web; validação visual delegada ao dev server do usuário | 63e2f21 |
+| 2026-07-20 | Fase 8 (8.1–8.3) | Import não cria mais o shape de imagem de referência (checkbox do PartsPanel some sozinho); botão-olho no header liga preview de bordado NO CANVAS: troca o src do asset de cada parte pelo SVG de pontos do /api/preview (rota por elemento que estava pronta e morta) — mesmo shape, então mover/esticar/girar e o sync continuam intactos; cor/ponto mudando com preview ligado regenera; guardas de corrida (generation) + prazo de 90s no polling. tsc limpo + 67 testes web; validação visual delegada ao dev server do usuário | (não commitado ainda nesta sessão) |
