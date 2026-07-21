@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { EmbroideryElement } from "@ponto-studio/shared";
-import { splitSvgByColor, normalizeColor, recolorSvg, composeThumbnail, normalizeSvgToFillContainer } from "./svgLayers.ts";
+import { splitSvgByColor, splitSvgIntoRegions, normalizeColor, recolorSvg, composeThumbnail, normalizeSvgToFillContainer } from "./svgLayers.ts";
 
 function makeElement(overrides: Partial<EmbroideryElement> = {}): EmbroideryElement {
   return {
@@ -72,6 +72,47 @@ describe("splitSvgByColor", () => {
 
   it("retorna vazio para conteúdo que não é SVG", () => {
     expect(splitSvgByColor("<div>oi</div>")).toEqual([]);
+  });
+});
+
+describe("splitSvgIntoRegions", () => {
+  it("divide uma camada (g fill com N paths) em N SVGs de 1 path cada, mesmo viewBox", () => {
+    const svg = `<svg ${NS} viewBox="0 0 100 100">
+  <g fill="#ff0000">
+    <path d="M0 0h10v10H0Z"/>
+    <path d="M50 50h10v10H50Z"/>
+    <path d="M80 0h10v10H80Z"/>
+  </g>
+</svg>`;
+    const regions = splitSvgIntoRegions(svg);
+    expect(regions).toHaveLength(3);
+    for (const region of regions) {
+      expect((region.match(/<path/g) ?? []).length).toBe(1);
+      expect(region).toContain('viewBox="0 0 100 100"');
+      // fill herdado do <g> vira fill explícito na região
+      expect(region).toContain('fill="#ff0000"');
+    }
+    // as coordenadas absolutas de cada região são preservadas
+    expect(regions[1]).toContain("M50 50");
+  });
+
+  it("com 1 path só (nada a separar) devolve o SVG original intacto", () => {
+    const svg = `<svg ${NS} viewBox="0 0 10 10"><g fill="#123456"><path d="M0 0Z"/></g></svg>`;
+    expect(splitSvgIntoRegions(svg)).toEqual([svg]);
+  });
+
+  it("conteúdo que não é SVG devolve o original intacto", () => {
+    expect(splitSvgIntoRegions("<div>oi</div>")).toEqual(["<div>oi</div>"]);
+  });
+
+  it("path com fill próprio (formato da IA, sem g) preserva a cor do path", () => {
+    const svg = `<svg ${NS} viewBox="0 0 20 20">
+      <path d="M0 0h5v5H0Z" fill="#aa0000"/>
+      <path d="M10 10h5v5H10Z" fill="#aa0000"/>
+    </svg>`;
+    const regions = splitSvgIntoRegions(svg);
+    expect(regions).toHaveLength(2);
+    expect(regions[0]).toContain('fill="#aa0000"');
   });
 });
 

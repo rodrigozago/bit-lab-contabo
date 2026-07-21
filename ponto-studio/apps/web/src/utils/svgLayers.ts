@@ -179,6 +179,40 @@ export function composeThumbnail(elements: EmbroideryElement[]): string | null {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${adjustedViewBox}" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style="display:block;">${innerParts.join("")}</svg>`;
 }
 
+/**
+ * Divide o svgContent de uma PARTE nas suas regiões desconectadas — um
+ * documento SVG por `<path>` (Fase 5: separação sob demanda). O vtracer emite
+ * um `<path>` por região conectada da cor (buracos são subpaths do MESMO
+ * path, então um "O" continua inteiro com o miolo vazado); é o agrupamento
+ * por cor (group_paths_by_color/splitSvgByColor) que junta regiões soltas
+ * numa parte só — esta função desfaz exatamente esse agrupamento, mantendo o
+ * viewBox/attrs do root (as coordenadas de cada região continuam absolutas
+ * no mesmo espaço, então os N SVGs se sobrepõem no lugar certo).
+ * Com menos de 2 paths não há o que separar — devolve `[svg]`.
+ */
+export function splitSvgIntoRegions(svg: string): string[] {
+  const doc = new DOMParser().parseFromString(svg, "image/svg+xml");
+  const docEl = doc.documentElement as Element | undefined;
+  const root = docEl && docEl.tagName?.toLowerCase() === "svg" ? docEl : doc.querySelector("svg");
+  if (!root) return [svg];
+
+  const paths = Array.from(doc.querySelectorAll("path"));
+  if (paths.length < 2) return [svg];
+
+  const rootAttrs = Array.from(root.attributes)
+    .map((a) => `${a.name}="${a.value}"`)
+    .join(" ");
+  const serializer = new XMLSerializer();
+
+  return paths.map((p) => {
+    const color = effectiveFill(p);
+    const clone = p.cloneNode(true) as Element;
+    clone.setAttribute("fill", color);
+    clone.removeAttribute("style");
+    return `<svg ${rootAttrs}>\n  <g fill="${color}">\n    ${serializer.serializeToString(clone)}\n  </g>\n</svg>`;
+  });
+}
+
 export function splitSvgByColor(svg: string): ColorLayer[] {
   const doc = new DOMParser().parseFromString(svg, "image/svg+xml");
   // documentElement é o caminho normal; happy-dom (testes) não o popula em

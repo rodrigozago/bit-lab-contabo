@@ -124,6 +124,38 @@ export function useProjectStore(
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /**
+   * Fase 5 (separação sob demanda): substitui um elemento por N clones, um
+   * por região desconectada (`regionSvgs` vem de splitSvgIntoRegions) — mesma
+   * cor/ponto/bbox/rotação, nomes "base 1..N", inseridos NA MESMA posição do
+   * array (a posição é a ordem de costura na máquina; as regiões continuam
+   * costurando no lugar da parte original). Ids são gerados FORA do updater:
+   * o StrictMode roda updaters 2x em dev, e efeitos colaterais lá dentro
+   * (gerar id, push em array) dobrariam.
+   */
+  const splitElement = useCallback((id: string, regionSvgs: string[]): string[] => {
+    if (regionSvgs.length < 2) return [];
+    const newIds = regionSvgs.map(() => crypto.randomUUID());
+    setProject((p) => {
+      const idx = p.elements.findIndex((e) => e.id === id);
+      if (idx === -1) return p;
+      const orig = p.elements[idx]!;
+      const base = orig.name?.trim() || "Região";
+      const clones: EmbroideryElement[] = regionSvgs.map((svgContent, i) => ({
+        ...orig,
+        id: newIds[i]!,
+        svgContent,
+        name: `${base} ${i + 1}`,
+      }));
+      const elements = [...p.elements.slice(0, idx), ...clones, ...p.elements.slice(idx + 1)];
+      const next = { ...p, elements, updatedAt: new Date().toISOString() };
+      scheduleSync(next);
+      return next;
+    });
+    setSelectedElementId(newIds[0]!);
+    return newIds;
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const removeElement = useCallback((id: string) => {
     setProject((p) => {
       const next = {
@@ -147,6 +179,7 @@ export function useProjectStore(
     updateElement,
     moveElement,
     toggleElementHidden,
+    splitElement,
     removeElement,
     saveStatus,
     lastSavedAt,

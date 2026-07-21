@@ -15,7 +15,7 @@ import { HOOP_PX_PER_MM, type CanvasSize, type EmbroideryElement, type Embroider
 import { useProjectStore, type SaveStatus } from "../store/projectStore.ts";
 import { api } from "../api/client.ts";
 import { rectToSvgPath } from "../utils/geometry.ts";
-import { splitSvgByColor, recolorSvg } from "../utils/svgLayers.ts";
+import { splitSvgByColor, splitSvgIntoRegions, recolorSvg } from "../utils/svgLayers.ts";
 import { findShapeByElementId, setShapesHidden } from "../utils/canvasShapes.ts";
 import { findLayerMetrics, suggestStitchParams } from "../utils/stitchHeuristics.ts";
 import { PropertiesPanel } from "./PropertiesPanel.tsx";
@@ -165,6 +165,7 @@ export function Editor({ project, onProjectChange }: Props) {
     updateElement,
     moveElement,
     toggleElementHidden,
+    splitElement,
     removeElement,
     saveStatus,
     lastSavedAt,
@@ -649,6 +650,63 @@ export function Editor({ project, onProjectChange }: Props) {
     }
   }
 
+  // ── Separação de regiões (Fase 5) ──
+  // Nº de regiões desconectadas da parte selecionada — habilita o botão
+  // "Separar regiões" do PropertiesPanel quando >= 2.
+  const selectedRegionCount = useMemo(() => {
+    if (!selectedElement?.svgContent) return 0;
+    return splitSvgIntoRegions(selectedElement.svgContent).length;
+  }, [selectedElement?.svgContent]);
+
+  /**
+   * Divide a parte selecionada nas suas regiões desconectadas: o store troca
+   * o elemento por N clones (mesma cor/ponto, nomes "base 1..N", mesma
+   * posição na ordem de costura) e o canvas troca o shape original por N
+   * shapes idênticos em posição/tamanho/rotação — cada região continua
+   * desenhando no mesmo lugar porque todos os SVGs compartilham o viewBox
+   * original (coordenadas absolutas).
+   */
+  async function handleSplitElement(elementId: string) {
+    if (!tldrawEditor) return;
+    const el = localProject.elements.find((e) => e.id === elementId);
+    if (!el?.svgContent) return;
+    const regions = splitSvgIntoRegions(el.svgContent);
+    if (regions.length < 2) return;
+
+    const shape = findShapeByElementId(tldrawEditor, elementId);
+    const newIds = splitElement(elementId, regions);
+    if (newIds.length === 0) return;
+
+    try {
+      if (shape && shape.type === "image") {
+        const { x, y, rotation } = shape;
+        const shapeProps = shape.props as { w: number; h: number };
+        const baseMeta = { ...shape.meta };
+        for (const [i, regionSvg] of regions.entries()) {
+          const dataUrl = await svgToDataUrl(recolorSvg(regionSvg, el.color));
+          const assetId = AssetRecordType.createId();
+          tldrawEditor.createAssets([{
+            id: assetId, type: "image", typeName: "asset",
+            props: { name: `regiao-${i + 1}.svg`, src: dataUrl, w: shapeProps.w, h: shapeProps.h, mimeType: "image/svg+xml", isAnimated: false },
+            meta: {},
+          }]);
+          tldrawEditor.createShape({
+            type: "image", x, y, rotation,
+            props: { assetId, w: shapeProps.w, h: shapeProps.h },
+            meta: { ...baseMeta, elementId: newIds[i] },
+          } as Parameters<typeof tldrawEditor.createShape>[0]);
+        }
+        tldrawEditor.deleteShapes([shape.id]);
+      }
+      // o elemento antigo não existe mais — o src salvo pelo preview morre junto
+      previewOriginalSrc.current.delete(elementId);
+    } catch (err) {
+      toast.error(
+        `Erro ao separar as regiões no canvas: ${err instanceof Error ? err.message : "erro desconhecido"}`
+      );
+    }
+  }
+
   async function handleDeleteProject() {
     if (!window.confirm(`Deletar projeto "${localProject.name}"? Esta ação não pode ser desfeita.`)) return;
     setDeleting(true);
@@ -747,6 +805,8 @@ export function Editor({ project, onProjectChange }: Props) {
                   element={selectedElement}
                   onChange={(patch) => { void handlePropertiesChange(selectedElement.id, patch); }}
                   onDelete={() => handleDeleteElement(selectedElement.id)}
+                  regionCount={selectedRegionCount}
+                  onSplit={() => { void handleSplitElement(selectedElement.id); }}
                 />
               ) : (
                 <div className="flex flex-col items-center justify-center gap-2 border-t p-4 text-center">

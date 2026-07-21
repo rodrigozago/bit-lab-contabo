@@ -10,8 +10,8 @@ rodando com 8 tipos de ponto (Tatami/Contour/Meander/Circular/Running/Zigzag/Rip
 Column agora funciona em formas simples E complexas (extração geral de polígono, curvas incluídas), UI
 por tipo, heurística de sugestão, rotação real. Validação empírica da Fase 4 no container ficou delegada
 ao teste manual do usuário no dev server (decisão dele em 2026-07-20 — Docker tinha caído; o SVG de teste
-curvo está descrito na Seção 8). Depois: Fase 5 (segmentação de partes,
-sem escopo) e Fase 6 (Demais fills). Fases 7 (toolbar unificada) e 8 (melhorar partes — sem imagem de
+curvo está descrito na Seção 8). Falta só a Fase 6 (Demais fills — exige Docker pra validação). Fases 5
+(separação de regiões sob demanda), 7 (toolbar unificada) e 8 (melhorar partes — sem imagem de
 referência + preview de bordado no canvas) foram CONCLUÍDAS em 2026-07-20.
 
 ---
@@ -63,7 +63,8 @@ referência + preview de bordado no canvas) foram CONCLUÍDAS em 2026-07-20.
 - [x] **Fase 3** — Satin Column (formas simples) ✅ 2026-07-20
 - [x] **Fase 4** — Satin Column pra formas complexas (extração geral de polígono) ✅ 2026-07-20 —
       validação empírica delegada ao teste manual do usuário no dev server
-- [ ] **Fase 5** — Revisão: segmentação de partes por cor (ainda sem escopo)
+- [x] **Fase 5** — Segmentação de partes: separação de regiões sob demanda ✅ 2026-07-20 (validação
+      visual delegada ao teste manual do usuário no dev server)
 - [ ] **Fase 6** — Demais fills (Guided, Linear Gradient, Tartan, Cross Stitch)
 - [x] **Fase 7** — Reorganização de UI: toolbar unificada ✅ 2026-07-20 (validação visual delegada ao
       teste manual do usuário no dev server)
@@ -640,14 +641,19 @@ silenciosamente pra formas não-elegíveis, mesmo comportamento já aceito pro c
 
 ## 9. Fase 5+ (fast-follow)
 
-- [ ] **Revisão: segmentação de partes por cor** — hoje `analyze.py` separa uma "parte" do bordado por
-      COR (k-means + vtracer, uma camada por cor). O usuário observou que isso pode não ser a melhor
-      abordagem (ex.: duas regiões da mesma cor mas que fazem mais sentido como partes de ponto
-      diferentes, ou uma única forma que merece virar 2+ partes por outro critério que não cor). Ainda
-      **sem pesquisa nem escopo definidos** — é uma questão de arquitetura da ANÁLISE DE IMAGEM
-      (`workers/embroidery/analyze.py` + `apps/web/src/utils/svgLayers.ts`), não do motor de pontos em si;
-      pode fazer mais sentido como um documento de plano separado deste (este aqui é especificamente sobre
-      a migração pro Ink/Stitch). Pedido explícito do usuário em 2026-07-20, ainda não iniciado.
+- [x] **Fase 5 — Segmentação de partes: separação de regiões sob demanda** ✅ 2026-07-20 — escopo
+      decidido com o usuário (opção "separar sob demanda"; separação automática no import e "mesclar
+      partes" ficaram DE FORA por escolha explícita — mesclar pode virar fase futura). Achado que definiu
+      o design: o vtracer já emite **um `<path>` por região conectada** (buracos são subpaths do mesmo
+      path — um "O" fica inteiro com o miolo vazado); é o agrupamento por cor (`group_paths_by_color` no
+      worker + `splitSvgByColor` no cliente) que funde regiões soltas numa parte — ou seja, separar não
+      exigiu mexer NADA na análise de imagem, só desfazer o agrupamento no cliente. Implementação:
+      `splitSvgIntoRegions` (`svgLayers.ts`) gera um SVG por path mantendo o viewBox original (regiões
+      continuam no lugar certo, coordenadas absolutas); `projectStore.splitElement` troca o elemento por
+      N clones NA MESMA posição do array (ordem de costura preservada; nomes "base 1..N"; ids gerados
+      fora do updater — StrictMode roda updaters 2x); `Editor.handleSplitElement` cria N shapes no mesmo
+      x/y/w/h/rotação e deleta o original; botão "Separar regiões (N)" no PropertiesPanel (só aparece com
+      2+ regiões). Se quiser voltar atrás depois: "mesclar partes" é o candidato natural de fase futura.
 - [ ] **Fase 6 — Demais fills**: Guided (com linha-guia), Linear Gradient, Tartan, Cross Stitch.
 - [x] **Fase 7 — Reorganização de UI: toolbar unificada** ✅ 2026-07-20 — IMPLEMENTADA no mesmo dia
       (ver log, Seção 13): `CanvasToolbar.tsx` absorveu as ações de forma (agrupar/desagrupar/girar/
@@ -816,3 +822,4 @@ nos mesmos arquivos da Fase 1. **Fase 4 criou 2 arquivos novos** (geometria de e
 | 2026-07-20 | Fase 4 (4.1–4.5) | Satin Column pra formas complexas (pedido explícito do usuário) — `flattenPathData` (novo, achata curvas C/S/Q/T/A em polilinha) + `extractSatinRails` (novo arquivo `satinRails.ts`: PCA, split em 2 trilhos, reamostragem por arco); achado crítico corrigido: pontas RETAS (vértices empatados no extremo) quebravam o split em 1-lado-vs-3-lados, fix via `collapseTiedEnds`. "Cetim" não esconde mais da UI pra partes com `svgContent`. 68 testes API (19 novos: 9 flattenPathData + 5 extractSatinRails + 5 svgConverter) + 67 web, tsc limpo. Validação empírica no container delegada ao teste manual do usuário no dev server (Docker tinha caído; decisão do usuário) | be5ddab |
 | 2026-07-20 | Fase 7 (7.1–7.3) | Reorganização de UI: CanvasToolbar absorveu agrupar/desagrupar/girar/espelhar (botões-ícone) + alinhar/distribuir (DropdownMenu lateral); ShapeActionsPanel.tsx removido; grupos Editar/Arquivo migraram pra sidebar esquerda (app-sidebar.tsx, prop projectActions); painel direito só Partes+Propriedades; resíduos nativos do tldraw (MenuPanel/StylePanel/ActionsMenu/QuickActions) desligados. tsc limpo + 67 testes web; validação visual delegada ao dev server do usuário | 63e2f21 |
 | 2026-07-20 | Fase 8 (8.1–8.3) | Import não cria mais o shape de imagem de referência (checkbox do PartsPanel some sozinho); botão-olho no header liga preview de bordado NO CANVAS: troca o src do asset de cada parte pelo SVG de pontos do /api/preview (rota por elemento que estava pronta e morta) — mesmo shape, então mover/esticar/girar e o sync continuam intactos; cor/ponto mudando com preview ligado regenera; guardas de corrida (generation) + prazo de 90s no polling. tsc limpo + 67 testes web; validação visual delegada ao dev server do usuário | 347d86b |
+| 2026-07-20 | Fase 5 (5.1–5.2) | Separação de regiões sob demanda (escopo decidido com o usuário; automática no import e mesclar ficaram de fora). splitSvgIntoRegions (um SVG por path do vtracer, viewBox preservado), projectStore.splitElement (N clones na mesma posição da ordem de costura, nomes "base 1..N"), Editor.handleSplitElement (N shapes no mesmo lugar, original deletado), botão "Separar regiões (N)" no PropertiesPanel. 73 testes web (6 novos), tsc limpo; validação visual delegada ao dev server do usuário | (não commitado ainda nesta sessão) |

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronRight, Sparkles, Trash2 } from "lucide-react";
+import { ChevronRight, Scissors, Sparkles, Trash2 } from "lucide-react";
 import type { EmbroideryElement, StitchParams, StitchType } from "@ponto-studio/shared";
 import { cn } from "@/lib/utils.ts";
 import { Button } from "@/components/ui/button.tsx";
@@ -62,9 +62,12 @@ interface Props {
   element: EmbroideryElement;
   onChange: (patch: Partial<EmbroideryElement>) => void;
   onDelete: () => void;
+  /** Nº de regiões desconectadas da parte (Fase 5) — o botão Separar só aparece com 2+. */
+  regionCount?: number;
+  onSplit?: () => void;
 }
 
-export function PropertiesPanel({ element, onChange, onDelete }: Props) {
+export function PropertiesPanel({ element, onChange, onDelete, regionCount, onSplit }: Props) {
   const { stitch, color } = element;
   const [advancedOpen, setAdvancedOpen] = useState(false);
   // "satin" (legado) usa os mesmos controles de "contour" — sempre foi a mesma coisa
@@ -370,6 +373,16 @@ export function PropertiesPanel({ element, onChange, onDelete }: Props) {
             )}
           </CollapsibleContent>
         </Collapsible>
+
+        {regionCount !== undefined && regionCount >= 2 && onSplit && (
+          <Button
+            variant="outline"
+            onClick={onSplit}
+            title="Divide esta parte nas regiões desconectadas — cada uma vira uma parte própria, com o mesmo ponto/cor, pra você configurar separado"
+          >
+            <Scissors /> Separar regiões ({regionCount})
+          </Button>
+        )}
 
         <Button variant="outline" className="text-destructive hover:text-destructive" onClick={onDelete}>
           <Trash2 /> Remover área

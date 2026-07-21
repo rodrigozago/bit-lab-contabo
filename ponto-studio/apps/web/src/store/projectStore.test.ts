@@ -235,4 +235,54 @@ describe("useProjectStore", () => {
     expect(result.current.saveStatus).toBe("saved");
     expect(onSync).toHaveBeenCalledTimes(2);
   });
+
+  it("splitElement troca o elemento por N clones NA MESMA posição (ordem de costura preservada)", () => {
+    const { result } = renderHook(() => useProjectStore(makeProject()));
+
+    let before = "", middle = "", after = "";
+    act(() => {
+      before = result.current.addElement("M 0 0 Z", "#111111");
+      middle = result.current.addElement("M 0 0 Z", "#ff0000", "<svg>2 regioes</svg>", { name: "Coração" });
+      after = result.current.addElement("M 0 0 Z", "#222222");
+    });
+
+    let newIds: string[] = [];
+    act(() => {
+      newIds = result.current.splitElement(middle, ["<svg>r1</svg>", "<svg>r2</svg>"]);
+    });
+
+    expect(newIds).toHaveLength(2);
+    const ids = result.current.project.elements.map((e) => e.id);
+    // clones ocupam a posição do original, entre before e after
+    expect(ids).toEqual([before, newIds[0], newIds[1], after]);
+    const [r1, r2] = newIds.map((id) => result.current.project.elements.find((e) => e.id === id)!);
+    expect(r1.name).toBe("Coração 1");
+    expect(r2.name).toBe("Coração 2");
+    expect(r1.color).toBe("#ff0000"); // cor/ponto herdados do original
+    expect(r1.svgContent).toBe("<svg>r1</svg>");
+    expect(r2.svgContent).toBe("<svg>r2</svg>");
+    // a primeira região fica selecionada
+    expect(result.current.selectedElement?.id).toBe(newIds[0]);
+  });
+
+  it("splitElement sem nome usa \"Região 1..N\" e ignora chamadas com <2 regiões", () => {
+    const { result } = renderHook(() => useProjectStore(makeProject()));
+
+    let id = "";
+    act(() => {
+      id = result.current.addElement("M 0 0 Z", "#000", "<svg></svg>");
+    });
+
+    let noop: string[] = ["sentinela"];
+    act(() => {
+      noop = result.current.splitElement(id, ["<svg>única</svg>"]);
+    });
+    expect(noop).toEqual([]);
+    expect(result.current.project.elements).toHaveLength(1);
+
+    act(() => {
+      result.current.splitElement(id, ["<svg>a</svg>", "<svg>b</svg>", "<svg>c</svg>"]);
+    });
+    expect(result.current.project.elements.map((e) => e.name)).toEqual(["Região 1", "Região 2", "Região 3"]);
+  });
 });
