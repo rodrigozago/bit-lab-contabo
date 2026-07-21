@@ -1,5 +1,5 @@
 import * as React from "react"
-import { FolderKanban } from "lucide-react"
+import { FolderKanban, ImageUp, Type as TypeIcon, Download, History as HistoryIcon, Trash2 } from "lucide-react"
 import { Link } from "react-router-dom"
 import type { CanvasSize } from "@ponto-studio/shared"
 
@@ -25,9 +25,25 @@ interface ProjectContext {
   canvas: CanvasSize
 }
 
+/**
+ * Ações de projeto do Editor (Fase 7 — antes viviam nos grupos "Arquivo"/
+ * "Editar" da sidebar DIREITA; migraram pra cá pra sidebar direita ficar só
+ * com Propriedades + Partes). Os handlers/modais continuam no Editor.
+ */
+export interface ProjectActions {
+  onImportImage: () => void
+  onAddText: () => void
+  onExport: () => void
+  onHistory: () => void
+  onDeleteProject: () => void
+  deleting: boolean
+}
+
 interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
   /** Presente só no Editor — mostra nome do projeto e bastidor na sidebar. */
   projectContext?: ProjectContext
+  /** Presente só no Editor — grupos Arquivo/Editar abaixo do bloco Projeto. */
+  projectActions?: ProjectActions
 }
 
 const navGroups = [
@@ -46,9 +62,10 @@ const navGroups = [
 /**
  * Sidebar de navegação compartilhada entre as duas dashboards (Home e Editor),
  * no padrão do shadcn-dashboard-landing-template: header brandado, NavMain,
- * NavUser no footer, colapsável pra ícones com SidebarRail.
+ * NavUser no footer, colapsável pra ícones com SidebarRail. No Editor, também
+ * carrega o bloco "Projeto" e os grupos Editar/Arquivo (via projectActions).
  */
-export function AppSidebar({ projectContext, ...props }: AppSidebarProps) {
+export function AppSidebar({ projectContext, projectActions, ...props }: AppSidebarProps) {
   return (
     <Sidebar collapsible="icon" variant="inset" {...props}>
       <SidebarHeader>
@@ -83,6 +100,56 @@ export function AppSidebar({ projectContext, ...props }: AppSidebarProps) {
               </p>
             </SidebarGroupContent>
           </SidebarGroup>
+        )}
+
+        {projectActions && (
+          <>
+            <SidebarGroup>
+              <SidebarGroupLabel>Editar</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton onClick={projectActions.onImportImage} tooltip="Importar imagem">
+                      <ImageUp /> <span>Importar imagem</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton onClick={projectActions.onAddText} tooltip="Adicionar texto">
+                      <TypeIcon /> <span>Adicionar texto</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton onClick={projectActions.onExport} tooltip="Exportar bordado">
+                      <Download /> <span>Exportar bordado</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+
+            <SidebarGroup>
+              <SidebarGroupLabel>Arquivo</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton onClick={projectActions.onHistory} tooltip="Histórico do projeto">
+                      <HistoryIcon /> <span>Histórico</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      onClick={projectActions.onDeleteProject}
+                      disabled={projectActions.deleting}
+                      tooltip="Deletar projeto"
+                      className="text-destructive hover:text-destructive"
+                    >
+                      <Trash2 /> <span>Deletar projeto</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          </>
         )}
       </SidebarContent>
       <SidebarFooter>

@@ -10,7 +10,7 @@ import {
 } from "@tldraw/tldraw";
 import "@tldraw/tldraw/tldraw.css";
 import type { ImperativePanelHandle } from "react-resizable-panels";
-import { ImageUp, Type as TypeIcon, Download, History as HistoryIcon, Trash2, PanelRight } from "lucide-react";
+import { PanelRight } from "lucide-react";
 import { HOOP_PX_PER_MM, type CanvasSize, type EmbroideryElement, type EmbroideryProject } from "@ponto-studio/shared";
 import { useProjectStore, type SaveStatus } from "../store/projectStore.ts";
 import { api } from "../api/client.ts";
@@ -19,7 +19,6 @@ import { splitSvgByColor, recolorSvg } from "../utils/svgLayers.ts";
 import { findShapeByElementId, setShapesHidden } from "../utils/canvasShapes.ts";
 import { findLayerMetrics, suggestStitchParams } from "../utils/stitchHeuristics.ts";
 import { PropertiesPanel } from "./PropertiesPanel.tsx";
-import { ShapeActionsPanel } from "./ShapeActionsPanel.tsx";
 import { PartsPanel } from "./PartsPanel.tsx";
 import { CanvasToolbar } from "./CanvasToolbar.tsx";
 import { ExportModal } from "./ExportModal.tsx";
@@ -30,7 +29,7 @@ import { HistoryModal } from "./HistoryModal.tsx";
 import type { ImportConfirmPayload } from "./ImportModal.tsx";
 import { AppSidebar } from "@/components/app-sidebar";
 import { ModeToggle } from "@/components/mode-toggle";
-import { SidebarProvider, SidebarInset, SidebarTrigger, SidebarGroup, SidebarGroupLabel, SidebarGroupContent } from "@/components/ui/sidebar.tsx";
+import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar.tsx";
 import { Separator } from "@/components/ui/separator.tsx";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable.tsx";
 import { Button } from "@/components/ui/button.tsx";
@@ -123,16 +122,25 @@ function SaveStatusIndicator({
   );
 }
 
-// ── UI do tldraw enxuta (EDIT-2) ────────────────────────────────────────────────
+// ── UI do tldraw enxuta (EDIT-2 + Fase 7) ──────────────────────────────────────
 // A toolbar horizontal nativa do tldraw fica desligada (Toolbar: null) — as
 // ferramentas agora vivem no CanvasToolbar vertical (estilo Photoshop) sobreposto
 // à esquerda do canvas, que dirige a mesma API do tldraw (setCurrentTool).
 // Sem PageMenu: o projeto não tem conceito de múltiplas páginas (1 EmbroideryProject = 1 canvas).
+// Fase 7: MenuPanel (hambúrguer do canto superior-esquerdo, com Edit/View/Export
+// nativos), StylePanel, ActionsMenu e QuickActions também desligados — eram
+// resíduo herdado (nunca foram nulados de propósito) e competiam visualmente
+// com o CanvasToolbar/sidebars custom, além de expor ações duplicadas (export
+// SVG/PNG nativo, agrupar nativo etc.) fora do fluxo do app.
 // OnTheCanvas é criado por componente (useMemo no Editor) porque precisa do
 // canvas.widthMm/heightMm do projeto pra desenhar o overlay do bastidor.
 const baseTldrawComponents: Omit<TLComponents, "OnTheCanvas"> = {
   Toolbar: null,
   PageMenu: null,
+  MenuPanel: null,
+  StylePanel: null,
+  ActionsMenu: null,
+  QuickActions: null,
 };
 
 // ── Main Editor Component ─────────────────────────────────────────────────────
@@ -210,7 +218,7 @@ export function Editor({ project, onProjectChange }: Props) {
     editor.getInitialMetaForShape = () => ({ layer: "embroidery" });
 
     // Seleção no canvas → seleciona o elemento de bordado vinculado (meta.elementId)
-    // e mantém a lista bruta de shapes selecionados (pro ShapeActionsPanel).
+    // e mantém a lista bruta de shapes selecionados (pras ações do CanvasToolbar).
     editor.store.listen(() => {
       const selectedIds = editor.getSelectedShapeIds();
       setSelectedShapeIds(selectedIds);
@@ -564,7 +572,17 @@ export function Editor({ project, onProjectChange }: Props) {
       }
       className="h-svh overflow-hidden"
     >
-      <AppSidebar projectContext={{ name: localProject.name, canvas: localProject.canvas }} />
+      <AppSidebar
+        projectContext={{ name: localProject.name, canvas: localProject.canvas }}
+        projectActions={{
+          onImportImage: () => setShowImport(true),
+          onAddText: () => setShowTextTool(true),
+          onExport: () => setShowExport(true),
+          onHistory: () => setShowHistory(true),
+          onDeleteProject: handleDeleteProject,
+          deleting,
+        }}
+      />
       <SidebarInset className="overflow-hidden">
         {/* ── Topbar ── */}
         <header className="flex h-(--header-height) shrink-0 items-center gap-2 border-b">
@@ -592,7 +610,7 @@ export function Editor({ project, onProjectChange }: Props) {
                 portais do Radix (dropdown do usuário/logout, tooltip da sidebar). */}
             <div className="relative h-full isolate">
               <Tldraw onMount={handleMount} components={tldrawComponents} />
-              {tldrawEditor && <CanvasToolbar editor={tldrawEditor} />}
+              {tldrawEditor && <CanvasToolbar editor={tldrawEditor} selectedShapeIds={selectedShapeIds} />}
             </div>
           </ResizablePanel>
           <ResizableHandle withHandle />
@@ -624,44 +642,9 @@ export function Editor({ project, onProjectChange }: Props) {
                 </div>
               )}
 
-              {/* ── ARQUIVO ── */}
-              <SidebarGroup>
-                <SidebarGroupLabel>Arquivo</SidebarGroupLabel>
-                <SidebarGroupContent className="grid grid-cols-2 gap-1.5">
-                  <Button variant="secondary" size="sm" onClick={() => setShowHistory(true)} title="Histórico do projeto">
-                    <HistoryIcon /> Histórico
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="text-destructive hover:text-destructive"
-                    onClick={handleDeleteProject}
-                    disabled={deleting}
-                    title="Deletar projeto"
-                  >
-                    <Trash2 /> Deletar
-                  </Button>
-                </SidebarGroupContent>
-              </SidebarGroup>
-
-              {/* ── EDITAR ── */}
-              <SidebarGroup>
-                <SidebarGroupLabel>Editar</SidebarGroupLabel>
-                <SidebarGroupContent className="flex flex-col gap-1.5">
-                  <Button variant="outline" size="sm" onClick={() => setShowImport(true)}>
-                    <ImageUp /> Importar imagem
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => setShowTextTool(true)}>
-                    <TypeIcon /> Adicionar texto
-                  </Button>
-                  <Button size="sm" onClick={() => setShowExport(true)}>
-                    <Download /> Exportar bordado
-                  </Button>
-                </SidebarGroupContent>
-              </SidebarGroup>
-
-              {/* ── FERRAMENTAS / ALINHAR / DISTRIBUIR ── */}
-              <ShapeActionsPanel editor={tldrawEditor} selectedShapeIds={selectedShapeIds} />
+              {/* Arquivo/Editar migraram pra sidebar ESQUERDA (AppSidebar,
+                  projectActions) e as ações de forma pro CanvasToolbar —
+                  Fase 7: este painel é só Partes + Propriedades. */}
             </div>
           </ResizablePanel>
         </ResizablePanelGroup>

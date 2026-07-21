@@ -11,10 +11,9 @@ Column agora funciona em formas simples E complexas (extração geral de polígo
 por tipo, heurística de sugestão, rotação real. Validação empírica da Fase 4 no container ficou delegada
 ao teste manual do usuário no dev server (decisão dele em 2026-07-20 — Docker tinha caído; o SVG de teste
 curvo está descrito na Seção 8). Depois: Fase 5 (segmentação de partes,
-sem escopo), Fase 6 (Demais fills), Fase 7 (reorganização de UI — toolbar unificada) e Fase 8 (melhorar
-partes — remover imagem de referência + preview de bordado dentro do tldraw). Fases 7/8 são fora do
-escopo do motor de pontos, registradas a pedido do usuário; mapeamento do estado atual já feito pras 2
-(ver Seção 9).
+sem escopo), Fase 6 (Demais fills) e Fase 8 (melhorar partes — remover imagem de referência + preview
+de bordado dentro do tldraw; fora do escopo do motor de pontos, mapeamento do estado atual já feito, ver
+Seção 9). Fase 7 (reorganização de UI — toolbar unificada) foi CONCLUÍDA em 2026-07-20.
 
 ---
 
@@ -67,8 +66,8 @@ escopo do motor de pontos, registradas a pedido do usuário; mapeamento do estad
       validação empírica delegada ao teste manual do usuário no dev server
 - [ ] **Fase 5** — Revisão: segmentação de partes por cor (ainda sem escopo)
 - [ ] **Fase 6** — Demais fills (Guided, Linear Gradient, Tartan, Cross Stitch)
-- [ ] **Fase 7** — Reorganização de UI: toolbar unificada (fora do escopo do motor de pontos; mapeamento
-      do estado atual já feito, ver Seção 9)
+- [x] **Fase 7** — Reorganização de UI: toolbar unificada ✅ 2026-07-20 (validação visual delegada ao
+      teste manual do usuário no dev server)
 - [ ] **Fase 8** — Melhorar partes: remover imagem de referência + preview de bordado dentro do tldraw
       (fora do escopo do motor de pontos; mapeamento do estado atual já feito, ver Seção 9)
 
@@ -651,7 +650,16 @@ silenciosamente pra formas não-elegíveis, mesmo comportamento já aceito pro c
       pode fazer mais sentido como um documento de plano separado deste (este aqui é especificamente sobre
       a migração pro Ink/Stitch). Pedido explícito do usuário em 2026-07-20, ainda não iniciado.
 - [ ] **Fase 6 — Demais fills**: Guided (com linha-guia), Linear Gradient, Tartan, Cross Stitch.
-- [ ] **Fase 7 — Reorganização de UI: toolbar unificada** — pedido explícito do usuário em 2026-07-20,
+- [x] **Fase 7 — Reorganização de UI: toolbar unificada** ✅ 2026-07-20 — IMPLEMENTADA no mesmo dia
+      (ver log, Seção 13): `CanvasToolbar.tsx` absorveu as ações de forma (agrupar/desagrupar/girar/
+      espelhar como botões-ícone com estado disabled por seleção; alinhar/distribuir num DropdownMenu
+      lateral — 8 opções não cabiam no trilho vertical); `ShapeActionsPanel.tsx` foi REMOVIDO; grupos
+      "Editar"/"Arquivo" migraram pra sidebar esquerda (`app-sidebar.tsx`, prop nova `projectActions` —
+      handlers/modais continuam no Editor); painel direito ficou só com Partes + Propriedades; e os
+      resíduos nativos do tldraw (MenuPanel/StylePanel/ActionsMenu/QuickActions) foram desligados em
+      `baseTldrawComponents`. tsc limpo + 67 testes web OK; validação visual delegada ao teste manual do
+      usuário no dev server. Texto original do pedido (mantido pra referência): pedido explícito do
+      usuário em 2026-07-20,
       **fora do escopo do motor de pontos** (é reorganização de layout/UX do editor, não do Ink/Stitch);
       registrado aqui a pedido do usuário, mas é candidato a virar um documento de plano próprio se crescer.
       Mapeamento do estado ATUAL (pesquisado em 2026-07-20, ainda não escopado em passos de implementação):
@@ -794,3 +802,4 @@ nos mesmos arquivos da Fase 1. **Fase 4 criou 2 arquivos novos** (geometria de e
 | 2026-07-20 | Fase 2 (2.0–2.4) | Achado crítico corrigido: fill fantasma em stroke-family (FillStitch+Stroke não são mutuamente exclusivos no Ink/Stitch); `running` perdeu `angle` (nunca teve efeito real) e ganhou `repeats`/`beanStitchRepeats`; tipos novos `zigzag` e `ripple`; `buildStitchAttributes` devolve `{presentation, inkstitch}`; PropertiesPanel com controles novos; e2e validado com os 7 tipos via SVG de produção real (2702 pontos, 7 blocos, todos com geometria) | 2786631 |
 | 2026-07-20 | Fase 3 (3.1–3.4) | Satin Column real (`satinColumn`), escopo reduzido a formas simples (decisão explícita do usuário) — trilhos extraídos trivialmente do bbox retangular; fallback pra tatami quando há `svgContent`; opção "Cetim" some da UI nesse caso. Achado: coluna reta gera geometria idêntica a zigzag_stitch simples (a diferença só aparece em colunas curvas, fora do escopo). e2e validado com os 8 tipos via SVG de produção real (3018 pontos, 8 blocos, todos com geometria) | c2123c4 |
 | 2026-07-20 | Fase 4 (4.1–4.5) | Satin Column pra formas complexas (pedido explícito do usuário) — `flattenPathData` (novo, achata curvas C/S/Q/T/A em polilinha) + `extractSatinRails` (novo arquivo `satinRails.ts`: PCA, split em 2 trilhos, reamostragem por arco); achado crítico corrigido: pontas RETAS (vértices empatados no extremo) quebravam o split em 1-lado-vs-3-lados, fix via `collapseTiedEnds`. "Cetim" não esconde mais da UI pra partes com `svgContent`. 68 testes API (19 novos: 9 flattenPathData + 5 extractSatinRails + 5 svgConverter) + 67 web, tsc limpo. Validação empírica no container delegada ao teste manual do usuário no dev server (Docker tinha caído; decisão do usuário) | be5ddab |
+| 2026-07-20 | Fase 7 (7.1–7.3) | Reorganização de UI: CanvasToolbar absorveu agrupar/desagrupar/girar/espelhar (botões-ícone) + alinhar/distribuir (DropdownMenu lateral); ShapeActionsPanel.tsx removido; grupos Editar/Arquivo migraram pra sidebar esquerda (app-sidebar.tsx, prop projectActions); painel direito só Partes+Propriedades; resíduos nativos do tldraw (MenuPanel/StylePanel/ActionsMenu/QuickActions) desligados. tsc limpo + 67 testes web; validação visual delegada ao dev server do usuário | (não commitado ainda nesta sessão) |
