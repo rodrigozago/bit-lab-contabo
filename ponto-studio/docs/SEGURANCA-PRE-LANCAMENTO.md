@@ -8,6 +8,16 @@
 > idealmente também. 🟡 MÉDIO e 🟢 podem ser fast-follow pós-lançamento, mas estão listados pra não
 > se perderem.
 
+> **⚙️ Estado da implementação (2026-07-21):** todos os 18 itens de CÓDIGO foram implementados nesta
+> sessão (commits da Fase 10 — ver git log, prefixo "Segurança:"). O que RESTA é operacional e depende
+> de você, não de código: (a) **criar a conta/projetos no Rollbar** e pôr os tokens nos `.env` de
+> produção (o código já lê `ROLLBAR_SERVER_TOKEN`/`VITE_ROLLBAR_CLIENT_TOKEN` e fica no-op sem eles);
+> (b) **gerar os segredos de produção** frescos (`SESSION_SECRET`, `PONTO_STUDIO_OIDC_SECRET`/
+> `OIDC_CLIENT_SECRET`, `POSTGRES_PASSWORD`, `INITIAL_ADMIN_PASSWORD`); (c) **confirmar HSTS/headers no
+> nginx** da VPS (item 8 — a parte que fica no nginx, fora deste repo); (d) **decidir o self-signup** do
+> ponto-studio (item 13); (e) **backups** do Postgres + volume `jwks` (seção 19); (f) **disparar um erro
+> de teste** em cada superfície e confirmar que chega no Rollbar. Ver a seção 19 e o gate final (20).
+
 **Escopo auditado:** `ponto-studio/apps/api` (Fastify), `ponto-studio/apps/web` (React/SPA),
 `ponto-studio/workers/embroidery` (Python + Ink/Stitch), `auth/` (Express + oidc-provider), e o
 `docker-compose.yml` de cada um. **Fora do escopo desta rodada:** pentest ativo, revisão do nginx da VPS
@@ -18,26 +28,29 @@ valem pra todos os RPs.
 
 ## 0. Resumo por severidade
 
-| # | Severidade | Item | Onde |
-|---|---|---|---|
-| 1 | 🔴 BLOQUEADOR | Rotas da API sem autenticação nem checagem de dono (IDOR) | `apps/api/src/routes/{export,stitchPreview,preview,analyze,upload}.ts` |
-| 2 | 🔴 BLOQUEADOR | `SESSION_SECRET` com fallback fixo público no auth | `auth/src/oidc.js:61` |
-| 3 | 🔴 BLOQUEADOR | `OIDC_CLIENT_SECRET` aceita string vazia como default | `apps/api/src/config.ts:17` |
-| 4 | 🟠 ALTO | CORS reflete qualquer origem com credenciais | `apps/api/src/index.ts:28` |
-| 5 | 🟠 ALTO | Sem rate limit na API (upload/analyze/export) | `apps/api/src/index.ts` |
-| 6 | 🟠 ALTO | Rollbar (error tracking) ausente nas 4 superfícies | web/api/auth/worker |
-| 7 | 🟡 MÉDIO | `/exports` e `/uploads` servidos sem auth | `apps/api/src/index.ts:32-45` |
-| 8 | 🟡 MÉDIO | Sem headers de segurança no app (CSP/HSTS/etc.) | api + auth |
-| 9 | 🟡 MÉDIO | Sem validação de schema nos corpos de request | `apps/api/src/routes/*` |
-| 10 | 🟡 MÉDIO | `email_verified: true` fixo + signup sem verificação de e-mail | `auth/src/oidc.js`, `auth/src/routes/auth.js` |
-| 11 | 🟡 MÉDIO | Sem log de auditoria nas ações de admin | `auth/src/routes/admin.js` |
-| 12 | 🟡 MÉDIO | Persistência/segredo do JWKS (perder = derruba todos; vazar = forja tokens) | `auth` volume `jwks` |
-| 13 | 🟡 MÉDIO | Decisão de self-signup do ponto-studio | `auth` env `ALLOW_SELF_SIGNUP` |
-| 14 | 🟢 BAIXO | PII (e-mail/sub) logada em nível info | `apps/api/src/routes/auth.ts:32`, `auth/src/index.js` |
-| 15 | 🟢 BAIXO | `trust proxy: true` amplo demais | `auth/src/index.js:16` |
-| 16 | 🟢 BAIXO | Redis/Postgres sem senha (rede interna só) | ambos compose |
-| 17 | 🟢 BAIXO | Rate limit de login por IP+email (rotação de e-mail escapa) | `auth/src/routes/auth.js:44` |
-| 18 | 🟢 BAIXO | XXE potencial no parse de SVG pelo Ink/Stitch | `workers/embroidery` |
+| # | Severidade | Status | Item | Onde |
+|---|---|---|---|---|
+| 1 | 🔴 BLOQUEADOR | ✅ código | Rotas da API sem autenticação nem checagem de dono (IDOR) | `apps/api/src/routes/{export,stitchPreview,preview,analyze,upload}.ts` |
+| 2 | 🔴 BLOQUEADOR | ✅ código | `SESSION_SECRET` com fallback fixo público no auth | `auth/src/oidc.js` |
+| 3 | 🔴 BLOQUEADOR | ✅ código | `OIDC_CLIENT_SECRET` aceita string vazia como default | `apps/api/src/config.ts` |
+| 4 | 🟠 ALTO | ✅ código | CORS reflete qualquer origem com credenciais | `apps/api/src/index.ts` |
+| 5 | 🟠 ALTO | ✅ código | Sem rate limit na API (upload/analyze/export) | `apps/api/src/index.ts` |
+| 6 | 🟠 ALTO | ✅ código / ⏳ ops | Rollbar (error tracking) ausente nas 4 superfícies | web/api/auth/worker |
+| 7 | 🟡 MÉDIO | ✅ código | `/exports` e `/uploads` servidos sem auth | `apps/api/src/index.ts` |
+| 8 | 🟡 MÉDIO | ✅ código (api) / ⏳ nginx | Sem headers de segurança no app (CSP/HSTS/etc.) | api + nginx |
+| 9 | 🟡 MÉDIO | ✅ código | Sem validação de schema nos corpos de request | `apps/api/src/routes/*` |
+| 10 | 🟡 MÉDIO | ✅ decisão (documentado) | `email_verified: true` fixo + signup sem verificação de e-mail | `auth/src/oidc.js` |
+| 11 | 🟡 MÉDIO | ✅ código | Sem log de auditoria nas ações de admin | `auth/src/routes/admin.js`, `auth/src/models/auditLog.js` |
+| 12 | 🟡 MÉDIO | ⏳ ops | Persistência/segredo do JWKS (perder = derruba todos; vazar = forja tokens) | `auth` volume `jwks` |
+| 13 | 🟡 MÉDIO | ⏳ decisão | Decisão de self-signup do ponto-studio | `auth` env `ALLOW_SELF_SIGNUP` |
+| 14 | 🟢 BAIXO | ✅ código | PII (e-mail/sub) logada em nível info | `apps/api/src/routes/auth.ts` |
+| 15 | 🟢 BAIXO | ✅ documentado | `trust proxy: true` amplo demais | `auth/src/index.js` |
+| 16 | 🟢 BAIXO | ⏳ ops (opcional) | Redis/Postgres sem senha (rede interna só) | ambos compose |
+| 17 | 🟢 BAIXO | ✅ código | Rate limit de login por IP+email (rotação de e-mail escapa) | `auth/src/routes/{auth,interaction}.js` |
+| 18 | 🟢 BAIXO | ⏳ verificar | XXE potencial no parse de SVG pelo Ink/Stitch | `workers/embroidery` |
+
+Legenda: **✅ código** = corrigido no código nesta sessão; **⏳ ops** = depende de ação operacional sua
+(tokens/segredos/backups/nginx); **⏳ decisão** = decisão de negócio pendente; **⏳ verificar** = confirmar.
 
 **Já verificado OK (não precisa fazer nada):** subprocess do worker usa lista de args, sem `shell=True`
 (sem shell injection — `inkstitch_runner.py:96`); nenhum `.env` versionado no git (`.gitignore` cobre);
@@ -308,3 +321,4 @@ ponto-studio vai ser aberto (qualquer um cria conta e usa) ou fechado (admin pro
 | Data | O que | Quem |
 |------|-------|------|
 | 2026-07-20 | Auditoria inicial + este documento criado (18 achados + Rollbar + ops) | — |
+| 2026-07-21 | Todos os 18 itens de CÓDIGO implementados (7cc8c65, ca3bdb2, 476aa5b, dc3d799, fb0ceff, cbc9e61). Restam só os itens operacionais/decisão (Rollbar tokens, segredos de prod, HSTS no nginx, self-signup, backups, teste de erro no Rollbar) — ver o box "Estado da implementação" no topo. | — |

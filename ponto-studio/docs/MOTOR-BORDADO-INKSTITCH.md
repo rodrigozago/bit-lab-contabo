@@ -10,9 +10,10 @@ rodando com 8 tipos de ponto (Tatami/Contour/Meander/Circular/Running/Zigzag/Rip
 Column agora funciona em formas simples E complexas (extração geral de polígono, curvas incluídas), UI
 por tipo, heurística de sugestão, rotação real. Validação empírica da Fase 4 no container ficou delegada
 ao teste manual do usuário no dev server (decisão dele em 2026-07-20 — Docker tinha caído; o SVG de teste
-curvo está descrito na Seção 8). Faltam: Fase 6 (Demais fills — exige Docker), Fase 9 (ferramenta
-"Criar outline") e Fase 10 (segurança pré-lançamento — doc próprio SEGURANCA-PRE-LANCAMENTO.md, 3
-bloqueadores mapeados), todas registradas mas não iniciadas. Fases 5
+curvo está descrito na Seção 8). Faltam: Fase 6 (Demais fills — exige Docker) e Fase 9 (ferramenta
+"Criar outline"), registradas mas não iniciadas. Fase 10 (segurança pré-lançamento) teve todo o CÓDIGO
+implementado em 2026-07-21 — restam só itens operacionais (tokens Rollbar, segredos de prod, backups,
+HSTS no nginx), ver docs/SEGURANCA-PRE-LANCAMENTO.md. Fases 5
 (separação de regiões sob demanda), 7 (toolbar unificada) e 8 (melhorar partes — sem imagem de
 referência + preview de bordado no canvas) foram CONCLUÍDAS em 2026-07-20.
 
@@ -74,9 +75,11 @@ referência + preview de bordado no canvas) foram CONCLUÍDAS em 2026-07-20.
       ✅ 2026-07-20 (validação visual delegada ao teste manual do usuário no dev server)
 - [ ] **Fase 9** — Ferramenta "Criar outline": gerar uma parte de contorno a partir de uma parte
       existente (pedido do usuário em 2026-07-20; ainda não iniciada — ver Seção 9)
-- [ ] **Fase 10** — Segurança pré-lançamento (auditoria do ponto-studio + auth/, incl. Rollbar) —
-      **documento próprio**: [`docs/SEGURANCA-PRE-LANCAMENTO.md`](SEGURANCA-PRE-LANCAMENTO.md).
-      3 bloqueadores mapeados; ver Seção 9
+- [~] **Fase 10** — Segurança pré-lançamento (auditoria do ponto-studio + auth/, incl. Rollbar) —
+      **documento próprio**: [`docs/SEGURANCA-PRE-LANCAMENTO.md`](SEGURANCA-PRE-LANCAMENTO.md). Os 18
+      itens de CÓDIGO foram implementados em 2026-07-21 (3 bloqueadores + Rollbar nas 4 superfícies +
+      rate limit/helmet/schemas/CORS/audit log/etc.); restam só itens OPERACIONAIS (tokens do Rollbar,
+      segredos de prod, HSTS no nginx, self-signup, backups) — ver o doc. Ver Seção 9
 
 ---
 
@@ -857,3 +860,4 @@ nos mesmos arquivos da Fase 1. **Fase 4 criou 2 arquivos novos** (geometria de e
 | 2026-07-20 | Fase 7 (7.1–7.3) | Reorganização de UI: CanvasToolbar absorveu agrupar/desagrupar/girar/espelhar (botões-ícone) + alinhar/distribuir (DropdownMenu lateral); ShapeActionsPanel.tsx removido; grupos Editar/Arquivo migraram pra sidebar esquerda (app-sidebar.tsx, prop projectActions); painel direito só Partes+Propriedades; resíduos nativos do tldraw (MenuPanel/StylePanel/ActionsMenu/QuickActions) desligados. tsc limpo + 67 testes web; validação visual delegada ao dev server do usuário | 63e2f21 |
 | 2026-07-20 | Fase 8 (8.1–8.3) | Import não cria mais o shape de imagem de referência (checkbox do PartsPanel some sozinho); botão-olho no header liga preview de bordado NO CANVAS: troca o src do asset de cada parte pelo SVG de pontos do /api/preview (rota por elemento que estava pronta e morta) — mesmo shape, então mover/esticar/girar e o sync continuam intactos; cor/ponto mudando com preview ligado regenera; guardas de corrida (generation) + prazo de 90s no polling. tsc limpo + 67 testes web; validação visual delegada ao dev server do usuário | 347d86b |
 | 2026-07-20 | Fase 5 (5.1–5.2) | Separação de regiões sob demanda (escopo decidido com o usuário; automática no import e mesclar ficaram de fora). splitSvgIntoRegions (um SVG por path do vtracer, viewBox preservado), projectStore.splitElement (N clones na mesma posição da ordem de costura, nomes "base 1..N"), Editor.handleSplitElement (N shapes no mesmo lugar, original deletado), botão "Separar regiões (N)" no PropertiesPanel. 73 testes web (6 novos), tsc limpo; validação visual delegada ao dev server do usuário | 0959552 |
+| 2026-07-21 | Fase 10 (segurança) | Auditoria + 18 itens de código implementados nos 2 apps: 3 bloqueadores (IDOR nas rotas da API, SESSION_SECRET/OIDC_CLIENT_SECRET com fallback), CORS fixo, rate limit + helmet + schemas, estáticos com sessão, Rollbar nas 4 superfícies, audit log do admin, rate limit de login por IP. Restam itens operacionais (tokens/segredos/backups/nginx). Doc: SEGURANCA-PRE-LANCAMENTO.md | 7cc8c65…cbc9e61 |
