@@ -10,8 +10,9 @@ rodando com 8 tipos de ponto (Tatami/Contour/Meander/Circular/Running/Zigzag/Rip
 Column agora funciona em formas simples E complexas (extração geral de polígono, curvas incluídas), UI
 por tipo, heurística de sugestão, rotação real. Validação empírica da Fase 4 no container ficou delegada
 ao teste manual do usuário no dev server (decisão dele em 2026-07-20 — Docker tinha caído; o SVG de teste
-curvo está descrito na Seção 8). Faltam: Fase 6 (Demais fills — exige Docker pra validação) e Fase 9
-(ferramenta "Criar outline" — registrada, não iniciada). Fases 5
+curvo está descrito na Seção 8). Faltam: Fase 6 (Demais fills — exige Docker), Fase 9 (ferramenta
+"Criar outline") e Fase 10 (segurança pré-lançamento — doc próprio SEGURANCA-PRE-LANCAMENTO.md, 3
+bloqueadores mapeados), todas registradas mas não iniciadas. Fases 5
 (separação de regiões sob demanda), 7 (toolbar unificada) e 8 (melhorar partes — sem imagem de
 referência + preview de bordado no canvas) foram CONCLUÍDAS em 2026-07-20.
 
@@ -73,6 +74,9 @@ referência + preview de bordado no canvas) foram CONCLUÍDAS em 2026-07-20.
       ✅ 2026-07-20 (validação visual delegada ao teste manual do usuário no dev server)
 - [ ] **Fase 9** — Ferramenta "Criar outline": gerar uma parte de contorno a partir de uma parte
       existente (pedido do usuário em 2026-07-20; ainda não iniciada — ver Seção 9)
+- [ ] **Fase 10** — Segurança pré-lançamento (auditoria do ponto-studio + auth/, incl. Rollbar) —
+      **documento próprio**: [`docs/SEGURANCA-PRE-LANCAMENTO.md`](SEGURANCA-PRE-LANCAMENTO.md).
+      3 bloqueadores mapeados; ver Seção 9
 
 ---
 
@@ -675,6 +679,16 @@ silenciosamente pra formas não-elegíveis, mesmo comportamento já aceito pro c
       offsetting de polígono (estilo Clipper) — bem mais geometria; só entrar se o outline simples
       (sobre a própria borda) não bastar. UI sugerida: botão "Criar outline" no PropertiesPanel (ao lado
       de "Separar regiões"), criando a parte logo DEPOIS da original na ordem de costura.
+- [ ] **Fase 10 — Segurança pré-lançamento** — pedido explícito do usuário em 2026-07-20. Auditoria de
+      segurança do `ponto-studio/` (web + api + worker) e do `auth/` (SSO/OIDC) antes de lançar, com a
+      lista de tudo que precisa ser feito. **Vive num documento dedicado** (é grande e cruza 2 apps):
+      [`docs/SEGURANCA-PRE-LANCAMENTO.md`](SEGURANCA-PRE-LANCAMENTO.md) — 18 achados priorizados por
+      severidade + integração do **Rollbar** (rastreio de erros) nas 4 superfícies (web/api/auth/worker) +
+      checklist de operação (backups, segredos de prod, HSTS) + gate final de lançamento. **3 bloqueadores**
+      achados na auditoria: (1) rotas da API sem auth nem checagem de dono (IDOR em export/preview —
+      qualquer um baixa o desenho de qualquer projeto); (2) `SESSION_SECRET` do auth com fallback fixo
+      público no código; (3) `OIDC_CLIENT_SECRET` do ponto aceitando string vazia como default. Nenhum
+      item implementado ainda — só mapeado.
 - [x] **Fase 7 — Reorganização de UI: toolbar unificada** ✅ 2026-07-20 — IMPLEMENTADA no mesmo dia
       (ver log, Seção 13): `CanvasToolbar.tsx` absorveu as ações de forma (agrupar/desagrupar/girar/
       espelhar como botões-ícone com estado disabled por seleção; alinhar/distribuir num DropdownMenu
