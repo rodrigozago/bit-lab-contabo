@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { EmbroideryProject, EmbroideryElement, StitchParams } from "@ponto-studio/shared";
-import { convertProjectToSvg } from "./svgConverter.js";
+import { convertProjectToSvg, buildElementPreviewSvg } from "./svgConverter.js";
 
 // svgPath está em page-px do tldraw (ver rectToSvgPath/HOOP_PX_PER_MM); um
 // retângulo 10x10 vira 2.5x2.5mm no canvas — usado como bbox do elemento
@@ -433,5 +433,31 @@ describe("convertProjectToSvg", () => {
     const svg = convertProjectToSvg(makeProject([el]));
     // fallback também reescala page-px → mm (mesma conversão de elementToSvgPath)
     expect(svg).toContain('d="M 0 0 L 2.5 0 L 2.5 2.5 L 0 2.5 Z"');
+  });
+});
+
+describe("buildElementPreviewSvg", () => {
+  const canvas = { widthMm: 100, heightMm: 100 };
+
+  it("emite width/height em mm IGUAIS às dimensões do viewBox (1 unidade = 1mm, senão o Ink/Stitch assume 96 DPI e o preview sai fora de escala)", () => {
+    const el = makeElement({
+      svgContent: `<svg viewBox="0 0 200 150"><path d="M 10 10 L 50 50 Z" fill="#123"/></svg>`,
+      stitch: { type: "tatami", density: 0.6, angle: 45 } satisfies StitchParams,
+    });
+    const preview = buildElementPreviewSvg(el, canvas);
+    expect(preview).toContain('width="200mm"');
+    expect(preview).toContain('height="150mm"');
+    expect(preview).toContain('viewBox="0 0 200 150"');
+  });
+
+  it("sem viewBox no svgContent, cai pras dimensões do canvas (mm)", () => {
+    const el = makeElement({
+      svgContent: `<svg><path d="M 1 1 Z" fill="#123"/></svg>`,
+      stitch: { type: "tatami", density: 0.6, angle: 45 } satisfies StitchParams,
+    });
+    const preview = buildElementPreviewSvg(el, canvas);
+    expect(preview).toContain('width="100mm"');
+    expect(preview).toContain('height="100mm"');
+    expect(preview).toContain('viewBox="0 0 100 100"');
   });
 });

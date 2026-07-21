@@ -271,11 +271,24 @@ function extractAndAnnotatePaths(el: EmbroideryElement, canvas: CanvasSize): str
  * mantendo o viewBox ORIGINAL (sem reescala mm) para o preview sobrepor o shape
  * no canvas sem distorção. A densidade (line_distance) é convertida das mm para
  * as unidades do viewBox, para o espaçamento visual bater com o do bordado real.
+ *
+ * IMPORTANTE — `width`/`height` em mm IGUAIS às dimensões do viewBox: sem isso
+ * o Ink/Stitch não sabe o tamanho físico do documento e assume 96 DPI (1
+ * unidade = 1px ≈ 0.265mm), gerando os pontos numa escala diferente da que o
+ * worker usa pra reconstruir o preview (`pattern_to_preview_svg` divide por
+ * SCALE_SVG_TO_EMB=10, i.e. assume 1 unidade = 1mm). O descompasso fazia o
+ * preview sair grande e ESTOURAR/cortar o shape no canvas. Declarando
+ * width/height mm = dims do viewBox, 1 unidade = 1mm — mesma convenção do
+ * caminho de export (`convertProjectToSvg`), que sempre funcionou.
  */
 export function buildElementPreviewSvg(el: EmbroideryElement, canvas: CanvasSize): string {
   const svg = el.svgContent ?? "";
   const dims = parseViewBoxDimensions(svg);
   const viewBox = extractViewBox(svg) ?? `0 0 ${canvas.widthMm} ${canvas.heightMm}`;
+  // dimensões do viewBox (3º/4º números) — 1 unidade = 1mm no documento
+  const vbParts = viewBox.trim().split(/[\s,]+/).map(Number);
+  const vbW = dims?.width ?? vbParts[2] ?? canvas.widthMm;
+  const vbH = dims?.height ?? vbParts[3] ?? canvas.heightMm;
 
   const unitsPerMm = dims && canvas.widthMm > 0 ? dims.width / canvas.widthMm : 1;
   const { presentation, inkstitch } = buildStitchAttributes(el, unitsPerMm);
@@ -285,7 +298,7 @@ export function buildElementPreviewSvg(el: EmbroideryElement, canvas: CanvasSize
       `<path ${cleanAttrs} d="${escapeXml(d)}" ${presentation} ${inkstitch} />`
   );
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkstitch="http://inkstitch.org/namespace" viewBox="${viewBox}">
+  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkstitch="http://inkstitch.org/namespace" width="${vbW}mm" height="${vbH}mm" viewBox="${viewBox}">
   <g id="${el.id}">
     ${paths.join("\n    ")}
   </g>
