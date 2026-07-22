@@ -11,7 +11,8 @@ export default defineConfig({
     },
   },
   server: {
-    port: 3006,
+    // porta default do Vite (5173) — 3006 é a porta do container `web` em
+    // produção (docker-compose), deixa livre pra não confundir os dois.
     proxy: {
       "/api": "http://localhost:4000",
       "/admin": "http://localhost:4000",

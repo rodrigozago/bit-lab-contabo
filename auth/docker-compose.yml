@@ -62,8 +62,10 @@ services:
     build: ./web
     restart: unless-stopped
     ports:
-      # nginx da VPS faz proxy_pass pra cá (apps.bit-lab.tech) — só loopback
-      - "127.0.0.1:4003:80"
+      # nginx da VPS faz proxy_pass pra cá (apps.bit-lab.tech) — só loopback.
+      # 4003 já é do face-lab-api; 3006 segue o padrão de portas 3xxx pros
+      # frontends/web (3002 studio, 3003 ponto, 3004 face, 3005 on-air).
+      - "127.0.0.1:3006:80"
     depends_on:
       - auth
     networks:
