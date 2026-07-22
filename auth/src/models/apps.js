@@ -33,4 +33,13 @@ async function remove(id) {
   await pool.query('DELETE FROM apps WHERE id = $1', [id])
 }
 
-module.exports = { list, findBySlug, create, ensure, remove }
+/** Liga/desliga self-signup (`/signup?app=<slug>`) pra este app específico. */
+async function setSelfSignup(id, allowed) {
+  const { rows } = await pool.query(
+    'UPDATE apps SET allow_self_signup = $2 WHERE id = $1 RETURNING *',
+    [id, !!allowed]
+  )
+  return rows[0] || null
+}
+
+module.exports = { list, findBySlug, create, ensure, remove, setSelfSignup }

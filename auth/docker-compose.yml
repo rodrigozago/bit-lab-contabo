@@ -40,7 +40,6 @@ services:
       INITIAL_ADMIN_PASSWORD: "${INITIAL_ADMIN_PASSWORD}"
       FACE_LAB_OIDC_SECRET: "${FACE_LAB_OIDC_SECRET}"
       PONTO_STUDIO_OIDC_SECRET: "${PONTO_STUDIO_OIDC_SECRET}"
-      ALLOW_SELF_SIGNUP: "${ALLOW_SELF_SIGNUP:-false}"
       ADMIN_NOTIFY_WEBHOOK_URL: "${ADMIN_NOTIFY_WEBHOOK_URL:-}"
       ROLLBAR_SERVER_TOKEN: "${ROLLBAR_SERVER_TOKEN:-}"
       JWKS_PATH: "/app/data/jwks.json"
@@ -56,6 +55,17 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    networks:
+      - auth
+
+  web:
+    build: ./web
+    restart: unless-stopped
+    ports:
+      # nginx da VPS faz proxy_pass pra cá (apps.bit-lab.tech) — só loopback
+      - "127.0.0.1:4003:80"
+    depends_on:
+      - auth
     networks:
       - auth
 

@@ -17,5 +17,6 @@ ponto-studio/**/.venv/
 auth/.env
 auth/node_modules/
 auth/data/
+auth/web/dist/
 
 studio/

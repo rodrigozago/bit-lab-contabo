@@ -11,12 +11,13 @@ async function requireSession(req, res, next) {
   next()
 }
 
-// Confere is_admin direto no banco (não confia na sessão cacheada) — assim,
-// revogar admin de alguém tem efeito imediato, sem esperar a sessão expirar.
-async function requireAdmin(req, res, next) {
+// Confere is_superuser direto no banco (não confia na sessão cacheada) —
+// assim, revogar superuser de alguém tem efeito imediato, sem esperar a
+// sessão expirar.
+async function requireSuperuser(req, res, next) {
   const fresh = await users.findById(req.user.userId)
-  if (!fresh || !fresh.is_admin) return res.status(403).json({ error: 'apenas admin' })
+  if (!fresh || !fresh.is_superuser) return res.status(403).json({ error: 'apenas superuser' })
   next()
 }
 
-module.exports = { requireSession, requireAdmin }
+module.exports = { requireSession, requireSuperuser }

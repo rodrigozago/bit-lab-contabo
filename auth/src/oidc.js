@@ -101,7 +101,11 @@ const configuration = {
         // precisar dessa garantia, implementar verificação no signup e
         // refletir o valor real aqui. Ver
         // ponto-studio/docs/SEGURANCA-PRE-LANCAMENTO.md item 10.
-        return { sub: id, email: user.email, email_verified: true, is_admin: user.is_admin }
+        //
+        // Claim continua se chamando `is_admin` no wire (não renomeado pra
+        // is_superuser) de propósito — é o que ponto-studio já lê no
+        // finishAuth() hoje; renomear quebraria sem redeploy coordenado.
+        return { sub: id, email: user.email, email_verified: true, is_admin: user.is_superuser }
       },
     }
   },

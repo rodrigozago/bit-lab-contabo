@@ -1,7 +1,7 @@
 const bcrypt = require('bcryptjs')
 const { pool } = require('../db')
 
-const PUBLIC_COLUMNS = 'id, email, is_admin, created_at'
+const PUBLIC_COLUMNS = 'id, email, is_superuser, created_at'
 
 async function findByEmail(email) {
   const { rows } = await pool.query('SELECT * FROM users WHERE email = $1', [email.toLowerCase()])
@@ -18,11 +18,11 @@ async function list() {
   return rows
 }
 
-async function create({ email, password, isAdmin = false }) {
+async function create({ email, password, isSuperuser = false }) {
   const hash = bcrypt.hashSync(password, 12)
   const { rows } = await pool.query(
-    `INSERT INTO users (email, password_hash, is_admin) VALUES ($1, $2, $3) RETURNING ${PUBLIC_COLUMNS}`,
-    [email.toLowerCase(), hash, isAdmin]
+    `INSERT INTO users (email, password_hash, is_superuser) VALUES ($1, $2, $3) RETURNING ${PUBLIC_COLUMNS}`,
+    [email.toLowerCase(), hash, isSuperuser]
   )
   return rows[0]
 }

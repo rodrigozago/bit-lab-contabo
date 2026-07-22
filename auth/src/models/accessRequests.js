@@ -41,7 +41,9 @@ async function approve(id, decidedBy) {
   )
   const request = rows[0]
   if (!request) return null
-  await appAccess.grant(request.user_id, request.app_id)
+  // Aprovação pela fila sempre concede 'end_user' — app_admin só sai de
+  // convite explícito do superuser (link/token), nunca de auto-aprovação.
+  await appAccess.grant(request.user_id, request.app_id, 'end_user')
   return request
 }
 

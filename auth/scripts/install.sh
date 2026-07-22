@@ -65,7 +65,7 @@ cd "$PROJECT_DIR"
 log "Buildando imagem..."
 docker compose build
 
-log "Subindo a stack (postgres, redis, auth)..."
+log "Subindo a stack (postgres, redis, auth, web)..."
 docker compose up -d
 
 log "Aguardando o serviço responder..."
@@ -117,10 +117,11 @@ echo ""
 log "Instalação concluída!"
 echo ""
 echo "Confirme antes de considerar tudo pronto:"
-echo "  1. DNS: auth.bit-lab.tech apontando pro mesmo IP de bit-lab.tech (via Cloudflare)"
-echo "  2. Certificado /etc/ssl/cloudflare/bit-lab.tech.pem cobre auth.bit-lab.tech (wildcard *.bit-lab.tech)"
+echo "  1. DNS: auth.bit-lab.tech e apps.bit-lab.tech apontando pro mesmo IP de bit-lab.tech (via Cloudflare)"
+echo "  2. Certificado /etc/ssl/cloudflare/bit-lab.tech.pem cobre esses subdomínios (wildcard *.bit-lab.tech)"
 echo "  3. https://auth.bit-lab.tech/login carrega a tela de login"
-echo "  4. https://ponto.bit-lab.tech redireciona pro login se você não estiver logado"
+echo "  4. https://apps.bit-lab.tech carrega o dashboard (pede login se você não estiver logado)"
+echo "  5. https://ponto.bit-lab.tech redireciona pro login se você não estiver logado"
 echo ""
 echo "Logs:      docker compose -f $PROJECT_DIR/docker-compose.yml logs -f"
 echo "Atualizar: git pull && $SCRIPT_DIR/install.sh"

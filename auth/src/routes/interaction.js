@@ -11,13 +11,17 @@ const { notifyAccessRequest } = require('../notify')
 
 const router = express.Router()
 
-const SIGNUP_ENABLED = () => process.env.ALLOW_SELF_SIGNUP === 'true'
-
-function loginPage(uid, extra = {}) {
+// "Criar conta" na tela de login do OIDC só aparece se o app sendo acessado
+// (client_id === slug) tiver self-signup ligado — não é mais uma flag global.
+async function loginPage(uid, appSlug, extra = {}) {
+  const app = appSlug && (await apps.findBySlug(appSlug))
+  const signupHref = app && app.allow_self_signup
+    // depois do signup o usuário volta pra interação e o GET completa o login sozinho
+    ? `/signup?app=${encodeURIComponent(appSlug)}&redirect=${encodeURIComponent(`/interaction/${uid}`)}`
+    : undefined
   return renderLogin({
     action: `/interaction/${uid}/login`,
-    // depois do signup o usuário volta pra interação e o GET completa o login sozinho
-    signupHref: SIGNUP_ENABLED() ? `/signup?redirect=${encodeURIComponent(`/interaction/${uid}`)}` : undefined,
+    signupHref,
     ...extra,
   })
 }
@@ -70,7 +74,7 @@ router.get('/:uid', async (req, res, next) => {
           { mergeWithLastSubmission: false }
         )
       }
-      return res.type('html').send(loginPage(uid))
+      return res.type('html').send(await loginPage(uid, params.client_id))
     }
 
     if (prompt.name === 'consent') {
@@ -121,17 +125,17 @@ router.post('/:uid/login', express.urlencoded({ extended: false }), async (req, 
     const okPerAccount = await checkLimit(`login:${ip}:${(email || '').toLowerCase()}`, 10, 15 * 60)
     const okPerIp = await checkLimit(`login-ip:${ip}`, 50, 15 * 60)
     if (!okPerAccount || !okPerIp) {
-      return res.status(429).type('html').send(loginPage(uid, { error: 'Muitas tentativas — tente de novo em alguns minutos.' }))
+      return res.status(429).type('html').send(await loginPage(uid, params.client_id, { error: 'Muitas tentativas — tente de novo em alguns minutos.' }))
     }
 
     const user = email && (await users.findByEmail(email))
     if (!user || !users.verifyPassword(user, password || '')) {
-      return res.status(401).type('html').send(loginPage(uid, { error: 'E-mail ou senha incorretos.' }))
+      return res.status(401).type('html').send(await loginPage(uid, params.client_id, { error: 'E-mail ou senha incorretos.' }))
     }
 
     if (!(await appAccess.hasAccess(user.id, params.client_id))) {
       await ensureAccessRequest(user.id, params.client_id)
-      return res.status(403).type('html').send(loginPage(uid, { error: 'Sua conta não tem acesso a este app — fale com o admin.' }))
+      return res.status(403).type('html').send(await loginPage(uid, params.client_id, { error: 'Sua conta não tem acesso a este app — fale com o admin.' }))
     }
 
     // também cria a bl_session compartilhada: logar aqui = logado nos apps do gate nginx

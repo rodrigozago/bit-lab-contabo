@@ -3,13 +3,13 @@ const usersModel = require('../models/users')
 const appsModel = require('../models/apps')
 const appAccessModel = require('../models/appAccess')
 const accessRequestsModel = require('../models/accessRequests')
+const signupTokensModel = require('../models/signupTokens')
 const auditLog = require('../models/auditLog')
-const { requireSession, requireAdmin } = require('../middleware')
-const { renderAdmin } = require('../views/admin')
+const { requireSession, requireSuperuser } = require('../middleware')
 
 const router = express.Router()
 
-router.use(requireSession, requireAdmin)
+router.use(requireSession, requireSuperuser)
 router.use(express.json())
 
 function handlePgError(err, res) {
@@ -18,8 +18,10 @@ function handlePgError(err, res) {
   return res.status(500).json({ error: 'erro interno' })
 }
 
+// A tela em si virou a SPA (auth/web) servida em apps.bit-lab.tech — este
+// redirect é só pra bookmark antigo de /admin não quebrar.
 router.get('/', (req, res) => {
-  res.type('html').send(renderAdmin({ email: req.user.email }))
+  res.redirect('https://apps.bit-lab.tech/admin')
 })
 
 // ── users ──────────────────────────────────────────────────────────────────
@@ -28,11 +30,11 @@ router.get('/api/users', async (req, res) => {
 })
 
 router.post('/api/users', async (req, res) => {
-  const { email, password, isAdmin } = req.body
+  const { email, password, isSuperuser } = req.body
   if (!email || !password) return res.status(400).json({ error: 'email e senha são obrigatórios' })
   try {
-    const created = await usersModel.create({ email, password, isAdmin: !!isAdmin })
-    await auditLog.record(req.user, 'user.create', created.email, { isAdmin: !!isAdmin })
+    const created = await usersModel.create({ email, password, isSuperuser: !!isSuperuser })
+    await auditLog.record(req.user, 'user.create', created.email, { isSuperuser: !!isSuperuser })
     res.json(created)
   } catch (err) {
     handlePgError(err, res)
@@ -68,6 +70,14 @@ router.post('/api/apps', async (req, res) => {
   }
 })
 
+router.patch('/api/apps/:id/self-signup', async (req, res) => {
+  const { allowed } = req.body
+  const app = await appsModel.setSelfSignup(req.params.id, !!allowed)
+  if (!app) return res.status(404).json({ error: 'app não encontrado' })
+  await auditLog.record(req.user, 'app.self_signup_toggle', app.slug, { allowed: !!allowed })
+  res.json(app)
+})
+
 router.delete('/api/apps/:id', async (req, res) => {
   await appsModel.remove(req.params.id)
   res.json({ ok: true })
@@ -79,10 +89,20 @@ router.get('/api/access', async (req, res) => {
 })
 
 router.post('/api/access', async (req, res) => {
-  const { userId, appId } = req.body
+  const { userId, appId, role } = req.body
   if (!userId || !appId) return res.status(400).json({ error: 'userId e appId são obrigatórios' })
-  await appAccessModel.grant(userId, appId)
-  await auditLog.record(req.user, 'access.grant', userId, { appId })
+  if (role && !['end_user', 'app_admin'].includes(role)) return res.status(400).json({ error: 'role inválido' })
+  await appAccessModel.grant(userId, appId, role || 'end_user')
+  await auditLog.record(req.user, 'access.grant', userId, { appId, role: role || 'end_user' })
+  res.json({ ok: true })
+})
+
+router.patch('/api/access/:userId/:appId/role', async (req, res) => {
+  const { role } = req.body
+  if (!['end_user', 'app_admin'].includes(role)) return res.status(400).json({ error: 'role inválido' })
+  const updated = await appAccessModel.setRole(req.params.userId, req.params.appId, role)
+  if (!updated) return res.status(404).json({ error: 'acesso não encontrado' })
+  await auditLog.record(req.user, 'access.role_change', req.params.userId, { appId: req.params.appId, role })
   res.json({ ok: true })
 })
 
@@ -108,6 +128,30 @@ router.post('/api/access-requests/:id/reject', async (req, res) => {
   const request = await accessRequestsModel.reject(req.params.id, req.user.userId)
   if (!request) return res.status(404).json({ error: 'solicitação não encontrada ou já decidida' })
   await auditLog.record(req.user, 'access_request.reject', req.params.id)
+  res.json({ ok: true })
+})
+
+// ── links de convite ─────────────────────────────────────────────────────
+router.get('/api/signup-tokens', async (req, res) => {
+  res.json(await signupTokensModel.list())
+})
+
+router.post('/api/signup-tokens', async (req, res) => {
+  const { role, email, appIds, ttlHours } = req.body
+  if (!['end_user', 'app_admin'].includes(role)) return res.status(400).json({ error: 'role inválido' })
+  if (!Array.isArray(appIds) || appIds.length === 0) return res.status(400).json({ error: 'selecione pelo menos um app' })
+
+  const token = await signupTokensModel.create({
+    role, email: email || null, appIds, createdBy: req.user.userId, ttlHours: ttlHours || undefined,
+  })
+  await auditLog.record(req.user, 'signup_token.create', token.id, { role, email: email || null, appIds })
+  res.json({ id: token.id, url: `https://apps.bit-lab.tech/signup?token=${token.raw}`, expiresAt: token.expires_at })
+})
+
+router.delete('/api/signup-tokens/:id', async (req, res) => {
+  const revoked = await signupTokensModel.revoke(req.params.id)
+  if (!revoked) return res.status(404).json({ error: 'convite não encontrado ou já usado' })
+  await auditLog.record(req.user, 'signup_token.revoke', req.params.id)
   res.json({ ok: true })
 })
 

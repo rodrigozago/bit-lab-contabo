@@ -22,7 +22,7 @@ async function create(res, user) {
   const token = crypto.randomBytes(32).toString('hex')
   await redis.set(
     KEY_PREFIX + token,
-    JSON.stringify({ userId: user.id, email: user.email, isAdmin: user.is_admin }),
+    JSON.stringify({ userId: user.id, email: user.email, isSuperuser: user.is_superuser }),
     'EX',
     TTL_SECONDS
   )

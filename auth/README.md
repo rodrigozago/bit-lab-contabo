@@ -6,6 +6,27 @@ cookie `.bit-lab.tech` + gate por app no nginx (`auth_request`), com um
 provider OIDC real (`oidc-provider`) já rodando por baixo pra quando algum app
 precisar de login via token de verdade.
 
+O portal central — dashboard de apps + administração — vive em
+**`apps.bit-lab.tech`**, servido pela SPA em [`web/`](web) (React + Vite +
+shadcn/ui), que fala com este serviço via proxy interno (`/api`, `/admin/api`).
+`auth.bit-lab.tech` continua sendo o `ISSUER` do OIDC e onde vivem
+`/login`, `/signup` e `/interaction/:uid` (telas vanilla, sem framework).
+
+## Papéis
+
+| Papel | Onde mora | Significado |
+|---|---|---|
+| **Superuser** | `users.is_superuser` | Acesso total: administração completa, vincula usuários a apps, gera links de convite. |
+| **Admin (de app)** | `app_access.role = 'app_admin'` | Papel elevado só naquele app específico. |
+| **End user** | `app_access.role = 'end_user'` (default) | Uso normal do app. |
+
+Não existe mais self-signup ligado por padrão — cada app tem seu próprio
+toggle `allow_self_signup`, configurável pelo superuser em
+`apps.bit-lab.tech/admin/apps`. Contas de end user/app admin são criadas por
+**links de convite** (`apps.bit-lab.tech/admin/tokens`): o superuser escolhe o
+papel, quais apps o link concede, e-mail opcional e validade — o link só
+mostra o token uma vez.
+
 ## Como funciona
 
 - **Login:** `POST /login` (email/senha) → cria sessão no Redis → cookie
@@ -14,12 +35,13 @@ precisar de login via token de verdade.
   Sem sessão → `401` (nginx redireciona pro login). Sessão válida mas sem
   acesso ao app → `403`. Acesso concedido → `200` (+ header `X-User-Email`
   repassado pro app de baixo).
-- **Admin:** `/admin` (protegido, só admin) — CRUD de usuários, apps e quem
-  acessa o quê.
+- **Admin:** `apps.bit-lab.tech/admin` (SPA, protegida por sessão + superuser)
+  — CRUD de usuários, apps (+ toggle de self-signup), acessos (+ papel),
+  solicitações pendentes e links de convite. A API JSON por trás mora em
+  `/admin/api/*` neste serviço.
 - **OIDC:** `Provider` real montado (discovery, JWKS, `/auth`, `/token`,
-  `/userinfo`) — sem nenhum client registrado ainda porque nenhum app
-  consome o protocolo hoje. Ver comentário em `src/oidc.js` pro próximo passo
-  quando isso for necessário.
+  `/userinfo`) — clients registrados: `face-lab`, `ponto-studio`. Ver
+  comentário em `src/oidc.js`.
 
 ## Rodando localmente
 
@@ -46,6 +68,11 @@ curl -i -b /tmp/cookies.txt "http://127.0.0.1:4002/verify?app=ponto-studio"
 curl -i -b /tmp/cookies.txt "http://127.0.0.1:4002/verify?app=nao-existe"
 ```
 
+A SPA (`web/`) sobe junto no `docker compose up --build` (serviço `web`,
+`127.0.0.1:4003`) — em dev, rode `cd web && npm install && npm run dev`
+(proxy do Vite já aponta `/api`, `/admin`, `/login`, `/signup`, `/logout` pro
+backend em `localhost:4000`).
+
 ## Instalar na VPS
 
 ```bash
@@ -54,14 +81,16 @@ sudo ./scripts/install.sh
 ```
 
 Prepara `.env` (pergunta as senhas se faltarem), builda e sobe
-Postgres+Redis+auth, e sincroniza o `nginx/bit-lab.tech.conf` (que já traz o
-bloco `auth.bit-lab.tech` e o gate do `ponto.bit-lab.tech`) — com backup do
-conf anterior e teste (`nginx -t`) antes de recarregar.
+Postgres+Redis+auth+web, e sincroniza o `nginx/bit-lab.tech.conf` (que já traz
+os blocos `auth.bit-lab.tech`, `apps.bit-lab.tech` e o gate do
+`ponto.bit-lab.tech`) — com backup do conf anterior e teste (`nginx -t`) antes
+de recarregar.
 
 ## Adicionando um novo app ao gate
 
-1. No painel admin (`/admin`), cria o app (slug + nome) e concede acesso aos
-   usuários certos.
+1. No painel (`apps.bit-lab.tech/admin/apps`), cria o app (slug + nome) e
+   concede acesso aos usuários certos em Acessos (ou gera um link de convite
+   em Links de convite).
 2. No nginx, adiciona no server block do domínio desse app o mesmo bloco
    `auth_request` usado em `ponto.bit-lab.tech` (troca só o slug na query
    string `?app=` e a porta do `proxy_pass` de destino).
@@ -87,6 +116,6 @@ Nenhuma mudança no serviço `auth` em si é necessária.
   o vetor de ataque principal em requests não-GET entre sites). Suficiente
   pra uma ferramenta interna de time pequeno; adicionar token de verdade se
   isso crescer.
-- **Sem self-signup nem "esqueci minha senha" por e-mail** — de propósito,
-  criação/reset de senha é sempre feito pelo admin no painel (sem depender de
-  SMTP).
+- **Sem "esqueci minha senha" por e-mail** — de propósito, reset de senha é
+  sempre feito pelo superuser no painel (sem depender de SMTP). Self-signup
+  existe, mas é opt-in por app (ver seção Papéis) — nunca ligado globalmente.

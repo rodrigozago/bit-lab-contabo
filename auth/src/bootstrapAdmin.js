@@ -33,7 +33,7 @@ async function bootstrap() {
     return
   }
 
-  const admin = await users.create({ email, password, isAdmin: true })
+  const admin = await users.create({ email, password, isSuperuser: true })
   for (const app of seededApps) {
     await appAccess.grant(admin.id, app.id)
   }
