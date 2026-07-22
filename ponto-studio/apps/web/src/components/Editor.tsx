@@ -878,6 +878,17 @@ export function Editor({ project, onProjectChange }: Props) {
             </div>
           </div>
         )}
+        {/* Trava a tela enquanto o preview de bordado gera no worker (job do
+            Ink/Stitch, alguns segundos) — o overlay full-screen intercepta os
+            cliques, então o usuário não dispara outras ações no meio. */}
+        {previewLoading && (
+          <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-background/55">
+            <div className="flex items-center gap-3 rounded-xl border bg-card px-5 py-4 text-sm font-semibold shadow-lg">
+              <div className="h-5 w-5 animate-spin rounded-full border-[3px] border-border border-t-primary" />
+              <span>Gerando preview do bordado…</span>
+            </div>
+          </div>
+        )}
       </SidebarInset>
     </SidebarProvider>
   );
