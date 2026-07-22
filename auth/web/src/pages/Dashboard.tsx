@@ -18,6 +18,21 @@ const roleLabel: Record<MyAccess["role"], string> = {
   app_admin: "Admin",
 }
 
+// Cada app tem sua própria rota de entrada pós-login (não é sempre "/") —
+// ponto-studio manda pra "/app"; face-lab não tem uma rota única, então
+// aproxima pelo papel central (app_admin -> /producer, end_user -> /me).
+// on-air não está aqui porque a raiz "/" já é a Home logada.
+const APP_LAUNCH_PATH: Record<string, string | ((role: MyAccess["role"]) => string)> = {
+  "ponto-studio": "/app",
+  "face-lab": (role) => (role === "app_admin" ? "/producer" : "/me"),
+}
+
+function launchUrl(app: MyAccess): string {
+  const entry = APP_LAUNCH_PATH[app.slug]
+  const path = typeof entry === "function" ? entry(app.role) : entry ?? ""
+  return `https://${app.slug}.bit-lab.tech${path}`
+}
+
 export function Dashboard() {
   const [apps, setApps] = React.useState<MyAccess[] | null>(null)
 
@@ -47,7 +62,7 @@ export function Dashboard() {
       {apps && apps.length > 0 && (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
           {apps.map((app) => (
-            <a key={app.app_id} href={`https://${app.slug}.bit-lab.tech`} target="_blank" rel="noreferrer">
+            <a key={app.app_id} href={launchUrl(app)} target="_blank" rel="noreferrer">
               <Card className="h-full transition-colors hover:bg-accent/50">
                 <CardHeader>
                   <div className="flex items-start justify-between gap-2">
