@@ -3,7 +3,6 @@ import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { createClient } from "redis";
 import type { ExportJob, ExportFormat, LocalAnalyzeParams } from "@ponto-studio/shared";
-import { getRollbar } from "./rollbar.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const EXPORTS_DIR = join(__dirname, "..", "..", "exports");
@@ -14,17 +13,11 @@ const REDIS_URL = process.env["REDIS_URL"] ?? "redis://localhost:6379";
 const JOBS_QUEUE = "embroidery:jobs";
 const RESULTS_CHANNEL = "embroidery:results";
 
-// Limite de backlog da fila: acima disso, avisa no Rollbar (no-op sem token).
-// Mesma ideia do QUEUE_DEPTH_WARN do worker — só que aqui a profundidade sai de
-// graça, porque rPush retorna o novo tamanho da lista.
-const QUEUE_DEPTH_WARN = Number(process.env["QUEUE_DEPTH_WARN"] ?? 20);
-
-/** Loga a profundidade da fila e alerta no Rollbar quando passa do limite. */
+// Loga a profundidade da fila no enqueue (rPush retorna o novo tamanho da lista,
+// então sai de graça). O ALERTA de backlog fica no worker, que posta no Slack
+// junto das métricas de job — aqui só registramos no log da API.
 function reportQueueDepth(depth: number, jobType: string): void {
   console.log(`[jobQueue] enfileirado ${jobType} — fila com ${depth} job(s)`);
-  if (depth >= QUEUE_DEPTH_WARN) {
-    getRollbar()?.warning("queue backlog deep", { queue_depth: depth, jobType });
-  }
 }
 
 type RedisClient = ReturnType<typeof createClient>;

@@ -74,6 +74,10 @@ services:
       EXPORTS_DIR: "/exports"
       UPLOADS_DIR: "/uploads"
       ROLLBAR_SERVER_TOKEN: "${ROLLBAR_SERVER_TOKEN:-}"
+      ROLLBAR_ENV: "${ROLLBAR_ENV:-production}"
+      # feed de métricas por job (tempo/pontos/áreas) e alerta de fila → Slack
+      SLACK_METRICS_WEBHOOK: "${SLACK_METRICS_WEBHOOK:-}"
+      QUEUE_DEPTH_WARN: "${QUEUE_DEPTH_WARN:-20}"
     volumes:
       - exports:/exports
       # análise local lê a imagem enviada pela API (somente leitura)

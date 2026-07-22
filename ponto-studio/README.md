@@ -134,22 +134,28 @@ Projeto (JSON) → API → Salva SVG → RPUSH embroidery:jobs (Redis)
 | `PORT` | Porta da API | `3001` |
 | `PUBLIC_URL` | URL base pública da API (para URLs de download) | `http://localhost:3001` (`https://ponto.bit-lab.tech` nesta VPS) |
 | `EXPORTS_DIR` | Diretório de saída do worker | `/exports` |
-| `ROLLBAR_SERVER_TOKEN` | Token servidor (secreto) do Rollbar — erros + telemetria da API e do worker. Sem ele, tudo vira no-op. | *(vazio = desligado)* |
-| `ROLLBAR_TELEMETRY` | `0` desliga só a telemetria de timing (eventos `info`), mantém os erros. Protege a cota do free tier. | `1` |
-| `QUEUE_DEPTH_WARN` | Acima deste tamanho de fila, worker e API alertam no Rollbar (backlog). | `20` |
+| `ROLLBAR_SERVER_TOKEN` | Token servidor (secreto) do Rollbar — **erros** da API e do worker. Sem ele, vira no-op. | *(vazio = desligado)* |
+| `SLACK_METRICS_WEBHOOK` | Incoming Webhook do Slack — **feed de métricas** por job (worker). Sem ele, o worker não posta nada. | *(vazio = desligado)* |
+| `QUEUE_DEPTH_WARN` | Acima deste tamanho de fila, o worker posta um alerta de backlog no Slack. | `20` |
+| `ROLLBAR_ENV` | Rótulo do ambiente nas mensagens do Slack e no Rollbar. | `production` |
 
-### Observabilidade (Rollbar)
+### Observabilidade
 
-O worker emite **1 evento por job** (`worker.export.done`, `worker.analyze.done`,
-`worker.preview.done`, `worker.stitch_data.done`) com `duration_ms`, `inkstitch_ms`
-(tempo só do subprocess do Ink/Stitch), nº de pontos, bytes e `queue_depth`. As mesmas
-métricas também vão nas linhas de `log.info` (visíveis no `docker logs`, sem depender do
-Rollbar). Quando a fila passa de `QUEUE_DEPTH_WARN`, worker e API mandam um `warning`.
+Divisão de responsabilidades: **Rollbar = erros** (exceptions, com stack trace/agrupamento);
+**Slack = métricas e operacional** (feed por job).
 
-> Rollbar cobre bem **erros** e serve pra timing via eventos `info`, mas não é uma
-> plataforma de métricas (agregações p50/p95 e gráficos de latência não são o forte dele).
-> Se um dia precisar de dashboards de latência, o passo natural é somar Loki/Prometheus
-> (Grafana Cloud) **só pra métricas** e manter o Rollbar pros erros.
+O worker posta **1 mensagem no Slack por job** (análise/export/preview/stitch_data) com
+`tempo`, `inkstitch_ms` (tempo só do subprocess do Ink/Stitch), nº de `pontos`/`áreas`,
+`tamanho` e profundidade da `fila`. As mesmas métricas também vão nas linhas de `log.info`
+(visíveis no `docker logs`, sem depender de nada externo). Quando a fila passa de
+`QUEUE_DEPTH_WARN`, sai um alerta `⚠️ Fila acumulando`.
+
+Para configurar: Slack → **Apps → Incoming Webhooks** → escolha o canal (ex.: `#ponto-metrics`)
+→ copie a URL pra `SLACK_METRICS_WEBHOOK`. Como é webhook direto, não consome cota do Rollbar.
+
+> Isso é um feed, não um sistema de métricas: agregações (p50/p95, gráficos de latência)
+> não existem aqui. Se um dia precisar disso, o passo natural é somar Loki/Prometheus
+> (Grafana Cloud) só pra métricas — o feed do Slack e os erros no Rollbar continuam válidos.
 
 ## Banco de Dados
 

@@ -27,6 +27,7 @@ import os
 import sys
 import tempfile
 import time
+import urllib.request
 from pathlib import Path
 from typing import Any
 
@@ -72,24 +73,38 @@ def report_error() -> None:
             log.exception("Falha ao reportar erro pro Rollbar")
 
 
-# Telemetria (timing/métricas) via Rollbar: eventos `info` contam na cota do
-# free tier, então ficam atrás deste toggle. "0" desliga só a telemetria — os
-# erros (report_error) continuam indo. No-op também sem ROLLBAR_SERVER_TOKEN.
-_TELEMETRY_ON = os.environ.get("ROLLBAR_TELEMETRY", "1") != "0"
+# Telemetria (timing/métricas) → Slack via Incoming Webhook. Diferente do
+# Rollbar (que fica só pros ERROS), aqui vai o feed de métricas por job: tempo,
+# pontos, áreas etc. Sem SLACK_METRICS_WEBHOOK vira no-op (dev não posta nada).
+# Label do ambiente reaproveita ROLLBAR_ENV pra bater com o dashboard de erros.
+SLACK_METRICS_WEBHOOK = os.environ.get("SLACK_METRICS_WEBHOOK", "")
+ENV_NAME = os.environ.get("ROLLBAR_ENV", "production")
 
 
-def report_message(event: str, level: str = "info", **data: Any) -> None:
+def notify_slack(text: str, fields: dict[str, str] | None = None) -> None:
     """
-    Manda um evento de telemetria pro Rollbar (timing, métricas, profundidade de
-    fila). No-op sem token, sem o pacote, ou com ROLLBAR_TELEMETRY=0. Nunca
-    derruba o worker se o Rollbar falhar.
+    Posta uma métrica no Slack (Incoming Webhook). `text` é a linha principal
+    (mrkdwn); `fields` vira um bloco de campos em 2 colunas. No-op sem
+    SLACK_METRICS_WEBHOOK. Best-effort com timeout curto — nunca derruba o job.
     """
-    if _rollbar is None or not _TELEMETRY_ON:
+    if not SLACK_METRICS_WEBHOOK:
         return
+    blocks: list[dict[str, Any]] = [
+        {"type": "section", "text": {"type": "mrkdwn", "text": text}}
+    ]
+    if fields:
+        blocks.append({
+            "type": "section",
+            "fields": [{"type": "mrkdwn", "text": f"*{k}*\n{v}"} for k, v in fields.items()],
+        })
+    payload = json.dumps({"text": text, "blocks": blocks}).encode("utf-8")
+    req = urllib.request.Request(
+        SLACK_METRICS_WEBHOOK, data=payload, headers={"Content-Type": "application/json"}
+    )
     try:
-        _rollbar.report_message(event, level=level, extra_data=data)
-    except Exception:  # noqa: BLE001 — telemetria não pode quebrar o job
-        log.exception("Falha ao enviar telemetria pro Rollbar")
+        urllib.request.urlopen(req, timeout=5)  # noqa: S310 — URL é do nosso env
+    except Exception:  # noqa: BLE001 — métrica não pode quebrar o job
+        log.exception("Falha ao postar métrica no Slack")
 
 
 REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379")
@@ -304,11 +319,15 @@ def process_job(r: redis.Redis, job_data: dict[str, Any], queue_depth: int = 0) 
             "Job %s concluído → %s (%d pontos, %d ms, inkstitch %d ms)",
             job_id, output_file, stitches, duration_ms, inkstitch_ms,
         )
-        report_message(
-            "worker.export.done",
-            duration_ms=duration_ms, inkstitch_ms=inkstitch_ms,
-            stitches=stitches, format=fmt, bytes=len(result_bytes),
-            queue_depth=queue_depth,
+        notify_slack(
+            f":sewing_needle: *Export {fmt}* · `{ENV_NAME}`",
+            {
+                "Tempo": f"{duration_ms} ms",
+                "Ink/Stitch": f"{inkstitch_ms} ms",
+                "Pontos": str(stitches),
+                "Tamanho": f"{len(result_bytes) // 1024} KB",
+                "Fila": str(queue_depth),
+            },
         )
 
         result = json.dumps({"jobId": job_id, "status": "done", "outputFile": output_file})
@@ -355,14 +374,21 @@ def process_analyze_job(r: redis.Redis, job_data: dict[str, Any], queue_depth: i
             json.dumps(metrics), encoding="utf-8"
         )
         duration_ms = round((time.perf_counter() - t0) * 1000)
+        n_areas = len(metrics.get("layers", []))
+        svg_kb = len(svg) // 1024
         log.info(
-            "Análise %s concluída → %s (%d bytes, %d ms)",
-            job_id, output_file, len(svg), duration_ms,
+            "Análise %s concluída → %s (%d áreas, %d bytes, %d ms)",
+            job_id, output_file, n_areas, len(svg), duration_ms,
         )
-        report_message(
-            "worker.analyze.done",
-            duration_ms=duration_ms, svg_bytes=len(svg),
-            colors=params.colors, queue_depth=queue_depth,
+        notify_slack(
+            f":thread: *Análise concluída* · `{ENV_NAME}`",
+            {
+                "Tempo": f"{duration_ms} ms",
+                "Áreas": str(n_areas),
+                "Cores": str(params.colors),
+                "Tamanho": f"{svg_kb} KB",
+                "Fila": str(queue_depth),
+            },
         )
 
         result = json.dumps({"jobId": job_id, "status": "done", "outputFile": output_file})
@@ -407,10 +433,14 @@ def process_preview_job(r: redis.Redis, job_data: dict[str, Any], queue_depth: i
             "Preview %s concluído → %s (%d pontos, %d ms, inkstitch %d ms)",
             job_id, output_file, stitches, duration_ms, inkstitch_ms,
         )
-        report_message(
-            "worker.preview.done",
-            duration_ms=duration_ms, inkstitch_ms=inkstitch_ms,
-            stitches=stitches, queue_depth=queue_depth,
+        notify_slack(
+            f":framed_picture: *Preview* · `{ENV_NAME}`",
+            {
+                "Tempo": f"{duration_ms} ms",
+                "Ink/Stitch": f"{inkstitch_ms} ms",
+                "Pontos": str(stitches),
+                "Fila": str(queue_depth),
+            },
         )
 
         r.publish(RESULTS_CHANNEL, json.dumps({"jobId": job_id, "status": "done", "outputFile": output_file}))
@@ -460,10 +490,14 @@ def process_stitch_data_job(r: redis.Redis, job_data: dict[str, Any], queue_dept
             "Stitch data %s concluído → %s (%d pontos, %d ms, inkstitch %d ms)",
             job_id, output_file, stitches, duration_ms, inkstitch_ms,
         )
-        report_message(
-            "worker.stitch_data.done",
-            duration_ms=duration_ms, inkstitch_ms=inkstitch_ms,
-            stitches=stitches, queue_depth=queue_depth,
+        notify_slack(
+            f":film_frames: *Stitch data* · `{ENV_NAME}`",
+            {
+                "Tempo": f"{duration_ms} ms",
+                "Ink/Stitch": f"{inkstitch_ms} ms",
+                "Pontos": str(stitches),
+                "Fila": str(queue_depth),
+            },
         )
 
         r.publish(RESULTS_CHANNEL, json.dumps({"jobId": job_id, "status": "done", "outputFile": output_file}))
@@ -523,7 +557,10 @@ def main() -> None:
             queue_depth = _queue_depth(r)
             if queue_depth >= QUEUE_DEPTH_WARN:
                 log.warning("Fila '%s' profunda: %d jobs aguardando", JOBS_QUEUE, queue_depth)
-                report_message("worker.queue.deep", level="warning", queue_depth=queue_depth)
+                notify_slack(
+                    f":warning: *Fila acumulando* · `{ENV_NAME}`",
+                    {"Jobs aguardando": str(queue_depth), "Limite": str(QUEUE_DEPTH_WARN)},
+                )
 
             process_job(r, job_data, queue_depth)
 
