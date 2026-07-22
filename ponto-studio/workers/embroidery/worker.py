@@ -72,11 +72,43 @@ def report_error() -> None:
             log.exception("Falha ao reportar erro pro Rollbar")
 
 
+# Telemetria (timing/métricas) via Rollbar: eventos `info` contam na cota do
+# free tier, então ficam atrás deste toggle. "0" desliga só a telemetria — os
+# erros (report_error) continuam indo. No-op também sem ROLLBAR_SERVER_TOKEN.
+_TELEMETRY_ON = os.environ.get("ROLLBAR_TELEMETRY", "1") != "0"
+
+
+def report_message(event: str, level: str = "info", **data: Any) -> None:
+    """
+    Manda um evento de telemetria pro Rollbar (timing, métricas, profundidade de
+    fila). No-op sem token, sem o pacote, ou com ROLLBAR_TELEMETRY=0. Nunca
+    derruba o worker se o Rollbar falhar.
+    """
+    if _rollbar is None or not _TELEMETRY_ON:
+        return
+    try:
+        _rollbar.report_message(event, level=level, extra_data=data)
+    except Exception:  # noqa: BLE001 — telemetria não pode quebrar o job
+        log.exception("Falha ao enviar telemetria pro Rollbar")
+
+
 REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379")
 JOBS_QUEUE = "embroidery:jobs"
 RESULTS_CHANNEL = "embroidery:results"
 EXPORTS_DIR = Path(os.environ.get("EXPORTS_DIR", "/exports"))
 UPLOADS_DIR = Path(os.environ.get("UPLOADS_DIR", "/uploads"))
+
+# Limite de backlog da fila: acima disso, o worker manda um alerta (warning) pro
+# Rollbar. Threshold evita spam/cota quando a fila está saudável (perto de 0).
+QUEUE_DEPTH_WARN = int(os.environ.get("QUEUE_DEPTH_WARN", "20"))
+
+
+def _queue_depth(r: "redis.Redis") -> int:
+    """Tamanho atual da fila de jobs (LLEN). 0 em caso de erro — não pode derrubar o job."""
+    try:
+        return int(r.llen(JOBS_QUEUE))
+    except Exception:  # noqa: BLE001
+        return 0
 
 # Mapeamento de formato → extensão pyembroidery / Ink/Stitch
 FORMAT_MAP: dict[str, str] = {
@@ -214,7 +246,7 @@ def _pattern_from_bytes(data: bytes, ext: str) -> pyembroidery.EmbPattern:
 
 # ── Worker loop ───────────────────────────────────────────────────────────────
 
-def process_job(r: redis.Redis, job_data: dict[str, Any]) -> None:
+def process_job(r: redis.Redis, job_data: dict[str, Any], queue_depth: int = 0) -> None:
     job_id: str = job_data["jobId"]
 
     # Dispatch por tipo: "export" (default, SVG → bordado), "analyze"
@@ -222,13 +254,13 @@ def process_job(r: redis.Redis, job_data: dict[str, Any]) -> None:
     # "stitch_data" (SVG → sequência de pontos em JSON, para o player EXP-2).
     job_type = job_data.get("type", "export")
     if job_type == "analyze":
-        process_analyze_job(r, job_data)
+        process_analyze_job(r, job_data, queue_depth)
         return
     if job_type == "preview":
-        process_preview_job(r, job_data)
+        process_preview_job(r, job_data, queue_depth)
         return
     if job_type == "stitch_data":
-        process_stitch_data_job(r, job_data)
+        process_stitch_data_job(r, job_data, queue_depth)
         return
 
     svg_file: str = job_data["svgFile"]
@@ -249,9 +281,12 @@ def process_job(r: redis.Redis, job_data: dict[str, Any]) -> None:
     output_file = f"{job_id}.{ext}"
     output_path = EXPORTS_DIR / output_file
 
+    t0 = time.perf_counter()
     try:
         svg_text = svg_path.read_text(encoding="utf-8")
+        t_ink = time.perf_counter()
         result_bytes = run_inkstitch(svg_text, formats=(ext,))[ext]
+        inkstitch_ms = round((time.perf_counter() - t_ink) * 1000)
 
         # Conta pontos pra validar (mesmo critério de antes: SVG sem paths
         # válidos = erro) — os bytes gravados são os ORIGINAIS do Ink/Stitch,
@@ -263,7 +298,18 @@ def process_job(r: redis.Redis, job_data: dict[str, Any]) -> None:
             return
 
         output_path.write_bytes(result_bytes)
-        log.info("Job %s concluído → %s (%d pontos)", job_id, output_file, len(pattern.stitches))
+        stitches = len(pattern.stitches)
+        duration_ms = round((time.perf_counter() - t0) * 1000)
+        log.info(
+            "Job %s concluído → %s (%d pontos, %d ms, inkstitch %d ms)",
+            job_id, output_file, stitches, duration_ms, inkstitch_ms,
+        )
+        report_message(
+            "worker.export.done",
+            duration_ms=duration_ms, inkstitch_ms=inkstitch_ms,
+            stitches=stitches, format=fmt, bytes=len(result_bytes),
+            queue_depth=queue_depth,
+        )
 
         result = json.dumps({"jobId": job_id, "status": "done", "outputFile": output_file})
         r.publish(RESULTS_CHANNEL, result)
@@ -274,7 +320,7 @@ def process_job(r: redis.Redis, job_data: dict[str, Any]) -> None:
         _publish_error(r, job_id, str(exc))
 
 
-def process_analyze_job(r: redis.Redis, job_data: dict[str, Any]) -> None:
+def process_analyze_job(r: redis.Redis, job_data: dict[str, Any], queue_depth: int = 0) -> None:
     """Análise local: imagem em UPLOADS_DIR → SVG por cor em EXPORTS_DIR."""
     from analyze import DEFAULT_MERGE_DELTA_E, AnalyzeParams, analyze_image_with_metrics
 
@@ -289,6 +335,7 @@ def process_analyze_job(r: redis.Redis, job_data: dict[str, Any]) -> None:
         _publish_error(r, job_id, f"Imagem não encontrada: {image_file}")
         return
 
+    t0 = time.perf_counter()
     try:
         params = AnalyzeParams(
             colors=int(raw_params.get("colors", 4)),
@@ -307,7 +354,16 @@ def process_analyze_job(r: redis.Redis, job_data: dict[str, Any]) -> None:
         (EXPORTS_DIR / f"{job_id}.metrics.json").write_text(
             json.dumps(metrics), encoding="utf-8"
         )
-        log.info("Análise %s concluída → %s (%d bytes)", job_id, output_file, len(svg))
+        duration_ms = round((time.perf_counter() - t0) * 1000)
+        log.info(
+            "Análise %s concluída → %s (%d bytes, %d ms)",
+            job_id, output_file, len(svg), duration_ms,
+        )
+        report_message(
+            "worker.analyze.done",
+            duration_ms=duration_ms, svg_bytes=len(svg),
+            colors=params.colors, queue_depth=queue_depth,
+        )
 
         result = json.dumps({"jobId": job_id, "status": "done", "outputFile": output_file})
         r.publish(RESULTS_CHANNEL, result)
@@ -318,7 +374,7 @@ def process_analyze_job(r: redis.Redis, job_data: dict[str, Any]) -> None:
         _publish_error(r, job_id, str(exc))
 
 
-def process_preview_job(r: redis.Redis, job_data: dict[str, Any]) -> None:
+def process_preview_job(r: redis.Redis, job_data: dict[str, Any], queue_depth: int = 0) -> None:
     """
     Preview: SVG-entrada (um elemento anotado com inkstitch, no viewBox
     original) → Ink/Stitch (PES, que embute a cor real da linha — DST não
@@ -334,15 +390,28 @@ def process_preview_job(r: redis.Redis, job_data: dict[str, Any]) -> None:
         _publish_error(r, job_id, f"SVG de preview não encontrado: {svg_file}")
         return
 
+    t0 = time.perf_counter()
     try:
         svg_text = svg_path.read_text(encoding="utf-8")
+        t_ink = time.perf_counter()
         pes_bytes = run_inkstitch(svg_text, formats=("pes",))["pes"]
+        inkstitch_ms = round((time.perf_counter() - t_ink) * 1000)
         pattern = _pattern_from_bytes(pes_bytes, "pes")
         preview_svg = pattern_to_preview_svg(pattern, _svg_viewbox(svg_path))
 
         output_file = f"{job_id}.svg"
         (EXPORTS_DIR / output_file).write_text(preview_svg, encoding="utf-8")
-        log.info("Preview %s concluído → %s (%d pontos)", job_id, output_file, len(pattern.stitches))
+        stitches = len(pattern.stitches)
+        duration_ms = round((time.perf_counter() - t0) * 1000)
+        log.info(
+            "Preview %s concluído → %s (%d pontos, %d ms, inkstitch %d ms)",
+            job_id, output_file, stitches, duration_ms, inkstitch_ms,
+        )
+        report_message(
+            "worker.preview.done",
+            duration_ms=duration_ms, inkstitch_ms=inkstitch_ms,
+            stitches=stitches, queue_depth=queue_depth,
+        )
 
         r.publish(RESULTS_CHANNEL, json.dumps({"jobId": job_id, "status": "done", "outputFile": output_file}))
     except Exception as exc:
@@ -351,7 +420,7 @@ def process_preview_job(r: redis.Redis, job_data: dict[str, Any]) -> None:
         _publish_error(r, job_id, str(exc))
 
 
-def process_stitch_data_job(r: redis.Redis, job_data: dict[str, Any]) -> None:
+def process_stitch_data_job(r: redis.Redis, job_data: dict[str, Any], queue_depth: int = 0) -> None:
     """
     Dados do player de simulação (EXP-2): SVG do projeto inteiro (mesmo
     arquivo que alimenta o export) → Ink/Stitch (PES, cor embutida) →
@@ -369,9 +438,12 @@ def process_stitch_data_job(r: redis.Redis, job_data: dict[str, Any]) -> None:
         _publish_error(r, job_id, f"SVG não encontrado: {svg_file}")
         return
 
+    t0 = time.perf_counter()
     try:
         svg_text = svg_path.read_text(encoding="utf-8")
+        t_ink = time.perf_counter()
         pes_bytes = run_inkstitch(svg_text, formats=("pes",))["pes"]
+        inkstitch_ms = round((time.perf_counter() - t_ink) * 1000)
         pattern = _pattern_from_bytes(pes_bytes, "pes")
 
         if len(pattern.stitches) == 0:
@@ -382,7 +454,17 @@ def process_stitch_data_job(r: redis.Redis, job_data: dict[str, Any]) -> None:
 
         output_file = f"{job_id}.json"
         (EXPORTS_DIR / output_file).write_text(json.dumps(data), encoding="utf-8")
-        log.info("Stitch data %s concluído → %s (%d pontos)", job_id, output_file, len(pattern.stitches))
+        stitches = len(pattern.stitches)
+        duration_ms = round((time.perf_counter() - t0) * 1000)
+        log.info(
+            "Stitch data %s concluído → %s (%d pontos, %d ms, inkstitch %d ms)",
+            job_id, output_file, stitches, duration_ms, inkstitch_ms,
+        )
+        report_message(
+            "worker.stitch_data.done",
+            duration_ms=duration_ms, inkstitch_ms=inkstitch_ms,
+            stitches=stitches, queue_depth=queue_depth,
+        )
 
         r.publish(RESULTS_CHANNEL, json.dumps({"jobId": job_id, "status": "done", "outputFile": output_file}))
     except Exception as exc:
@@ -434,7 +516,16 @@ def main() -> None:
 
             _, payload = item
             job_data = json.loads(payload)
-            process_job(r, job_data)
+
+            # Backlog restante na fila (este job já foi retirado pelo BLPOP).
+            # Vai junto na telemetria de cada job e dispara um alerta quando
+            # cresce demais — sinal de que o worker não está dando conta.
+            queue_depth = _queue_depth(r)
+            if queue_depth >= QUEUE_DEPTH_WARN:
+                log.warning("Fila '%s' profunda: %d jobs aguardando", JOBS_QUEUE, queue_depth)
+                report_message("worker.queue.deep", level="warning", queue_depth=queue_depth)
+
+            process_job(r, job_data, queue_depth)
 
         except redis.exceptions.ConnectionError as exc:
             log.error("Conexão Redis perdida: %s — reconectando em 3s…", exc)

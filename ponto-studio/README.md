@@ -134,6 +134,22 @@ Projeto (JSON) → API → Salva SVG → RPUSH embroidery:jobs (Redis)
 | `PORT` | Porta da API | `3001` |
 | `PUBLIC_URL` | URL base pública da API (para URLs de download) | `http://localhost:3001` (`https://ponto.bit-lab.tech` nesta VPS) |
 | `EXPORTS_DIR` | Diretório de saída do worker | `/exports` |
+| `ROLLBAR_SERVER_TOKEN` | Token servidor (secreto) do Rollbar — erros + telemetria da API e do worker. Sem ele, tudo vira no-op. | *(vazio = desligado)* |
+| `ROLLBAR_TELEMETRY` | `0` desliga só a telemetria de timing (eventos `info`), mantém os erros. Protege a cota do free tier. | `1` |
+| `QUEUE_DEPTH_WARN` | Acima deste tamanho de fila, worker e API alertam no Rollbar (backlog). | `20` |
+
+### Observabilidade (Rollbar)
+
+O worker emite **1 evento por job** (`worker.export.done`, `worker.analyze.done`,
+`worker.preview.done`, `worker.stitch_data.done`) com `duration_ms`, `inkstitch_ms`
+(tempo só do subprocess do Ink/Stitch), nº de pontos, bytes e `queue_depth`. As mesmas
+métricas também vão nas linhas de `log.info` (visíveis no `docker logs`, sem depender do
+Rollbar). Quando a fila passa de `QUEUE_DEPTH_WARN`, worker e API mandam um `warning`.
+
+> Rollbar cobre bem **erros** e serve pra timing via eventos `info`, mas não é uma
+> plataforma de métricas (agregações p50/p95 e gráficos de latência não são o forte dele).
+> Se um dia precisar de dashboards de latência, o passo natural é somar Loki/Prometheus
+> (Grafana Cloud) **só pra métricas** e manter o Rollbar pros erros.
 
 ## Banco de Dados
 

@@ -3,6 +3,7 @@ import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { createClient } from "redis";
 import type { ExportJob, ExportFormat, LocalAnalyzeParams } from "@ponto-studio/shared";
+import { getRollbar } from "./rollbar.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const EXPORTS_DIR = join(__dirname, "..", "..", "exports");
@@ -12,6 +13,19 @@ mkdirSync(EXPORTS_DIR, { recursive: true });
 const REDIS_URL = process.env["REDIS_URL"] ?? "redis://localhost:6379";
 const JOBS_QUEUE = "embroidery:jobs";
 const RESULTS_CHANNEL = "embroidery:results";
+
+// Limite de backlog da fila: acima disso, avisa no Rollbar (no-op sem token).
+// Mesma ideia do QUEUE_DEPTH_WARN do worker — só que aqui a profundidade sai de
+// graça, porque rPush retorna o novo tamanho da lista.
+const QUEUE_DEPTH_WARN = Number(process.env["QUEUE_DEPTH_WARN"] ?? 20);
+
+/** Loga a profundidade da fila e alerta no Rollbar quando passa do limite. */
+function reportQueueDepth(depth: number, jobType: string): void {
+  console.log(`[jobQueue] enfileirado ${jobType} — fila com ${depth} job(s)`);
+  if (depth >= QUEUE_DEPTH_WARN) {
+    getRollbar()?.warning("queue backlog deep", { queue_depth: depth, jobType });
+  }
+}
 
 type RedisClient = ReturnType<typeof createClient>;
 
@@ -105,7 +119,8 @@ export async function enqueueJob(params: {
   // Publica o job na fila do Redis
   const payload = JSON.stringify({ jobId, svgFile, format, projectId });
   const pub = await getPublisher();
-  await pub.rPush(JOBS_QUEUE, payload);
+  const depth = await pub.rPush(JOBS_QUEUE, payload);
+  reportQueueDepth(depth, "export");
 
   return job;
 }
@@ -138,7 +153,8 @@ export async function enqueueAnalyzeJob(params: {
     params: analyzeParams,
   });
   const pub = await getPublisher();
-  await pub.rPush(JOBS_QUEUE, payload);
+  const depth = await pub.rPush(JOBS_QUEUE, payload);
+  reportQueueDepth(depth, "analyze");
 
   return job;
 }
@@ -168,7 +184,8 @@ export async function enqueuePreviewJob(params: {
 
   const payload = JSON.stringify({ type: "preview", jobId, svgFile: inputFile });
   const pub = await getPublisher();
-  await pub.rPush(JOBS_QUEUE, payload);
+  const depth = await pub.rPush(JOBS_QUEUE, payload);
+  reportQueueDepth(depth, "preview");
 
   return job;
 }
@@ -199,7 +216,8 @@ export async function enqueueStitchDataJob(params: {
 
   const payload = JSON.stringify({ type: "stitch_data", jobId, svgFile: inputFile });
   const pub = await getPublisher();
-  await pub.rPush(JOBS_QUEUE, payload);
+  const depth = await pub.rPush(JOBS_QUEUE, payload);
+  reportQueueDepth(depth, "stitch_data");
 
   return job;
 }
