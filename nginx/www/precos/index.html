@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Preços — Bit Lab</title>
+  <meta name="description" content="Tabela de preços Bit Lab 2026: gravação de set, Bit Lab Space, treinamento CDJ, presskit, live stream, equipamentos e club de membros." />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      min-height: 100vh;
+      background: #0a0a0a;
+      font-family: 'Courier New', monospace;
+      color: #e0e0e0;
+      padding: 3rem 1.25rem 5rem;
+    }
+
+    .wrap {
+      max-width: 880px;
+      margin: 0 auto;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 3rem;
+    }
+
+    .logo {
+      font-size: 2.5rem;
+      font-weight: bold;
+      letter-spacing: 0.1em;
+      color: #ffffff;
+    }
+
+    .logo span {
+      color: #4ade80;
+    }
+
+    .tagline {
+      margin-top: 0.75rem;
+      font-size: 0.95rem;
+      color: #6b7280;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+
+    .year-badge {
+      margin-top: 1.5rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: #111;
+      border: 1px solid #1f2937;
+      border-radius: 9999px;
+      padding: 0.4rem 1rem;
+      font-size: 0.85rem;
+      color: #4ade80;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #4ade80;
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    section {
+      margin-bottom: 2.5rem;
+      background: #111214;
+      border: 1px solid #1f2937;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    section h2 {
+      font-size: 0.95rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: #4ade80;
+      padding: 1.1rem 1.4rem;
+      border-bottom: 1px solid #1f2937;
+      background: #0d0f11;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    thead th {
+      text-align: left;
+      font-size: 0.72rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #6b7280;
+      padding: 0.7rem 1.4rem;
+      border-bottom: 1px solid #1f2937;
+    }
+
+    thead th:last-child, tbody td:last-child {
+      text-align: right;
+    }
+
+    tbody td {
+      padding: 0.85rem 1.4rem;
+      border-bottom: 1px solid #191b1e;
+      font-size: 0.95rem;
+    }
+
+    tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    tbody td:last-child {
+      color: #4ade80;
+      font-weight: bold;
+      white-space: nowrap;
+    }
+
+    .empty-note {
+      padding: 1rem 1.4rem;
+      font-size: 0.85rem;
+      color: #6b7280;
+      font-style: italic;
+    }
+
+    .club {
+      padding: 1.4rem;
+    }
+
+    .club-price {
+      display: flex;
+      align-items: baseline;
+      gap: 0.6rem;
+      flex-wrap: wrap;
+      margin-bottom: 1rem;
+    }
+
+    .club-price .value {
+      font-size: 1.6rem;
+      font-weight: bold;
+      color: #4ade80;
+    }
+
+    .club-price .sub {
+      font-size: 0.85rem;
+      color: #6b7280;
+    }
+
+    ul.club-benefits {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.55rem;
+      margin-bottom: 1.4rem;
+    }
+
+    ul.club-benefits li {
+      font-size: 0.9rem;
+      color: #d1d5db;
+      padding-left: 1.2rem;
+      position: relative;
+    }
+
+    ul.club-benefits li::before {
+      content: '›';
+      position: absolute;
+      left: 0;
+      color: #4ade80;
+    }
+
+    .btn-pay {
+      display: inline-block;
+      background: #4ade80;
+      color: #0a0a0a;
+      font-weight: bold;
+      text-decoration: none;
+      padding: 0.75rem 1.5rem;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      letter-spacing: 0.03em;
+    }
+
+    .btn-pay:hover {
+      background: #6ee89a;
+    }
+
+    footer {
+      text-align: center;
+      margin-top: 3.5rem;
+      font-size: 0.8rem;
+      color: #4b5563;
+      line-height: 1.6;
+    }
+
+    footer a {
+      color: #4ade80;
+      text-decoration: none;
+    }
+
+    @media (max-width: 560px) {
+      thead th, tbody td { padding: 0.7rem 1rem; }
+      section h2 { padding: 0.9rem 1rem; }
+      .club { padding: 1rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="logo">bit<span>-</span>lab<span>.tech</span></div>
+      <div class="tagline">tabela de preços</div>
+      <div class="year-badge"><div class="dot"></div>Precificação 2026</div>
+    </header>
+
+    <section>
+      <h2>Gravação de Set</h2>
+      <table>
+        <thead><tr><th>Serviço</th><th>Valor</th></tr></thead>
+        <tbody>
+          <tr><td>Áudio gravado</td><td>R$ 300</td></tr>
+          <tr><td>Audiovisual — 1 câmera</td><td>R$ 800</td></tr>
+          <tr><td>Audiovisual — 2 câmeras</td><td>R$ 1.600</td></tr>
+          <tr><td>Multicâmeras + Visualizer + Fotografias</td><td>R$ 2.800</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Bit Lab Space</h2>
+      <table>
+        <thead><tr><th>Serviço</th><th>Valor</th></tr></thead>
+        <tbody>
+          <tr><td>Sala + equipamentos (6h)</td><td>R$ 1.200</td></tr>
+          <tr><td>Diária (12h)</td><td>R$ 2.400</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Parcerias — Club de Membros</h2>
+      <div class="club">
+        <div class="club-price">
+          <span class="value">R$ 120 / mês</span>
+          <span class="sub">R$ 100 no primeiro mês</span>
+        </div>
+        <ul class="club-benefits">
+          <li>Duas horas de treino incluídas por mês</li>
+          <li>Acesso antecipado a cortesias (eventos do Bit Lab)</li>
+          <li>Pagamento por cartão de crédito</li>
+        </ul>
+        <a class="btn-pay" href="https://invoice.infinitepay.io/plans/rodrigo-dos-81s/hCuw7INEdU" target="_blank" rel="noopener noreferrer">Assinar Club de Membros</a>
+      </div>
+    </section>
+
+    <section>
+      <h2>Treinamento CDJ</h2>
+      <table>
+        <thead><tr><th>Carga Horária</th><th>Valor</th></tr></thead>
+        <tbody>
+          <tr><td>1h</td><td>R$ 90</td></tr>
+          <tr><td>2h</td><td>R$ 160</td></tr>
+          <tr><td>Pacote 10h — válido durante o mês</td><td>R$ 700</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Presskit</h2>
+      <table>
+        <thead><tr><th>Plano</th><th>Valor</th></tr></thead>
+        <tbody>
+          <tr><td>Fotografia</td><td>R$ 600</td></tr>
+          <tr><td>Pro (foto + vídeo)</td><td>R$ 1.200</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Live Stream</h2>
+      <table>
+        <thead><tr><th>Serviço</th><th>Valor</th></tr></thead>
+        <tbody>
+          <tr><td>Somente transmissão</td><td>R$ 700</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Equipamentos — Referência de Diária</h2>
+      <table>
+        <thead><tr><th>Equipamento</th><th>Valor/Dia</th></tr></thead>
+        <tbody>
+          <tr><td>CDJ-900 (cada)</td><td>R$ 150</td></tr>
+          <tr><td>DJM-2000</td><td>R$ 200</td></tr>
+          <tr><td>Caixa Ativa Top MakPro 600w</td><td>R$ 200</td></tr>
+          <tr><td>Sub (cada) 800w</td><td>R$ 250</td></tr>
+          <tr><td>Máquina de fumaça</td><td>R$ 120</td></tr>
+          <tr><td>Projetor</td><td>R$ 180</td></tr>
+          <tr><td>Tripé</td><td>R$ 50</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <footer>
+      Valores sugeridos para 2026. Condições especiais, pacotes personalizados e parcerias<br />
+      podem ser negociados diretamente com a equipe Bit Lab.<br /><br />
+      <a href="https://bit-lab.tech">bit-lab.tech</a>
+    </footer>
+  </div>
+</body>
+</html>
