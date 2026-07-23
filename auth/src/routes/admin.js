@@ -2,7 +2,6 @@ const express = require('express')
 const usersModel = require('../models/users')
 const appsModel = require('../models/apps')
 const appAccessModel = require('../models/appAccess')
-const accessRequestsModel = require('../models/accessRequests')
 const signupTokensModel = require('../models/signupTokens')
 const auditLog = require('../models/auditLog')
 const { requireSession, requireSuperuser } = require('../middleware')
@@ -109,25 +108,6 @@ router.patch('/api/access/:userId/:appId/role', async (req, res) => {
 router.delete('/api/access/:userId/:appId', async (req, res) => {
   await appAccessModel.revoke(req.params.userId, req.params.appId)
   await auditLog.record(req.user, 'access.revoke', req.params.userId, { appId: req.params.appId })
-  res.json({ ok: true })
-})
-
-// ── fila de solicitações de acesso ──────────────────────────────────────────
-router.get('/api/access-requests', async (req, res) => {
-  res.json(await accessRequestsModel.listPending())
-})
-
-router.post('/api/access-requests/:id/approve', async (req, res) => {
-  const request = await accessRequestsModel.approve(req.params.id, req.user.userId)
-  if (!request) return res.status(404).json({ error: 'solicitação não encontrada ou já decidida' })
-  await auditLog.record(req.user, 'access_request.approve', req.params.id)
-  res.json({ ok: true })
-})
-
-router.post('/api/access-requests/:id/reject', async (req, res) => {
-  const request = await accessRequestsModel.reject(req.params.id, req.user.userId)
-  if (!request) return res.status(404).json({ error: 'solicitação não encontrada ou já decidida' })
-  await auditLog.record(req.user, 'access_request.reject', req.params.id)
   res.json({ ok: true })
 })
 

@@ -20,12 +20,14 @@ shadcn/ui), que fala com este serviço via proxy interno (`/api`, `/admin/api`).
 | **Admin (de app)** | `app_access.role = 'app_admin'` | Papel elevado só naquele app específico. |
 | **End user** | `app_access.role = 'end_user'` (default) | Uso normal do app. |
 
-Não existe mais self-signup ligado por padrão — cada app tem seu próprio
-toggle `allow_self_signup`, configurável pelo superuser em
-`apps.bit-lab.tech/admin/apps`. Contas de end user/app admin são criadas por
-**links de convite** (`apps.bit-lab.tech/admin/tokens`): o superuser escolhe o
-papel, quais apps o link concede, e-mail opcional e validade — o link só
-mostra o token uma vez.
+Não existe mais self-signup ligado por padrão nem fila de solicitação de
+acesso — cada app tem seu próprio toggle `allow_self_signup`, configurável
+pelo superuser em `apps.bit-lab.tech/admin/apps`. Contas de end user/app admin
+são criadas por **links de convite** (`apps.bit-lab.tech/admin/tokens`): o
+superuser escolhe o papel, quais apps o link concede, e-mail opcional e
+validade — o link só mostra o token uma vez. Quem abre o link e já tem conta
+clica em "Já tenho conta" (`/invite/redeem?token=...`): loga normal e o
+convite é resgatado pra essa conta já existente, sem criar uma segunda.
 
 ## Como funciona
 
@@ -36,9 +38,8 @@ mostra o token uma vez.
   acesso ao app → `403`. Acesso concedido → `200` (+ header `X-User-Email`
   repassado pro app de baixo).
 - **Admin:** `apps.bit-lab.tech/admin` (SPA, protegida por sessão + superuser)
-  — CRUD de usuários, apps (+ toggle de self-signup), acessos (+ papel),
-  solicitações pendentes e links de convite. A API JSON por trás mora em
-  `/admin/api/*` neste serviço.
+  — CRUD de usuários, apps (+ toggle de self-signup), acessos (+ papel) e
+  links de convite. A API JSON por trás mora em `/admin/api/*` neste serviço.
 - **OIDC:** `Provider` real montado (discovery, JWKS, `/auth`, `/token`,
   `/userinfo`) — clients registrados: `face-lab`, `ponto-studio`. Ver
   comentário em `src/oidc.js`.

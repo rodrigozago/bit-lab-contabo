@@ -11,7 +11,6 @@ import { Dashboard } from "@/pages/Dashboard"
 import { UsersPage } from "@/pages/admin/Users"
 import { AppsPage } from "@/pages/admin/Apps"
 import { AccessPage } from "@/pages/admin/Access"
-import { RequestsPage } from "@/pages/admin/Requests"
 import { TokensPage } from "@/pages/admin/Tokens"
 
 export default function App() {
@@ -52,10 +51,6 @@ export default function App() {
                 <Route
                   path="/admin/access"
                   element={<RequireSuperuser><AccessPage /></RequireSuperuser>}
-                />
-                <Route
-                  path="/admin/requests"
-                  element={<RequireSuperuser><RequestsPage /></RequireSuperuser>}
                 />
                 <Route
                   path="/admin/tokens"

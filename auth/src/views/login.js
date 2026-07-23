@@ -29,7 +29,9 @@ function layout(title, body) {
   .error { color: #f87171; font-size: 13px; margin-bottom: 12px; }
   .alt { font-size: 13px; color: #a3a3a3; margin-top: 16px; text-align: center; }
   .alt a { color: #b8a3e8; }
-  .card p { font-size: 14px; line-height: 1.5; color: #d4d4d4; margin: 0; }
+  .card p { font-size: 14px; line-height: 1.5; color: #d4d4d4; margin: 0 0 12px; }
+  .btn-secondary { display: block; text-align: center; padding: 10px; border-radius: 8px;
+                   background: #333; color: #fff; text-decoration: none; font-weight: 600; }
 </style>
 </head>
 <body>
@@ -56,24 +58,37 @@ function renderLogin({ error, redirect, action = '/login', signupHref } = {}) {
 
 // token = resgate de convite (e-mail travado se o convite tiver um);
 // app = self-signup clássico daquele app específico.
+//
+// "Já tenho conta" pra quem veio de um convite (token) não vai só pro /login
+// — vai pro /invite/redeem, que loga normalmente e DEPOIS resgata o convite
+// pra essa conta já existente (senão o acesso concedido pelo link se perderia).
 function renderSignup({ error, redirect, token, app, lockedEmail } = {}) {
   const safeRedirect = escapeHtml(redirect || '')
-  return layout('bit-lab — criar conta', `  <form method="POST" action="/signup">
-    <h1>🪡 bit-lab — criar conta</h1>
-    ${error ? `<div class="error">${escapeHtml(error)}</div>` : ''}
-    <input type="hidden" name="redirect" value="${safeRedirect}" />
-    ${token ? `<input type="hidden" name="token" value="${escapeHtml(token)}" />` : ''}
-    ${app ? `<input type="hidden" name="app" value="${escapeHtml(app)}" />` : ''}
-    <label>E-mail</label>
-    <input type="email" name="email" required autofocus
-           ${lockedEmail ? `value="${escapeHtml(lockedEmail)}" readonly` : ''} />
-    <label>Senha (mín. 8 caracteres)</label>
-    <input type="password" name="password" minlength="8" required />
-    <label>Confirme a senha</label>
-    <input type="password" name="password2" minlength="8" required />
-    <button type="submit">Criar conta</button>
-    <div class="alt">Já tem conta? <a href="/login${redirect ? `?redirect=${encodeURIComponent(redirect)}` : ''}">Entrar</a></div>
-  </form>`)
+  const hasAccountHref = token
+    ? `/invite/redeem?token=${encodeURIComponent(token)}${redirect ? `&redirect=${encodeURIComponent(redirect)}` : ''}`
+    : `/login${redirect ? `?redirect=${encodeURIComponent(redirect)}` : ''}`
+
+  return layout('bit-lab — criar conta', `  <div style="display:flex;flex-direction:column;gap:16px;">
+    <div class="card">
+      <h1>🪡 Crie sua conta bit-lab</h1>
+      <p>Você foi convidado pro bit-lab. Se já tem uma conta, é só entrar — o convite continua valendo.</p>
+      <a class="btn-secondary" href="${escapeHtml(hasAccountHref)}">Já tenho conta</a>
+    </div>
+    <form method="POST" action="/signup">
+      ${error ? `<div class="error">${escapeHtml(error)}</div>` : ''}
+      <input type="hidden" name="redirect" value="${safeRedirect}" />
+      ${token ? `<input type="hidden" name="token" value="${escapeHtml(token)}" />` : ''}
+      ${app ? `<input type="hidden" name="app" value="${escapeHtml(app)}" />` : ''}
+      <label>E-mail</label>
+      <input type="email" name="email" required autofocus
+             ${lockedEmail ? `value="${escapeHtml(lockedEmail)}" readonly` : ''} />
+      <label>Senha (mín. 8 caracteres)</label>
+      <input type="password" name="password" minlength="8" required />
+      <label>Confirme a senha</label>
+      <input type="password" name="password2" minlength="8" required />
+      <button type="submit">Criar conta</button>
+    </form>
+  </div>`)
 }
 
 // Tela de mensagem simples (ex: convite inválido/expirado) — sem form.

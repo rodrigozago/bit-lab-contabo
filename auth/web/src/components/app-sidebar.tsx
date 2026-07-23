@@ -5,7 +5,6 @@ import {
   Users,
   AppWindow,
   KeySquare,
-  Inbox,
   Link as LinkIcon,
 } from "lucide-react"
 
@@ -31,7 +30,6 @@ const adminItems = [
   { title: "Usuários", url: "/admin/users", icon: Users },
   { title: "Apps", url: "/admin/apps", icon: AppWindow },
   { title: "Acessos", url: "/admin/access", icon: KeySquare },
-  { title: "Solicitações", url: "/admin/requests", icon: Inbox },
   { title: "Links de convite", url: "/admin/tokens", icon: LinkIcon },
 ]
 

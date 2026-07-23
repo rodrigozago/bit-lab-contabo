@@ -5,6 +5,7 @@ const appAccess = require('../models/appAccess')
 const signupTokens = require('../models/signupTokens')
 const session = require('../session')
 const { checkLimit } = require('../rateLimit')
+const { requireSession } = require('../middleware')
 const { renderLogin, renderSignup, renderMessage } = require('../views/login')
 
 const router = express.Router()
@@ -92,6 +93,36 @@ router.get('/signup', async (req, res) => {
   }
 
   return res.status(404).end()
+})
+
+// GET /invite/redeem — pra quem já tem conta bit-lab e clicou "Já tenho
+// conta" na tela de convite. requireSession já cuida do caso "não tá logado
+// ainda": redireciona pro /login?redirect=/invite/redeem?token=... e volta
+// pra cá sozinho depois — só então o convite é resgatado pra essa conta.
+router.get('/invite/redeem', requireSession, async (req, res) => {
+  const { token, redirect } = req.query
+  if (!token) {
+    return res.status(400).type('html').send(renderMessage({
+      title: 'Link inválido', message: 'Esse link está sem o token do convite.',
+    }))
+  }
+
+  const tokenRow = await signupTokens.findValidByToken(token)
+  if (!tokenRow) {
+    return res.status(410).type('html').send(renderMessage({
+      title: 'Convite inválido',
+      message: 'Este link de convite não existe mais, já foi usado ou expirou. Peça um novo link a quem te convidou.',
+    }))
+  }
+  if (tokenRow.email && tokenRow.email.toLowerCase() !== req.user.email.toLowerCase()) {
+    return res.status(403).type('html').send(renderMessage({
+      title: 'Convite não é pra essa conta',
+      message: `Este convite é só pro e-mail ${tokenRow.email} — entre com essa conta ou peça um novo link.`,
+    }))
+  }
+
+  await signupTokens.redeem(tokenRow, req.user.userId)
+  res.redirect(safeRedirectPath(redirect) || 'https://apps.bit-lab.tech/')
 })
 
 router.post('/signup', express.urlencoded({ extended: false }), async (req, res) => {

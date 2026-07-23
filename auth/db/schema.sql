@@ -50,25 +50,9 @@ CREATE TABLE IF NOT EXISTS app_access (
 ALTER TABLE app_access ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'end_user'
   CHECK (role IN ('end_user', 'app_admin'));
 
--- Fila de solicitações de acesso: quem tenta logar num app sem app_access
--- fica pendente até um superuser aprovar (ou recusar) pelo painel — aprovação
--- sempre concede papel 'end_user' (app_admin só sai de convite explícito).
-CREATE TABLE IF NOT EXISTS access_requests (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  app_id UUID NOT NULL REFERENCES apps(id) ON DELETE CASCADE,
-  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
-  requested_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  decided_at TIMESTAMPTZ,
-  decided_by UUID REFERENCES users(id)
-);
-
--- Só 1 solicitação PENDENTE por usuário+app (histórico de aprovadas/recusadas
--- pode acumular à vontade, só a pendente precisa ser única).
-CREATE UNIQUE INDEX IF NOT EXISTS access_requests_pending_unique
-  ON access_requests (user_id, app_id) WHERE status = 'pending';
-
--- Links de convite gerados pelo superuser (substituem o self-signup global):
+-- Links de convite gerados pelo superuser (substituem o self-signup global E
+-- a antiga fila de solicitação de acesso — removida: acesso só sai de convite
+-- ou self-signup ligado pro app específico, nada mais fica pendente):
 -- token_hash guarda só o sha256 do token — o valor bruto só existe na URL
 -- entregue ao convidado no momento da criação, nunca fica no banco.
 CREATE TABLE IF NOT EXISTS signup_tokens (
