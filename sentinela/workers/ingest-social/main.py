@@ -24,7 +24,7 @@ from scrape_log import log_run
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgres://sentinela:sentinela@localhost:5432/sentinela")
 POLL_INTERVAL_SECONDS = int(os.environ.get("POLL_INTERVAL_SECONDS", "600"))
-TWSCRAPE_DB_PATH = os.environ.get("TWSCRAPE_DB_PATH", "/data/accounts.db")
+TWSCRAPE_DB_PATH = os.environ.get("TWSCRAPE_DB_PATH", "accounts.db")
 # proxy padrão (Scrapoxy) pras contas que não têm um proxy dedicado — evita
 # que todas as contas apareçam saindo do mesmo IP do worker
 DEFAULT_PROXY = os.environ.get("SCRAPOXY_PROXY_URL")
