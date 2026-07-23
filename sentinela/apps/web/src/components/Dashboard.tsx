@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
 import { useAuth } from "../lib/auth.ts";
 import { api } from "../api/client.ts";
+import { BaseLayout } from "./layouts/base-layout.tsx";
 import type { Keyword, Mention, MonitoringTarget, TargetType } from "@sentinela/shared";
 
 export function Dashboard() {
@@ -17,52 +17,36 @@ export function Dashboard() {
 
   if (tenants.length === 0) {
     return (
-      <div className="mx-auto max-w-sm p-10">
-        <div className="text-center">
-          <h1 className="text-xl font-bold">🛰️ Sentinela</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
+      <BaseLayout title="Bem-vindo ao Sentinela">
+        <div className="mx-auto w-full max-w-sm px-4 lg:px-6">
+          <p className="text-center text-sm text-muted-foreground">
             Crie seu workspace pra começar a monitorar candidatos, partidos e palavras-chave.
           </p>
+          <CreateTenantForm onCreated={() => void refresh()} />
         </div>
-        <CreateTenantForm onCreated={() => void refresh()} />
-        {me?.isAdmin && (
-          <Link
-            to="/admin/scraping"
-            className="mt-4 block text-center text-sm text-muted-foreground hover:underline"
-          >
-            Ver status do scraping →
-          </Link>
-        )}
-      </div>
+      </BaseLayout>
     );
   }
 
   return (
-    <div className="mx-auto max-w-4xl p-6">
-      <header className="mb-6 flex items-center justify-between">
-        <h1 className="text-xl font-bold">🛰️ Sentinela</h1>
-        <div className="flex items-center gap-3">
-          {me?.isAdmin && (
-            <Link to="/admin/scraping" className="text-sm text-muted-foreground hover:underline">
-              Scraping
-            </Link>
-          )}
-          <select
-            className="rounded-md border border-border bg-card px-2 py-1 text-sm"
-            value={tenantId ?? ""}
-            onChange={(e) => setTenantId(e.target.value)}
-          >
-            {tenants.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.nome}
-              </option>
-            ))}
-          </select>
-        </div>
-      </header>
-
-      {tenantId && <TenantWorkspace tenantId={tenantId} />}
-    </div>
+    <BaseLayout
+      title="Dashboard"
+      headerActions={
+        <select
+          className="rounded-md border border-border bg-card px-2 py-1 text-sm"
+          value={tenantId ?? ""}
+          onChange={(e) => setTenantId(e.target.value)}
+        >
+          {tenants.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.nome}
+            </option>
+          ))}
+        </select>
+      }
+    >
+      <div className="px-4 lg:px-6">{tenantId && <TenantWorkspace tenantId={tenantId} />}</div>
+    </BaseLayout>
   );
 }
 

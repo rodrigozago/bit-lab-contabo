@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { pool } from "../db.js";
 import { requireAdmin } from "./plugins/requireAuth.js";
+import { encryptSecret } from "../services/socialAccountCrypto.js";
 
 // Dashboard de scraping — visão operacional da plataforma (não é dado de
 // tenant), por isso gated por is_admin (superuser central do bit-lab) e não
@@ -57,6 +58,28 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
          FROM social_accounts ORDER BY criado_em`
     );
     return { ok: true, data: rows };
+  });
+
+  // credenciais nunca voltam em texto puro — só o essencial pra popular o
+  // pool do twscrape (mesmo que manage_accounts.py faz via CLI, mas pelo
+  // navegador). ver services/socialAccountCrypto.ts.
+  app.post("/api/admin/social-accounts", { preHandler: requireAdmin }, async (req, reply) => {
+    const { username, authToken, ct0, proxyUrl } = req.body as {
+      username?: string;
+      authToken?: string;
+      ct0?: string;
+      proxyUrl?: string;
+    };
+    if (!username || !authToken || !ct0) {
+      return reply.status(400).send({ ok: false, error: "username, authToken e ct0 são obrigatórios" });
+    }
+    const { rows } = await pool.query(
+      `INSERT INTO social_accounts (platform, username, auth_token_encrypted, ct0_encrypted, proxy_url)
+       VALUES ('twitter', $1, $2, $3, $4)
+       RETURNING id, username, ativo, proxy_url AS "proxyUrl", criado_em AS "criadoEm"`,
+      [username, encryptSecret(authToken), encryptSecret(ct0), proxyUrl ?? null]
+    );
+    return reply.status(201).send({ ok: true, data: rows[0] });
   });
 
   app.patch("/api/admin/social-accounts/:id", { preHandler: requireAdmin }, async (req, reply) => {

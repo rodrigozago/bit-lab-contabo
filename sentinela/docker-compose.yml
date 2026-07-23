@@ -59,6 +59,9 @@ services:
       OIDC_CLIENT_ID: "sentinela"
       OIDC_CLIENT_SECRET: "${SENTINELA_OIDC_SECRET}"
       OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      # AES-256-GCM das credenciais em social_accounts (POST /api/admin/social-accounts)
+      # — mesma chave do worker-ingest-social, senão ele não decifra o que a API cifrou
+      SOCIAL_ACCOUNTS_ENCRYPTION_KEY: "${SOCIAL_ACCOUNTS_ENCRYPTION_KEY}"
       ROLLBAR_SERVER_TOKEN: "${ROLLBAR_SERVER_TOKEN:-}"
     depends_on:
       redis:

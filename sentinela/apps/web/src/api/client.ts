@@ -24,6 +24,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   auth: {
     me: () => request<Me>("/api/me"),
+    logout: () => request<{ ssoLogoutUrl: string }>("/api/auth/logout", { method: "POST" }),
   },
   tenants: {
     list: () => request<Me["tenants"]>("/api/tenants"),
@@ -63,6 +64,11 @@ export const api = {
     },
     sources: () => request<SourceStatus[]>("/api/admin/sources"),
     socialAccounts: () => request<SocialAccountSummary[]>("/api/admin/social-accounts"),
+    createSocialAccount: (data: { username: string; authToken: string; ct0: string; proxyUrl?: string }) =>
+      request<SocialAccountSummary>("/api/admin/social-accounts", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
     setSocialAccountActive: (id: string, ativo: boolean) =>
       request<SocialAccountSummary>(`/api/admin/social-accounts/${id}`, {
         method: "PATCH",

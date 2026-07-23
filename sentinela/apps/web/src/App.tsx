@@ -5,7 +5,10 @@ import { api } from "./api/client.ts";
 import { AuthContext, useAuth, loginUrl } from "./lib/auth.ts";
 import type { Me } from "@sentinela/shared";
 import { Dashboard } from "./components/Dashboard.tsx";
-import { AdminScraping } from "./components/AdminScraping.tsx";
+import { AdminTwitterAccounts } from "./components/admin/AdminTwitterAccounts.tsx";
+import { AdminNewsSources } from "./components/admin/AdminNewsSources.tsx";
+import { AdminScrapeLogs } from "./components/admin/AdminScrapeLogs.tsx";
+import { ThemeProvider } from "./components/theme-provider.tsx";
 
 export default function App() {
   const [me, setMe] = useState<Me | null>(null);
@@ -26,31 +29,53 @@ export default function App() {
   }, [refresh]);
 
   return (
-    <AuthContext.Provider value={{ me, loading: authLoading, refresh }}>
-      <Toaster />
-      <BrowserRouter>
-        <Routes>
-          <Route
-            path="/"
-            element={
-              <AuthGate>
-                <Dashboard />
-              </AuthGate>
-            }
-          />
-          <Route
-            path="/admin/scraping"
-            element={
-              <AuthGate>
-                <RequireAdmin>
-                  <AdminScraping />
-                </RequireAdmin>
-              </AuthGate>
-            }
-          />
-        </Routes>
-      </BrowserRouter>
-    </AuthContext.Provider>
+    <ThemeProvider defaultTheme="system" storageKey="sentinela-ui-theme">
+      <AuthContext.Provider value={{ me, loading: authLoading, refresh }}>
+        <Toaster />
+        <BrowserRouter>
+          <Routes>
+            <Route
+              path="/"
+              element={
+                <AuthGate>
+                  <Dashboard />
+                </AuthGate>
+              }
+            />
+            <Route
+              path="/admin/twitter-accounts"
+              element={
+                <AuthGate>
+                  <RequireAdmin>
+                    <AdminTwitterAccounts />
+                  </RequireAdmin>
+                </AuthGate>
+              }
+            />
+            <Route
+              path="/admin/news-sources"
+              element={
+                <AuthGate>
+                  <RequireAdmin>
+                    <AdminNewsSources />
+                  </RequireAdmin>
+                </AuthGate>
+              }
+            />
+            <Route
+              path="/admin/scrape-logs"
+              element={
+                <AuthGate>
+                  <RequireAdmin>
+                    <AdminScrapeLogs />
+                  </RequireAdmin>
+                </AuthGate>
+              }
+            />
+          </Routes>
+        </BrowserRouter>
+      </AuthContext.Provider>
+    </ThemeProvider>
   );
 }
 
