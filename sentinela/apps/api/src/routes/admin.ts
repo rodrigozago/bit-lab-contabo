@@ -73,4 +73,59 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     if (rows.length === 0) return reply.status(404).send({ ok: false, error: "conta não encontrada" });
     return { ok: true, data: rows[0] };
   });
+
+  // feeds de notícia compartilhados (sources tipo='news', tenant_id nulo) —
+  // curadoria é trabalho de admin, o worker de análise casa cada notícia
+  // contra os targets/keywords de todos os tenants (fan-out, ver
+  // workers/analysis/main.py). tenant_id nulo não cai no índice único
+  // parcial de sources (ver db/schema.sql), então aqui é select-then-upsert
+  // em vez de ON CONFLICT.
+  app.get("/api/admin/news-sources", { preHandler: requireAdmin }, async () => {
+    const { rows } = await pool.query(
+      `SELECT id, url_ou_handle AS "urlOuHandle", ativo, criado_em AS "criadoEm"
+         FROM sources WHERE tipo = 'news' AND tenant_id IS NULL
+        ORDER BY criado_em DESC`
+    );
+    return { ok: true, data: rows };
+  });
+
+  app.post("/api/admin/news-sources", { preHandler: requireAdmin }, async (req, reply) => {
+    const { url } = req.body as { url?: string };
+    if (!url) return reply.status(400).send({ ok: false, error: "url é obrigatória" });
+
+    const existing = await pool.query(
+      `SELECT id FROM sources WHERE tipo = 'news' AND tenant_id IS NULL AND url_ou_handle = $1`,
+      [url]
+    );
+    if (existing.rows.length > 0) {
+      const { rows } = await pool.query(
+        `UPDATE sources SET ativo = true WHERE id = $1
+         RETURNING id, url_ou_handle AS "urlOuHandle", ativo, criado_em AS "criadoEm"`,
+        [existing.rows[0].id]
+      );
+      return { ok: true, data: rows[0] };
+    }
+
+    const { rows } = await pool.query(
+      `INSERT INTO sources (tenant_id, tipo, url_ou_handle) VALUES (NULL, 'news', $1)
+       RETURNING id, url_ou_handle AS "urlOuHandle", ativo, criado_em AS "criadoEm"`,
+      [url]
+    );
+    return reply.status(201).send({ ok: true, data: rows[0] });
+  });
+
+  app.patch("/api/admin/news-sources/:id", { preHandler: requireAdmin }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const { ativo } = req.body as { ativo?: boolean };
+    if (typeof ativo !== "boolean") {
+      return reply.status(400).send({ ok: false, error: "ativo (boolean) é obrigatório" });
+    }
+    const { rows } = await pool.query(
+      `UPDATE sources SET ativo = $2 WHERE id = $1 AND tipo = 'news' AND tenant_id IS NULL
+       RETURNING id, url_ou_handle AS "urlOuHandle", ativo, criado_em AS "criadoEm"`,
+      [id, ativo]
+    );
+    if (rows.length === 0) return reply.status(404).send({ ok: false, error: "feed não encontrado" });
+    return { ok: true, data: rows[0] };
+  });
 }

@@ -1,4 +1,14 @@
-import type { Me, MonitoringTarget, Keyword, Mention, ScrapeRun, SourceStatus, SocialAccountSummary } from "@sentinela/shared";
+import type {
+  Me,
+  MonitoringTarget,
+  Keyword,
+  Mention,
+  ScrapeRun,
+  SourceStatus,
+  SocialAccountSummary,
+  NewsSource,
+  Tenant,
+} from "@sentinela/shared";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
@@ -17,18 +27,30 @@ export const api = {
   },
   tenants: {
     list: () => request<Me["tenants"]>("/api/tenants"),
-    create: (nome: string, slug: string) =>
-      request("/api/tenants", { method: "POST", body: JSON.stringify({ nome, slug }) }),
+    create: (nome: string) => request<Tenant>("/api/tenants", { method: "POST", body: JSON.stringify({ nome }) }),
   },
   targets: {
     list: (tenantId: string) => request<MonitoringTarget[]>(`/api/tenants/${tenantId}/targets`),
-    create: (tenantId: string, tipo: string, nome: string) =>
-      request(`/api/tenants/${tenantId}/targets`, { method: "POST", body: JSON.stringify({ tipo, nome }) }),
+    create: (tenantId: string, tipo: string, nome: string, contasRedes?: Record<string, string>) =>
+      request<MonitoringTarget>(`/api/tenants/${tenantId}/targets`, {
+        method: "POST",
+        body: JSON.stringify({ tipo, nome, contasRedes }),
+      }),
+    update: (tenantId: string, id: string, patch: { ativo?: boolean; contasRedes?: Record<string, string> }) =>
+      request<MonitoringTarget>(`/api/tenants/${tenantId}/targets/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(patch),
+      }),
   },
   keywords: {
     list: (tenantId: string) => request<Keyword[]>(`/api/tenants/${tenantId}/keywords`),
     create: (tenantId: string, termo: string) =>
-      request(`/api/tenants/${tenantId}/keywords`, { method: "POST", body: JSON.stringify({ termo }) }),
+      request<Keyword>(`/api/tenants/${tenantId}/keywords`, { method: "POST", body: JSON.stringify({ termo }) }),
+    update: (tenantId: string, id: string, ativo: boolean) =>
+      request<Keyword>(`/api/tenants/${tenantId}/keywords/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ ativo }),
+      }),
   },
   mentions: {
     list: (tenantId: string) => request<Mention[]>(`/api/tenants/${tenantId}/mentions`),
@@ -46,5 +68,10 @@ export const api = {
         method: "PATCH",
         body: JSON.stringify({ ativo }),
       }),
+    newsSources: () => request<NewsSource[]>("/api/admin/news-sources"),
+    createNewsSource: (url: string) =>
+      request<NewsSource>("/api/admin/news-sources", { method: "POST", body: JSON.stringify({ url }) }),
+    setNewsSourceActive: (id: string, ativo: boolean) =>
+      request<NewsSource>(`/api/admin/news-sources/${id}`, { method: "PATCH", body: JSON.stringify({ ativo }) }),
   },
 };

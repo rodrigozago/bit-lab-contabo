@@ -53,6 +53,13 @@ CREATE TABLE IF NOT EXISTS sources (
   criado_em TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_sources_tenant ON sources(tenant_id);
+-- upsert idempotente ao sincronizar sources a partir de targets/keywords
+-- (ver apps/api/src/services/sources.ts) — só se aplica a sources com
+-- tenant_id definido; Postgres trata NULL como distinto em índice único,
+-- então fontes compartilhadas (tenant_id nulo) não caem aqui de propósito
+-- (a rota de admin faz select-then-upsert em vez de contar com o índice).
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sources_unique_por_tenant
+  ON sources(tenant_id, tipo, url_ou_handle) WHERE tenant_id IS NOT NULL;
 
 -- staging: conteúdo bruto coletado pelos workers de ingestão, antes de passar
 -- pelo worker de análise (sentimento/entidades/embedding)

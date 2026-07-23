@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { pool } from "../db.js";
 import { requireAuth } from "./plugins/requireAuth.js";
-import { listTenantsForUser } from "../services/tenants.js";
+import { generateUniqueSlug, listTenantsForUser } from "../services/tenants.js";
 
 export async function tenantsRoutes(app: FastifyInstance): Promise<void> {
   app.get("/api/tenants", { preHandler: requireAuth }, async (req) => {
@@ -10,14 +10,16 @@ export async function tenantsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // criação self-serve simples pro MVP — quem cria vira owner. Sem convite
-  // entre tenants ainda (fase 2).
+  // entre tenants ainda (fase 2). Cliente só digita o nome — slug é gerado
+  // no servidor (ver generateUniqueSlug), não é algo que ele deveria pensar.
   app.post("/api/tenants", { preHandler: requireAuth }, async (req, reply) => {
-    const { nome, slug } = req.body as { nome?: string; slug?: string };
-    if (!nome || !slug) return reply.status(400).send({ ok: false, error: "nome e slug são obrigatórios" });
+    const { nome } = req.body as { nome?: string };
+    if (!nome) return reply.status(400).send({ ok: false, error: "nome é obrigatório" });
 
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
+      const slug = await generateUniqueSlug(nome);
       const { rows } = await client.query(
         `INSERT INTO tenants (nome, slug) VALUES ($1, $2) RETURNING id, nome, slug, plano`,
         [nome, slug]

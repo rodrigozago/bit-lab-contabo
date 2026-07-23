@@ -2,11 +2,22 @@
 
 Consome `raw_items` não processados (processado=false), chama a OpenAI pra
 sentimento + extração de entidades (candidato/partido mencionado) e grava o
-embedding do texto junto com a menção — tudo numa única chamada de chat
-(structured output) + uma chamada de embeddings, pra manter simples. O
-embedding já fica salvo com índice HNSW (ver db/schema.sql) pronto pra dedup
-por similaridade (retweet/republicação) e busca semântica; a query de dedup
-em si é fast-follow, não roda ainda neste MVP.
+embedding do texto — tudo numa única chamada de chat (structured output) +
+uma chamada de embeddings **uma vez só por item**, mesmo quando ele vira
+menção pra vários tenants (ver fan-out abaixo) — não faz sentido pagar a
+OpenAI de novo pra cada tenant. O embedding já fica salvo com índice HNSW
+(ver db/schema.sql) pronto pra dedup por similaridade (retweet/republicação)
+e busca semântica; a query de dedup em si é fast-follow, não roda ainda.
+
+Duas rotas pra achar o(s) tenant(s) dono(s) de um item, dependendo da fonte
+(`sources.tenant_id`):
+- **Source de um tenant específico** (ex: X provisionado a partir de um
+  target/keyword — ver apps/api/src/services/sources.ts): 1 tenant só.
+- **Source compartilhada** (`tenant_id` nulo — pool de notícias curado por
+  admin, ver /api/admin/news-sources): fan-out — casa o texto contra os
+  targets/keywords de TODOS os tenants com pelo menos 1 cadastro ativo e
+  gera uma linha em `mentions` por tenant que bateu. Uma notícia pode virar
+  menção pra vários clientes ao mesmo tempo — é esperado.
 
 `target_id`/`keyword_id` são resolvidos por correspondência simples de texto
 contra os cadastros do tenant (nome do alvo / termo da keyword aparecendo no
@@ -85,48 +96,85 @@ def find_target_or_keyword(cur, tenant_id: str, texto: str) -> tuple[str | None,
     return None, None
 
 
+def tenants_with_active_watch(cur) -> list[str]:
+    """Tenants que têm pelo menos 1 target ou keyword ativo — só esses
+    entram no fan-out de fontes compartilhadas (sem gastar OpenAI/CPU
+    checando tenant que não está monitorando nada ainda)."""
+    cur.execute(
+        """
+        SELECT tenant_id FROM monitoring_targets WHERE ativo = true
+        UNION
+        SELECT tenant_id FROM keywords WHERE ativo = true
+        """
+    )
+    return [row[0] for row in cur.fetchall()]
+
+
+def insert_mention(
+    cur,
+    tenant_id: str,
+    target_id: str | None,
+    keyword_id: str | None,
+    raw_id: str,
+    texto: str,
+    raw: dict,
+    analise: dict,
+    embedding: list[float],
+) -> None:
+    cur.execute(
+        """
+        INSERT INTO mentions
+            (tenant_id, target_id, keyword_id, raw_item_id, texto, url, publicado_em,
+             sentimento, score, entidades, embedding)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """,
+        (
+            tenant_id,
+            target_id,
+            keyword_id,
+            raw_id,
+            texto,
+            raw.get("url"),
+            raw.get("publicado_em"),
+            analise["sentimento"],
+            analise["score"],
+            json.dumps(analise["entidades"]),
+            embedding,
+        ),
+    )
+
+
 def process_item(conn: psycopg.Connection, raw_id: str, source_id: str, raw: dict) -> None:
     with conn.cursor() as cur:
-        # tenant do item vem da fonte — fonte compartilhada (tenant_id nulo)
-        # não gera menção por tenant específico ainda (fast-follow: replicar
-        # por todos os tenants que têm keyword/target batendo)
         cur.execute("SELECT tenant_id FROM sources WHERE id = %s", (source_id,))
         row = cur.fetchone()
-        tenant_id = row[0] if row else None
-        if not tenant_id:
-            cur.execute("UPDATE raw_items SET processado = true WHERE id = %s", (raw_id,))
-            return
+        source_tenant_id = row[0] if row else None
 
         texto = extract_text(raw)
         if not texto.strip():
             cur.execute("UPDATE raw_items SET processado = true WHERE id = %s", (raw_id,))
+            conn.commit()
             return
 
+        # sentimento/entidades/embedding custam uma chamada à OpenAI — calcula
+        # uma vez só, mesmo que o item vire menção pra vários tenants abaixo
         analise = analyze_text(texto)
         embedding = embed_text(texto)
-        target_id, keyword_id = find_target_or_keyword(cur, tenant_id, texto)
 
-        cur.execute(
-            """
-            INSERT INTO mentions
-                (tenant_id, target_id, keyword_id, raw_item_id, texto, url, publicado_em,
-                 sentimento, score, entidades, embedding)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """,
-            (
-                tenant_id,
-                target_id,
-                keyword_id,
-                raw_id,
-                texto,
-                raw.get("url"),
-                raw.get("publicado_em"),
-                analise["sentimento"],
-                analise["score"],
-                json.dumps(analise["entidades"]),
-                embedding,
-            ),
-        )
+        if source_tenant_id:
+            # source de um tenant específico (ex: X provisionado a partir de
+            # um target/keyword) — só esse tenant importa
+            target_id, keyword_id = find_target_or_keyword(cur, source_tenant_id, texto)
+            insert_mention(cur, source_tenant_id, target_id, keyword_id, raw_id, texto, raw, analise, embedding)
+        else:
+            # fonte compartilhada (pool de notícias) — fan-out pra todo
+            # tenant que tem algo ativo pra monitorar
+            for tenant_id in tenants_with_active_watch(cur):
+                target_id, keyword_id = find_target_or_keyword(cur, tenant_id, texto)
+                if target_id is None and keyword_id is None:
+                    continue  # não bateu nada pra esse tenant, não gera menção
+                insert_mention(cur, tenant_id, target_id, keyword_id, raw_id, texto, raw, analise, embedding)
+
         cur.execute("UPDATE raw_items SET processado = true WHERE id = %s", (raw_id,))
     conn.commit()
 

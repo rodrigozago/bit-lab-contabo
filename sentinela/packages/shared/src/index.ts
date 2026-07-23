@@ -78,3 +78,10 @@ export interface SocialAccountSummary {
   proxyUrl: string | null;
   criadoEm: string;
 }
+
+export interface NewsSource {
+  id: string;
+  urlOuHandle: string;
+  ativo: boolean;
+  criadoEm: string;
+}
