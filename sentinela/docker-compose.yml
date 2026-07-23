@@ -1,0 +1,140 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    networks:
+      - sentinela
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: sentinela
+      POSTGRES_USER: sentinela
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - sentinela
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sentinela"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # orquestra o pool de proxies na frente dos workers de ingestão — rotação
+  # de IP automática pra evitar rate-limit/ban dos scrapers (ver .env.example)
+  scrapoxy:
+    image: scrapoxy/scrapoxy:4
+    restart: unless-stopped
+    environment:
+      AUTH_LOCAL_USERNAME: "admin"
+      AUTH_LOCAL_PASSWORD: "${SCRAPOXY_API_TOKEN}"
+    ports:
+      - "127.0.0.1:8890:8890" # painel admin, só loopback
+    networks:
+      - sentinela
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    ports:
+      - "127.0.0.1:4005:3001"
+    environment:
+      PORT: "3001"
+      PUBLIC_URL: "https://sentinela.bit-lab.tech"
+      REDIS_URL: "redis://redis:6379"
+      PGHOST: postgres
+      PGUSER: sentinela
+      PGPASSWORD: "${POSTGRES_PASSWORD}"
+      PGDATABASE: sentinela
+      NODE_ENV: production
+      OIDC_ISSUER: "https://auth.bit-lab.tech"
+      OIDC_CLIENT_ID: "sentinela"
+      OIDC_CLIENT_SECRET: "${SENTINELA_OIDC_SECRET}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      ROLLBAR_SERVER_TOKEN: "${ROLLBAR_SERVER_TOKEN:-}"
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - sentinela
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_ROLLBAR_CLIENT_TOKEN: "${VITE_ROLLBAR_CLIENT_TOKEN:-}"
+    ports:
+      # nginx da VPS (bit-lab-agents/nginx) faz proxy_pass para cá
+      - "127.0.0.1:3007:80"
+    depends_on:
+      - api
+    networks:
+      - sentinela
+    restart: unless-stopped
+
+  worker-ingest-news:
+    build:
+      # contexto na raiz do repo pra alcançar workers/scrape_log.py (helper
+      # compartilhado entre os 3 workers — ver comentário no arquivo)
+      context: .
+      dockerfile: workers/ingest-news/Dockerfile
+    environment:
+      DATABASE_URL: "postgres://sentinela:${POSTGRES_PASSWORD}@postgres:5432/sentinela"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - sentinela
+    restart: unless-stopped
+
+  worker-ingest-social:
+    build:
+      context: .
+      dockerfile: workers/ingest-social/Dockerfile
+    environment:
+      DATABASE_URL: "postgres://sentinela:${POSTGRES_PASSWORD}@postgres:5432/sentinela"
+      SCRAPOXY_PROXY_URL: "http://scrapoxy:8888"
+      # AES-256-GCM das credenciais em social_accounts — ver crypto.py e
+      # .env.example (gerar com `openssl rand -base64 32`)
+      SOCIAL_ACCOUNTS_ENCRYPTION_KEY: "${SOCIAL_ACCOUNTS_ENCRYPTION_KEY}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      scrapoxy:
+        condition: service_started
+    networks:
+      - sentinela
+    restart: unless-stopped
+
+  worker-analysis:
+    build:
+      context: .
+      dockerfile: workers/analysis/Dockerfile
+    environment:
+      DATABASE_URL: "postgres://sentinela:${POSTGRES_PASSWORD}@postgres:5432/sentinela"
+      OPENAI_API_KEY: "${OPENAI_API_KEY}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - sentinela
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+
+networks:
+  sentinela:
+    driver: bridge

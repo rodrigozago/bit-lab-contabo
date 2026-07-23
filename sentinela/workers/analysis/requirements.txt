@@ -1,0 +1,4 @@
+psycopg[binary]==3.2.3
+redis==5.1.1
+openai==1.54.0
+pgvector==0.3.6

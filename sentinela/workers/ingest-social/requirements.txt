@@ -1,0 +1,4 @@
+psycopg[binary]==3.2.3
+redis==5.1.1
+twscrape==0.17.0
+cryptography==43.0.3

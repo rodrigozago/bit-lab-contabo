@@ -24,6 +24,12 @@
       "runtimeExecutable": "npx",
       "runtimeArgs": ["-y", "pnpm@9.15.4", "-C", "ponto-studio", "--filter", "@ponto-studio/web", "dev"],
       "port": 3000
+    },
+    {
+      "name": "sentinela-web",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["-y", "pnpm@9.15.4", "-C", "sentinela", "--filter", "@sentinela/web", "dev"],
+      "port": 3000
     }
   ]
 }
