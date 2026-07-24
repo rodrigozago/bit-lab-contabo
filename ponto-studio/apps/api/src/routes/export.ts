@@ -67,9 +67,10 @@ export async function exportRoutes(app: FastifyInstance) {
         return { ok: false, error: "Project not found" };
       }
 
-      const svgContent = convertProjectToSvg(project);
+      const warnings: string[] = [];
+      const svgContent = convertProjectToSvg(project, warnings);
       const jobId = uuid();
-      const job = await enqueueJob({ jobId, svgContent, format, projectId });
+      const job = await enqueueJob({ jobId, svgContent, format, projectId, warnings });
 
       return { ok: true, data: job };
     }

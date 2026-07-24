@@ -34,8 +34,9 @@ export async function previewRoutes(app: FastifyInstance) {
     }
 
     const jobId = uuid();
-    const svgContent = buildElementPreviewSvg(element, canvas);
-    await enqueuePreviewJob({ jobId, svgContent });
+    const warnings: string[] = [];
+    const svgContent = buildElementPreviewSvg(element, canvas, warnings);
+    await enqueuePreviewJob({ jobId, svgContent, warnings });
     return reply.send({ ok: true, data: { jobId } });
   });
 
@@ -50,6 +51,7 @@ export async function previewRoutes(app: FastifyInstance) {
       jobId: job.jobId,
       status: job.status,
       ...(job.errorMessage ? { errorMessage: job.errorMessage } : {}),
+      ...(job.warnings?.length ? { warnings: job.warnings } : {}),
     };
 
     if (job.status === "done") {

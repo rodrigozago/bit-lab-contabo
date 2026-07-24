@@ -153,16 +153,17 @@ export async function pollPreviewUntilDone(jobId: string, intervalMs = 300): Pro
   });
 }
 
-/** Aguarda os dados do player de simulação (EXP-2) e resolve com o pattern. */
+/** Aguarda os dados do player de simulação (EXP-2) e resolve com o pattern +
+ * avisos não-bloqueantes (ex.: Cetim que caiu pro Tatami numa parte). */
 export async function pollStitchDataUntilDone(jobId: string, intervalMs = 1000) {
-  return new Promise<NonNullable<StitchPreviewJobStatus["pattern"]>>((resolve, reject) => {
+  return new Promise<{ pattern: NonNullable<StitchPreviewJobStatus["pattern"]>; warnings: string[] }>((resolve, reject) => {
     const timer = setInterval(async () => {
       try {
         const job = await api.stitchPreview.poll(jobId);
         if (job.status === "done") {
           clearInterval(timer);
           if (!job.pattern) return reject(new Error("Stitch preview terminou sem dados"));
-          resolve(job.pattern);
+          resolve({ pattern: job.pattern, warnings: job.warnings ?? [] });
         } else if (job.status === "error") {
           clearInterval(timer);
           reject(new Error(job.errorMessage ?? "Falha ao gerar dados do player"));

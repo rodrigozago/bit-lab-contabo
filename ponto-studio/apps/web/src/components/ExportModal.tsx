@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CheckCircle2, XCircle } from "lucide-react";
+import { CheckCircle2, XCircle, TriangleAlert } from "lucide-react";
 import type { CanvasSize, ExportFormat, ExportJob, StitchPattern } from "@ponto-studio/shared";
 import { api, pollStitchDataUntilDone, pollUntilDone } from "../api/client.ts";
 import { StitchPlayer } from "./StitchPlayer.tsx";
@@ -27,6 +27,23 @@ interface Props {
   onClose: () => void;
 }
 
+/** Avisos não-bloqueantes do resultado (ex.: Cetim que caiu pro Tatami numa
+ * parte) — antes disso o usuário nunca sabia que a escolha dele foi
+ * substituída silenciosamente no export/preview. */
+function WarningsBanner({ warnings }: { warnings: string[] }) {
+  if (warnings.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-1.5 rounded-md bg-accent px-3 py-2 text-xs text-muted-foreground">
+      {warnings.map((w, i) => (
+        <p key={i} className="flex items-start gap-1.5">
+          <TriangleAlert className="size-3.5 shrink-0 translate-y-px" />
+          <span>{w}</span>
+        </p>
+      ))}
+    </div>
+  );
+}
+
 export function ExportModal({ projectId, canvas, onClose }: Props) {
   const [step, setStep] = useState<ExportStep>("preview");
   const [format, setFormat] = useState<ModalFormat>("DST");
@@ -39,6 +56,7 @@ export function ExportModal({ projectId, canvas, onClose }: Props) {
   const [previewError, setPreviewError] = useState("");
   const [previewAttempt, setPreviewAttempt] = useState(0);
   const [pattern, setPattern] = useState<StitchPattern | null>(null);
+  const [warnings, setWarnings] = useState<string[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -48,7 +66,8 @@ export function ExportModal({ projectId, canvas, onClose }: Props) {
         const { jobId } = await api.stitchPreview.create(projectId);
         const result = await pollStitchDataUntilDone(jobId);
         if (!cancelled) {
-          setPattern(result);
+          setPattern(result.pattern);
+          setWarnings(result.warnings);
           setPreviewPhase("ready");
         }
       } catch (err) {
@@ -159,6 +178,7 @@ export function ExportModal({ projectId, canvas, onClose }: Props) {
               <>
                 <StitchPlayer pattern={pattern} />
                 <EstimateSummary pattern={pattern} canvas={canvas} />
+                <WarningsBanner warnings={warnings} />
               </>
             )}
             {previewPhase === "error" && (
@@ -229,6 +249,7 @@ export function ExportModal({ projectId, canvas, onClose }: Props) {
                 Baixar .{format}
               </a>
             </Button>
+            <WarningsBanner warnings={job.warnings ?? []} />
             <Button variant="outline" onClick={onClose}>Fechar</Button>
           </div>
         )}

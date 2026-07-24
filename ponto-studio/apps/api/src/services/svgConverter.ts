@@ -8,11 +8,15 @@ import { extractSatinRails, type RailPair } from "./satinRails.js";
  * Cada EmbroideryElement pode ter:
  *   - svgContent: SVG completo gerado pela IA → extrai os <path> de dentro
  *   - svgPath: atributo "d" de um path simples (shapes do tldraw)
+ *
+ * `warnings` (opcional) recebe avisos não-bloqueantes sobre o resultado (ex.:
+ * Cetim que não coube numa parte e caiu pro Tatami) — quem chama decide se
+ * repassa isso pro usuário (ver rotas de export/preview).
  */
-export function convertProjectToSvg(project: EmbroideryProject): string {
+export function convertProjectToSvg(project: EmbroideryProject, warnings?: string[]): string {
   const { canvas, elements, name } = project;
 
-  const elementsSvg = elements.map((el) => elementToSvgGroup(el, canvas)).join("\n  ");
+  const elementsSvg = elements.map((el) => elementToSvgGroup(el, canvas, warnings)).join("\n  ");
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg
@@ -27,18 +31,30 @@ export function convertProjectToSvg(project: EmbroideryProject): string {
 </svg>`;
 }
 
-function elementToSvgGroup(el: EmbroideryElement, canvas: CanvasSize): string {
+function elementToSvgGroup(el: EmbroideryElement, canvas: CanvasSize, warnings?: string[]): string {
   if (el.stitch.type === "satinColumn") {
     // Formas simples (sem svgContent): trilhos triviais a partir do bbox
     // retangular (Fase 3). Formas complexas (svgContent, vindas de
     // importação de imagem): extração geral de polígono (Fase 4, ver
     // satinRails.ts) — achata as curvas, acha o eixo principal e divide o
-    // contorno em 2 trilhos. Em QUALQUER dos dois casos a extração pode
-    // falhar (forma pouco alongada, geometria degenerada, path composto com
-    // buracos) — cai pro tatami com a mesma densidade, mantendo a geometria
-    // original.
-    const satinSvg = el.svgContent ? satinColumnFromComplexShape(el, canvas) : satinColumnToSvgGroup(el);
-    if (satinSvg) return satinSvg;
+    // contorno em 2 trilhos, aplicando na região de MAIOR ÁREA quando há mais
+    // de uma (ver satinColumnFromComplexShape). Em QUALQUER caso a extração
+    // pode falhar de vez (forma pouco alongada, geometria degenerada) — cai
+    // pro tatami com a mesma densidade, mantendo a geometria original.
+    const partName = el.name?.trim() || `parte ${el.color}`;
+    if (el.svgContent) {
+      const result = satinColumnFromComplexShape(el, canvas);
+      if (result) {
+        if (result.multiRegion) {
+          warnings?.push(`Cetim em "${partName}": aplicado só na maior região — as demais usam Tatami.`);
+        }
+        return result.svg;
+      }
+    } else {
+      const satinSvg = satinColumnToSvgGroup(el);
+      if (satinSvg) return satinSvg;
+    }
+    warnings?.push(`Cetim em "${partName}": a forma não coube num cetim de verdade — usando Tatami.`);
     return elementToSvgGroupByShape({ ...el, stitch: { type: "tatami", density: el.stitch.density, angle: 45 } }, canvas);
   }
   return elementToSvgGroupByShape(el, canvas);
@@ -88,18 +104,40 @@ function satinColumnToSvgGroup(el: EmbroideryElement): string | null {
 }
 
 /**
- * Constrói os 2 trilhos do cetim a partir da geometria REAL de um elemento
- * com `svgContent` (polígono arbitrário vindo de importação de imagem) —
- * ver `satinRails.ts` (Fase 4) pro algoritmo (PCA + split + reamostragem).
- * `null` quando: o SVG tem mais de 1 `<path>` (várias formas/buracos — não
- * dá pra saber qual vira o cetim), o path achatado vira mais de 1
- * subcaminho (path composto, mesmo motivo), ou a extração de trilhos falha
- * (forma pouco alongada/degenerada) — quem chama cai no fallback pra tatami.
+ * Área (shoelace, valor absoluto) de um polígono já achatado em polilinha —
+ * usada só pra ESCOLHER a maior região entre candidatas ao cetim (não
+ * precisa do sinal, que indicaria sentido horário/anti-horário).
  */
-function satinColumnFromComplexShape(el: EmbroideryElement, canvas: CanvasSize): string | null {
+function polygonArea(points: Array<[number, number]>): number {
+  let sum = 0;
+  for (let i = 0; i < points.length; i++) {
+    const [x1, y1] = points[i]!;
+    const [x2, y2] = points[(i + 1) % points.length]!;
+    sum += x1 * y2 - x2 * y1;
+  }
+  return Math.abs(sum) / 2;
+}
+
+/**
+ * Constrói os 2 trilhos do cetim a partir da geometria REAL de um elemento
+ * com `svgContent` (polígono arbitrário vindo de importação de imagem) — ver
+ * `satinRails.ts` (Fase 4) pro algoritmo (PCA + split + reamostragem). A
+ * parte pode ter mais de 1 `<path>` (regiões desconectadas da mesma cor —
+ * comum, é assim que `splitSvgByColor` agrupa fotos/logos) ou um path
+ * composto que achata em mais de 1 subcaminho (path com buraco); nesses
+ * casos, o cetim aplica na região de MAIOR ÁREA entre todas as candidatas —
+ * as demais ficam de fora do cetim (a parte inteira ainda cai pro fallback
+ * tatami se nem a maior render um trilho válido — forma pouco alongada ou
+ * degenerada). `multiRegion` avisa o chamador que houve descarte de região,
+ * pra emitir um aviso explícito pro usuário em vez de silencioso.
+ */
+function satinColumnFromComplexShape(
+  el: EmbroideryElement,
+  canvas: CanvasSize
+): { svg: string; multiRegion: boolean } | null {
   const svg = el.svgContent ?? "";
   const parts = extractPathParts(svg);
-  if (parts.length !== 1) return null;
+  if (parts.length === 0) return null;
 
   const sourceDims = parseViewBoxDimensions(svg);
   const elementBounds = parseElementBoundsMm(el.svgPath);
@@ -112,12 +150,28 @@ function satinColumnFromComplexShape(el: EmbroideryElement, canvas: CanvasSize):
           : fit;
       })()
     : null;
-  const scaledD = transform ? scalePathData(parts[0]!.d, transform.scale, transform.offsetX, transform.offsetY) : parts[0]!.d;
 
-  const flattened = flattenPathData(scaledD);
-  if (flattened.length !== 1) return null;
+  // Achata CADA path candidato e escolhe o subcaminho de maior área entre
+  // TODOS (de todos os paths) — cobre tanto múltiplos <path> (regiões soltas)
+  // quanto um único path composto com múltiplos subcaminhos (buraco).
+  let bestSubpath: Array<[number, number]> | null = null;
+  let bestArea = -1;
+  let candidateCount = 0;
+  for (const part of parts) {
+    const scaledD = transform ? scalePathData(part.d, transform.scale, transform.offsetX, transform.offsetY) : part.d;
+    const flattened = flattenPathData(scaledD);
+    for (const subpath of flattened) {
+      candidateCount++;
+      const area = polygonArea(subpath);
+      if (area > bestArea) {
+        bestArea = area;
+        bestSubpath = subpath;
+      }
+    }
+  }
+  if (!bestSubpath) return null;
 
-  const rails = extractSatinRails(flattened[0]!);
+  const rails = extractSatinRails(bestSubpath);
   if (!rails) return null;
 
   const centerX = (elementBounds?.x ?? 0) + (elementBounds?.width ?? 0) / 2;
@@ -126,13 +180,14 @@ function satinColumnFromComplexShape(el: EmbroideryElement, canvas: CanvasSize):
   const d = rotatePathData(railsToPathData(rails), angleDeg, centerX, centerY);
   const { presentation, inkstitch } = buildStitchAttributes(el);
 
-  return `<g id="${el.id}">
+  const svgFragment = `<g id="${el.id}">
     <path
       d="${escapeXml(d)}"
       ${presentation}
       ${inkstitch}
     />
   </g>`;
+  return { svg: svgFragment, multiRegion: candidateCount > 1 };
 }
 
 function railsToPathData(rails: RailPair): string {
@@ -192,18 +247,27 @@ function extractPathParts(svg: string): PathPart[] {
 
 /**
  * Bounding box do elemento DENTRO DO CANVAS, em mm — derivado de `el.svgPath`
- * (retângulo em page-px do tldraw, ver rectToSvgPath e o overlay do bastidor
- * em Editor.tsx), convertido via o mesmo HOOP_PX_PER_MM usado no editor.
- * É o que faz redimensionar/mover uma camada no canvas mudar de fato o
- * tamanho/posição do bordado exportado — sem isso, o desenho original
- * sempre era esticado pro bastidor INTEIRO, ignorando qualquer resize.
+ * (page-px do tldraw, ver geometry.ts e o overlay do bastidor em Editor.tsx),
+ * convertido via o mesmo HOOP_PX_PER_MM usado no editor. Funciona pra
+ * QUALQUER polígono (retângulo, elipse poligonalizada, traço livre) — min/max
+ * sobre TODOS os pares de coordenadas do `d`, não só os 4 primeiros (formas
+ * nativas do editor só emitem M/L/Z, nunca curvas/arcos, então não precisa de
+ * `flattenPathData` aqui — isso já é feito à parte pra `svgContent` vindo de
+ * importação de imagem, que pode ter curvas). É o que faz redimensionar/mover
+ * uma camada no canvas mudar de fato o tamanho/posição do bordado exportado —
+ * sem isso, o desenho original sempre era esticado pro bastidor INTEIRO,
+ * ignorando qualquer resize.
  */
 function parseElementBoundsMm(svgPath: string | undefined): (Dimensions & { x: number; y: number }) | null {
   if (!svgPath) return null;
   const nums = (svgPath.match(/-?\d+\.?\d*/g) ?? []).map(Number);
-  if (nums.length < 8) return null;
-  const xs = [nums[0]!, nums[2]!, nums[4]!, nums[6]!];
-  const ys = [nums[1]!, nums[3]!, nums[5]!, nums[7]!];
+  if (nums.length < 4) return null;
+  const xs: number[] = [];
+  const ys: number[] = [];
+  for (let i = 0; i + 1 < nums.length; i += 2) {
+    xs.push(nums[i]!);
+    ys.push(nums[i + 1]!);
+  }
   const minX = Math.min(...xs), maxX = Math.max(...xs);
   const minY = Math.min(...ys), maxY = Math.max(...ys);
   if (!(maxX > minX) || !(maxY > minY)) return null;
@@ -268,10 +332,18 @@ function extractAndAnnotatePaths(el: EmbroideryElement, canvas: CanvasSize): str
 
 /**
  * Monta o SVG-entrada do PREVIEW de um elemento pro Ink/Stitch — rodando no
- * TAMANHO FÍSICO REAL da parte (bbox em mm do `svgPath`), igual o export
- * (`convertProjectToSvg`), só que:
- *  - isolado (só este elemento, posicionado na ORIGEM 0,0 — não no offset dele
- *    dentro do canvas), com `viewBox="0 0 Wmm Hmm"` do próprio bbox, pra o
+ * TAMANHO FÍSICO REAL da parte (bbox em mm do `svgPath`), pelo MESMO caminho
+ * de conversão do export (`elementToSvgGroup`, a mesma função que
+ * `convertProjectToSvg` usa por elemento) — inclusive a extração real dos 2
+ * trilhos do Cetim (`satinColumnFromComplexShape`/`satinColumnToSvgGroup`),
+ * que esta função NUNCA fazia antes (montava os `<path>` manualmente, sem
+ * passar pelo dispatch de satinColumn — por isso o preview de uma parte
+ * "Cetim" podia divergir do resultado real do export). Pra reusar o mesmo
+ * código sem duplicar a lógica de bounds/rotação, construímos um elemento
+ * SINTÉTICO — mesmíssimo elemento, mas com `svgPath` reescrito pra um
+ * retângulo na ORIGEM (0,0) do tamanho físico real da parte (em vez do
+ * offset dela dentro do canvas) e `rotation` zerada:
+ *  - isolado na origem, com `viewBox="0 0 Wmm Hmm"` do próprio bbox, pra o
  *    preview de pontos que volta do worker sobrepor o shape 1:1 no canvas;
  *  - SEM embutir a rotação: o shape de imagem do tldraw já carrega a rotação,
  *    então o conteúdo do preview fica na orientação base (diferente do export,
@@ -284,33 +356,21 @@ function extractAndAnnotatePaths(el: EmbroideryElement, canvas: CanvasSize): str
  * bbox real (ex.: 25mm), a densidade/contagem de pontos é a mesma do bordado
  * de verdade e o job roda rápido.
  */
-export function buildElementPreviewSvg(el: EmbroideryElement, canvas: CanvasSize): string {
-  const svg = el.svgContent ?? "";
-  const sourceDims = parseViewBoxDimensions(svg);
+export function buildElementPreviewSvg(el: EmbroideryElement, canvas: CanvasSize, warnings?: string[]): string {
   const bounds = parseElementBoundsMm(el.svgPath);
   // tamanho físico da parte, em mm (fallback: canvas inteiro, pra legado sem svgPath)
-  const targetW = bounds?.width ?? canvas.widthMm;
-  const targetH = bounds?.height ?? canvas.heightMm;
+  const w = +(bounds?.width ?? canvas.widthMm).toFixed(3);
+  const h = +(bounds?.height ?? canvas.heightMm).toFixed(3);
 
-  // contain-fit da geometria de origem no bbox da parte, na ORIGEM (sem o
-  // offset do elemento dentro do canvas — o shape já está posicionado).
-  const fit = sourceDims ? computeContainTransform(sourceDims, { width: targetW, height: targetH }) : null;
+  const syntheticEl: EmbroideryElement = {
+    ...el,
+    svgPath: `M 0 0 L ${w * HOOP_PX_PER_MM} 0 L ${w * HOOP_PX_PER_MM} ${h * HOOP_PX_PER_MM} L 0 ${h * HOOP_PX_PER_MM} Z`,
+    rotation: 0,
+  };
+  const fragment = elementToSvgGroup(syntheticEl, { widthMm: w, heightMm: h }, warnings);
 
-  // sem unitsPerMm: o documento já está em mm de verdade, então a densidade
-  // vai em mm direto (mesmo caminho do export — inclusive emite max_stitch_length_mm).
-  const { presentation, inkstitch } = buildStitchAttributes(el);
-
-  const paths = extractPathParts(svg).map(({ cleanAttrs, d }) => {
-    const scaledD = fit ? scalePathData(d, fit.scale, fit.offsetX, fit.offsetY) : d;
-    return `<path ${cleanAttrs} d="${escapeXml(scaledD)}" ${presentation} ${inkstitch} />`;
-  });
-
-  const w = +targetW.toFixed(3);
-  const h = +targetH.toFixed(3);
   return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkstitch="http://inkstitch.org/namespace" width="${w}mm" height="${h}mm" viewBox="0 0 ${w} ${h}">
-  <g id="${el.id}">
-    ${paths.join("\n    ")}
-  </g>
+  ${fragment}
 </svg>`;
 }
 

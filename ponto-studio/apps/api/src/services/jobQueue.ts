@@ -90,8 +90,11 @@ export async function enqueueJob(params: {
   svgContent: string;
   format: ExportFormat;
   projectId: string;
+  /** Avisos não-bloqueantes já detectados na conversão pra SVG (ex.: Cetim
+   * que caiu pro Tatami) — persistidos no job pra a UI mostrar ao usuário. */
+  warnings?: string[];
 }): Promise<ExportJob> {
-  const { jobId, svgContent, format, projectId } = params;
+  const { jobId, svgContent, format, projectId, warnings } = params;
   const now = new Date().toISOString();
 
   const job: ExportJob = {
@@ -101,6 +104,7 @@ export async function enqueueJob(params: {
     status: "pending",
     createdAt: now,
     updatedAt: now,
+    ...(warnings?.length ? { warnings } : {}),
   };
   jobStore.set(jobId, job);
 
@@ -158,8 +162,9 @@ export async function enqueueAnalyzeJob(params: {
 export async function enqueuePreviewJob(params: {
   jobId: string;
   svgContent: string;
+  warnings?: string[];
 }): Promise<ExportJob> {
-  const { jobId, svgContent } = params;
+  const { jobId, svgContent, warnings } = params;
   const now = new Date().toISOString();
 
   const job: ExportJob = {
@@ -169,6 +174,7 @@ export async function enqueuePreviewJob(params: {
     status: "pending",
     createdAt: now,
     updatedAt: now,
+    ...(warnings?.length ? { warnings } : {}),
   };
   jobStore.set(jobId, job);
 
@@ -190,8 +196,9 @@ export async function enqueuePreviewJob(params: {
 export async function enqueueStitchDataJob(params: {
   jobId: string;
   svgContent: string;
+  warnings?: string[];
 }): Promise<ExportJob> {
-  const { jobId, svgContent } = params;
+  const { jobId, svgContent, warnings } = params;
   const now = new Date().toISOString();
 
   const job: ExportJob = {
@@ -201,6 +208,7 @@ export async function enqueueStitchDataJob(params: {
     status: "pending",
     createdAt: now,
     updatedAt: now,
+    ...(warnings?.length ? { warnings } : {}),
   };
   jobStore.set(jobId, job);
 

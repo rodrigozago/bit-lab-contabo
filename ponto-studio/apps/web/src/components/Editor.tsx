@@ -15,7 +15,7 @@ import { PanelRight, Eye } from "lucide-react";
 import { HOOP_PX_PER_MM, type CanvasSize, type EmbroideryElement, type EmbroideryProject } from "@ponto-studio/shared";
 import { useProjectStore, type SaveStatus } from "../store/projectStore.ts";
 import { api } from "../api/client.ts";
-import { rectToSvgPath, parseRectSvgPath } from "../utils/geometry.ts";
+import { rectToSvgPath, parseSvgPathBounds, shapeGeometryToSvgPath, svgPathToPoints } from "../utils/geometry.ts";
 import { splitSvgByColor, splitSvgIntoRegions, recolorSvg } from "../utils/svgLayers.ts";
 import { findShapeByElementId, setShapesHidden } from "../utils/canvasShapes.ts";
 import { findLayerMetrics, suggestStitchParams } from "../utils/stitchHeuristics.ts";
@@ -197,6 +197,21 @@ export function Editor({ project, onProjectChange }: Props) {
   // pra propagar um resize entre os shapes de um mesmo grupo de import.
   const suppressGroupSync = useRef(false);
   const rightPanelRef = useRef<ImperativePanelHandle>(null);
+  // IDs de EmbroideryElement conhecidos — usado pelo listener do documento
+  // (que só roda o setup UMA vez em handleMount) pra reconciliar shapes
+  // órfãos (elementId que não existe mais, ex.: Ctrl+Z depois de apagar uma
+  // parte) sem depender de `localProject.elements` direto: o React só
+  // recommita esse array depois do próximo render, mas o `addElement` seguido
+  // de `createShape` (import/split) dispara o listener SINCRONAMENTE, antes
+  // do commit — usar o state direto daria falso-positivo de "órfão" bem no
+  // meio da criação normal de uma parte. Os call-sites que criam elementId
+  // novo (handleImportConfirm, handleSplitElement, o próprio listener)
+  // registram o id aqui na hora; o efeito abaixo resincroniza a cada render
+  // como rede de segurança (cobre remoções e qualquer caminho não coberto).
+  const knownElementIdsRef = useRef<Set<string>>(new Set(localProject.elements.map((e) => e.id)));
+  useEffect(() => {
+    knownElementIdsRef.current = new Set(localProject.elements.map((e) => e.id));
+  }, [localProject.elements]);
 
   function toggleRightPanel() {
     const panel = rightPanelRef.current;
@@ -253,6 +268,45 @@ export function Editor({ project, onProjectChange }: Props) {
             if (elementId) removeElement(elementId);
           }
         }
+
+        // Promove QUALQUER shape novo desenhado no canvas (retângulo, elipse,
+        // traço livre) a uma parte de bordado de verdade — antes disso só o
+        // fluxo de importar imagem/texto criava EmbroideryElement; as
+        // ferramentas de desenho nativas eram becos sem saída visuais (a
+        // forma aparecia no canvas mas nunca ia pro export/preview). Todo
+        // shape novo já nasce com meta.layer:"embroidery" via
+        // getInitialMetaForShape acima — o sinal de "nunca visto" é a
+        // ausência de meta.elementId (shapes criados programaticamente pelo
+        // próprio Editor, ex. import/split, já estampam elementId na criação).
+        for (const record of Object.values(entry.changes.added)) {
+          if (record.typeName !== "shape") continue;
+          const shape = record as TLShape;
+          if (shape.meta?.["layer"] !== "embroidery") continue;
+          const elementId = shape.meta?.["elementId"] as string | undefined;
+
+          // Shape órfão: tinha elementId, mas a parte correspondente não
+          // existe mais no projeto (ex.: Ctrl+Z do tldraw ressuscitando um
+          // shape depois de "Remover área" ter apagado a parte). Reconciliar
+          // como shape novo em vez de deixar um "fantasma" fora do PartsPanel.
+          const isOrphan = elementId && !knownElementIdsRef.current.has(elementId);
+          if (elementId && !isOrphan) continue; // já vinculado a uma parte válida
+
+          const bounds = editor.getShapePageBounds(shape.id);
+          if (!bounds) continue;
+          const cx = bounds.x + bounds.w / 2;
+          const cy = bounds.y + bounds.h / 2;
+          const isRect = shape.type === "geo" && (shape.props as { geo?: string }).geo === "rectangle";
+          const props = shape.props as { w?: number; h?: number };
+          const svgPath = isRect && props.w != null && props.h != null
+            ? rectToSvgPath(cx - props.w / 2, cy - props.h / 2, props.w, props.h)
+            : shapeGeometryToSvgPath(editor, shape, { x: cx, y: cy });
+          if (!svgPath) continue;
+
+          const newElementId = addElement(svgPath, "#7c5cbf");
+          knownElementIdsRef.current.add(newElementId);
+          editor.updateShape({ id: shape.id, type: shape.type, meta: { ...shape.meta, elementId: newElementId } });
+        }
+
         if (suppressGroupSync.current) return;
 
         for (const [from, to] of Object.values(entry.changes.updated)) {
@@ -262,23 +316,33 @@ export function Editor({ project, onProjectChange }: Props) {
           const elementId = shape.meta?.["elementId"] as string | undefined;
           const bounds = editor.getShapePageBounds(shape.id);
           if (elementId && bounds) {
-            // Salva o retângulo NÃO rotacionado (w/h do shape, centrado no
-            // centro da AABB — que coincide com o centro do rect rotacionado)
-            // + rotation à parte. Salvar a própria AABB inflava o bbox e o
-            // export encolhia o desenho via contain-fit; a rotação é aplicada
-            // pelo worker (ponto:rotation) ao redor desse mesmo centro.
-            const props = shape.props as { w?: number; h?: number };
-            let w = props.w, h = props.h;
-            if (w == null || h == null) {
-              const geo = editor.getShapeGeometry(shape).bounds;
-              w = geo.w; h = geo.h;
-            }
+            // Salva a forma NÃO rotacionada centrada no centro da AABB (que
+            // coincide com o centro do shape rotacionado) + rotation à parte.
+            // Salvar a própria AABB inflava o bbox e o export encolhia o
+            // desenho via contain-fit; a rotação é aplicada pelo worker ao
+            // redor desse mesmo centro. Retângulo usa o atalho barato (w/h
+            // das props, sem passar pela geometria poligonalizada); qualquer
+            // outro tipo (elipse, traço livre) usa a geometria REAL do shape
+            // — antes disso, TUDO virava um retângulo aqui, perdendo a forma
+            // desenhada de verdade.
             const cx = bounds.x + bounds.w / 2;
             const cy = bounds.y + bounds.h / 2;
-            updateElement(elementId, {
-              svgPath: rectToSvgPath(cx - w / 2, cy - h / 2, w, h),
-              rotation: shape.rotation,
-            });
+            const isRect = shape.type === "geo" && (shape.props as { geo?: string }).geo === "rectangle";
+            let svgPath: string | null;
+            if (isRect) {
+              const props = shape.props as { w?: number; h?: number };
+              let w = props.w, h = props.h;
+              if (w == null || h == null) {
+                const geo = editor.getShapeGeometry(shape).bounds;
+                w = geo.w; h = geo.h;
+              }
+              svgPath = rectToSvgPath(cx - w / 2, cy - h / 2, w, h);
+            } else {
+              svgPath = shapeGeometryToSvgPath(editor, shape, { x: cx, y: cy });
+            }
+            if (svgPath) {
+              updateElement(elementId, { svgPath, rotation: shape.rotation });
+            }
           }
 
           // Imagem importada (referência OU uma cor do bordado) redimensionada
@@ -328,10 +392,13 @@ export function Editor({ project, onProjectChange }: Props) {
     // POSIÇÃO/TAMANHO persistidos no svgPath (antes o load ignorava o svgPath
     // e jogava tudo no centro do viewport a 100×100 — as partes reabriam no
     // lugar errado). Recolore com el.color (a cor pode ter mudado depois da
-    // importação e o svgContent guarda a cor antiga). Só partes com svgContent
-    // (importadas/texto) viram shape de imagem; shapes desenhados à mão sem
-    // svgContent seguem fora deste caminho, como antes.
-    const savedElements = localProject.elements.filter((el) => el.svgContent);
+    // importação e o svgContent guarda a cor antiga). Partes com svgContent
+    // (importadas/texto) viram shape de imagem; partes nativas (retângulo/
+    // elipse/traço livre, sem svgContent) viram um shape `draw` genérico com
+    // a silhueta real decodificada do svgPath — sem isso, o Passo 2 (promover
+    // essas ferramentas a parte de bordado) criaria dado que sobrevive no
+    // backend mas desaparece do canvas a cada F5.
+    const savedElements = localProject.elements;
     if (savedElements.length > 0) {
       // marca antes do async — StrictMode monta duas vezes e duplicaria os shapes
       initialSvgLoaded.current = true;
@@ -340,40 +407,81 @@ export function Editor({ project, onProjectChange }: Props) {
 
       const loadSavedElements = async () => {
         for (const el of savedElements) {
-          const recolored = recolorSvg(el.svgContent!, el.color);
-          const dataUrl = await svgToDataUrl(recolored);
-
-          // Posição/tamanho reais do svgPath; fallback (legado sem svgPath
-          // utilizável) = centro do viewport a 100×100.
-          const rect = parseRectSvgPath(el.svgPath) ?? {
-            x: vp.x + (vp.w - 100) / 2, y: vp.y + (vp.h - 100) / 2, w: 100, h: 100,
-          };
           const hidden = !!el.hidden;
           const rotation = el.rotation ?? 0;
 
-          const assetId = AssetRecordType.createId();
-          editor.createAssets([{
-            id: assetId, type: "image", typeName: "asset",
-            props: { name: "bordado.svg", src: dataUrl, w: rect.w, h: rect.h, mimeType: "image/svg+xml", isAnimated: false },
-            meta: {},
-          }]);
+          if (el.svgContent) {
+            const recolored = recolorSvg(el.svgContent, el.color);
+            const dataUrl = await svgToDataUrl(recolored);
+
+            // Posição/tamanho reais do svgPath; fallback (legado sem svgPath
+            // utilizável) = centro do viewport a 100×100.
+            const rect = parseSvgPathBounds(el.svgPath) ?? {
+              x: vp.x + (vp.w - 100) / 2, y: vp.y + (vp.h - 100) / 2, w: 100, h: 100,
+            };
+
+            const assetId = AssetRecordType.createId();
+            editor.createAssets([{
+              id: assetId, type: "image", typeName: "asset",
+              props: { name: "bordado.svg", src: dataUrl, w: rect.w, h: rect.h, mimeType: "image/svg+xml", isAnimated: false },
+              meta: {},
+            }]);
+
+            const shapeId = createShapeId();
+            editor.createShape({
+              id: shapeId,
+              type: "image",
+              // x/y = canto do retângulo NÃO-rotacionado (o svgPath é sempre o
+              // rect não-rotacionado centrado no centro de rotação — ver o
+              // listener de sync). A rotação em torno do CENTRO é aplicada depois
+              // via rotateShapesBy, mesma semântica da rotação feita pelo usuário.
+              x: rect.x, y: rect.y,
+              opacity: hidden ? 0 : 1,
+              isLocked: hidden,
+              props: { assetId, w: rect.w, h: rect.h },
+              meta: {
+                layer: "embroidery", elementId: el.id,
+                importGroupId: el.groupId ?? crypto.randomUUID(),
+                importGroupName: el.groupName ?? "Bordado",
+                ...(hidden ? { prevOpacity: 1 } : {}),
+              },
+            } as Parameters<typeof editor.createShape>[0]);
+
+            if (rotation !== 0) rotatedAfter.push({ id: shapeId, rotation });
+            continue;
+          }
+
+          // Parte nativa (sem svgContent): reconstrói como shape `draw`
+          // fechado usando os pontos reais do svgPath salvo (page-px
+          // absolutos — shape.x/y ficam em 0,0, os pontos do segmento JÁ são
+          // page-space, mesma convenção de saída/entrada usada pelo Passo 2).
+          // Fallback pra um quadrado 100×100 no viewport se o svgPath salvo
+          // não parsear (dado legado/corrompido) — não trava o carregamento
+          // do projeto por causa de uma parte só.
+          const points = svgPathToPoints(el.svgPath) ?? (() => {
+            const cx = vp.x + vp.w / 2, cy = vp.y + vp.h / 2;
+            return [
+              { x: cx - 50, y: cy - 50 }, { x: cx + 50, y: cy - 50 },
+              { x: cx + 50, y: cy + 50 }, { x: cx - 50, y: cy + 50 },
+            ];
+          })();
 
           const shapeId = createShapeId();
           editor.createShape({
             id: shapeId,
-            type: "image",
-            // x/y = canto do retângulo NÃO-rotacionado (o svgPath é sempre o
-            // rect não-rotacionado centrado no centro de rotação — ver o
-            // listener de sync). A rotação em torno do CENTRO é aplicada depois
-            // via rotateShapesBy, mesma semântica da rotação feita pelo usuário.
-            x: rect.x, y: rect.y,
+            type: "draw",
+            x: 0,
+            y: 0,
             opacity: hidden ? 0 : 1,
             isLocked: hidden,
-            props: { assetId, w: rect.w, h: rect.h },
+            props: {
+              segments: [{ type: "straight", points }],
+              isClosed: true,
+              isComplete: true,
+              size: "s",
+            },
             meta: {
               layer: "embroidery", elementId: el.id,
-              importGroupId: el.groupId ?? crypto.randomUUID(),
-              importGroupName: el.groupName ?? "Bordado",
               ...(hidden ? { prevOpacity: 1 } : {}),
             },
           } as Parameters<typeof editor.createShape>[0]);
@@ -471,6 +579,12 @@ export function Editor({ project, onProjectChange }: Props) {
           ...(suggested ? { stitch: suggested, stitchSuggested: true } : {}),
         }
       );
+      // Registra o id ANTES de criar o shape: o listener do documento roda
+      // sincronamente dentro de createShape, antes do próximo render — sem
+      // isso, o elementId ainda não estaria em knownElementIdsRef e a parte
+      // recém-importada seria confundida com um shape órfão (ver Editor.tsx,
+      // handleMount).
+      knownElementIdsRef.current.add(elementId);
 
       const svgAssetId = AssetRecordType.createId();
       tldrawEditor.createAssets([{
@@ -558,15 +672,16 @@ export function Editor({ project, onProjectChange }: Props) {
   }
 
   /** Pede o SVG de pontos de um elemento ao motor real e espera ficar pronto
-   * (com prazo — sem worker rodando, o job ficaria na fila pra sempre). */
-  async function fetchPreviewSvg(el: EmbroideryElement): Promise<string> {
+   * (com prazo — sem worker rodando, o job ficaria na fila pra sempre).
+   * `warnings` vem junto quando algo caiu num fallback (ex.: Cetim → Tatami). */
+  async function fetchPreviewSvg(el: EmbroideryElement): Promise<{ svg: string; warnings: string[] }> {
     const { jobId } = await api.preview.create({ element: el, canvas: localProject.canvas });
     const deadline = Date.now() + 90_000;
     while (Date.now() < deadline) {
       const job = await api.preview.poll(jobId);
       if (job.status === "done") {
         if (!job.svg) throw new Error("Preview terminou sem SVG");
-        return job.svg;
+        return { svg: job.svg, warnings: job.warnings ?? [] };
       }
       if (job.status === "error") throw new Error(job.errorMessage ?? "Falha ao gerar o preview");
       await new Promise((r) => setTimeout(r, 500));
@@ -575,19 +690,20 @@ export function Editor({ project, onProjectChange }: Props) {
   }
 
   /** Gera e aplica o preview de pontos de UM elemento (asset src do shape). */
-  async function applyPreviewToElement(el: EmbroideryElement, generation: number) {
+  async function applyPreviewToElement(el: EmbroideryElement, generation: number): Promise<string[]> {
     const info = getElementAsset(el.id);
-    if (!info) return;
-    const svg = await fetchPreviewSvg(el);
-    if (generation !== previewGeneration.current) return; // preview desligado no meio
+    if (!info) return [];
+    const { svg, warnings } = await fetchPreviewSvg(el);
+    if (generation !== previewGeneration.current) return []; // preview desligado no meio
     const dataUrl = await svgToDataUrl(svg);
-    if (generation !== previewGeneration.current) return;
+    if (generation !== previewGeneration.current) return [];
     // guarda o src REAL só na primeira troca (refreshes subsequentes não
     // podem sobrescrever o original com um preview anterior)
     if (!previewOriginalSrc.current.has(el.id)) {
       previewOriginalSrc.current.set(el.id, (info.asset.props as { src: string }).src);
     }
     setAssetSrc(info.assetId, dataUrl);
+    return warnings;
   }
 
   async function toggleStitchPreview() {
@@ -627,6 +743,8 @@ export function Editor({ project, onProjectChange }: Props) {
         `Preview de bordado falhou pra ${failed} parte${failed > 1 ? "s" : ""} — o worker está rodando?`
       );
     }
+    const warnings = results.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
+    if (warnings.length > 0) toast.info(warnings.join(" "));
   }
 
   async function handlePropertiesChange(elementId: string, patch: Partial<EmbroideryElement>) {
@@ -650,7 +768,8 @@ export function Editor({ project, onProjectChange }: Props) {
           const recolored = recolorSvg(merged.svgContent!, patch.color);
           previewOriginalSrc.current.set(elementId, await svgToDataUrl(recolored));
         }
-        await applyPreviewToElement(merged, previewGeneration.current);
+        const warnings = await applyPreviewToElement(merged, previewGeneration.current);
+        if (warnings.length > 0) toast.info(warnings.join(" "));
       } catch (err) {
         toast.error(
           `Erro ao atualizar o preview: ${err instanceof Error ? err.message : "erro desconhecido"}`
@@ -700,6 +819,9 @@ export function Editor({ project, onProjectChange }: Props) {
     const shape = findShapeByElementId(tldrawEditor, elementId);
     const newIds = splitElement(elementId, regions);
     if (newIds.length === 0) return;
+    // Mesmo motivo do handleImportConfirm: registra ANTES de criar os shapes
+    // (o listener do documento roda sincronamente, antes do próximo render).
+    for (const id of newIds) knownElementIdsRef.current.add(id);
 
     try {
       if (shape && shape.type === "image") {

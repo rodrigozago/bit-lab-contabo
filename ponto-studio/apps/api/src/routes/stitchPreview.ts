@@ -34,8 +34,9 @@ export async function stitchPreviewRoutes(app: FastifyInstance) {
     }
 
     const jobId = uuid();
-    const svgContent = convertProjectToSvg(project);
-    await enqueueStitchDataJob({ jobId, svgContent });
+    const warnings: string[] = [];
+    const svgContent = convertProjectToSvg(project, warnings);
+    await enqueueStitchDataJob({ jobId, svgContent, warnings });
     return reply.send({ ok: true, data: { jobId } });
   });
 
@@ -50,6 +51,7 @@ export async function stitchPreviewRoutes(app: FastifyInstance) {
       jobId: job.jobId,
       status: job.status,
       ...(job.errorMessage ? { errorMessage: job.errorMessage } : {}),
+      ...(job.warnings?.length ? { warnings: job.warnings } : {}),
     };
 
     if (job.status === "done") {

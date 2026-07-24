@@ -294,6 +294,9 @@ export interface ExportJob {
   errorMessage?: string;
   createdAt: string;
   updatedAt: string;
+  /** Avisos não-bloqueantes sobre o resultado (ex.: Cetim que não coube numa
+   * parte e caiu pro Tatami) — presente só quando algo assim aconteceu. */
+  warnings?: string[];
 }
 
 // ─── API Response Envelopes ───────────────────────────────────────────────────
@@ -379,6 +382,9 @@ export interface AnalyzeJobStatus {
   /** métricas por camada (ausente em jobs de workers antigos) */
   metrics?: AnalyzeMetrics;
   errorMessage?: string;
+  /** Avisos não-bloqueantes (ex.: Cetim que não coube na forma e caiu pro
+   * Tatami) — também reusado pelo job de preview por elemento (/api/preview). */
+  warnings?: string[];
 }
 
 // ─── Player de simulação de bordado (EXP-2) ──────────────────────────────────
@@ -401,4 +407,7 @@ export interface StitchPreviewJobStatus {
   /** sequência de pontos do projeto, presente quando status === "done" */
   pattern?: StitchPattern;
   errorMessage?: string;
+  /** Avisos não-bloqueantes (ex.: Cetim que não coube numa parte e caiu pro
+   * Tatami) — presente só quando algo assim aconteceu. */
+  warnings?: string[];
 }

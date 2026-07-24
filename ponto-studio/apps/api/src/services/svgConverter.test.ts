@@ -264,17 +264,52 @@ describe("convertProjectToSvg", () => {
     expect((dMatch![1]!.match(/L/g) ?? []).length).toBeGreaterThan(4);
   });
 
-  it("satinColumn com svgContent contendo MAIS DE 1 path cai no fallback pra tatami (não sabe qual vira o cetim)", () => {
+  it("satinColumn com svgContent contendo MAIS DE 1 path aplica na região de MAIOR ÁREA e avisa (não cai mais no fallback direto)", () => {
+    // regiões desconectadas da mesma cor são comuns (splitSvgByColor agrupa
+    // fotos/logos assim) — em vez de desistir, o cetim vai na maior ("escada"
+    // alongada), a triangular minúscula fica de fora; o chamador recebe um
+    // aviso pra mostrar ao usuário (ver elementToSvgGroup).
     const el = makeElement({
+      color: "#336699",
+      svgPath: "M 0 0 L 800 0 L 800 200 L 0 200 Z", // 200x50mm no canvas
       svgContent: `<svg viewBox="0 0 40 10">
         <path d="M 0 0 L 10 0 L 20 0 L 30 0 L 40 0 L 40 10 L 30 10 L 20 10 L 10 10 L 0 10 Z" fill="#aabbcc"/>
         <path d="M 1 1 L 2 1 L 2 2 Z" fill="#aabbcc"/>
       </svg>`,
       stitch: { type: "satinColumn", density: 0.5 } satisfies StitchParams,
     });
-    const svg = convertProjectToSvg(makeProject([el]));
+    const warnings: string[] = [];
+    const svg = convertProjectToSvg(makeProject([el]), warnings);
+    expect(svg).toContain('inkstitch:satin_column="true"');
+    expect(svg).not.toContain('inkstitch:fill_method');
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("maior região");
+  });
+
+  it("satinColumn de forma alongada com svgContent de UM path só não emite aviso de multi-região", () => {
+    const el = makeElement({
+      color: "#336699",
+      svgPath: "M 0 0 L 800 0 L 800 200 L 0 200 Z",
+      svgContent: `<svg viewBox="0 0 40 10"><path d="M 0 0 L 10 0 L 20 0 L 30 0 L 40 0 L 40 10 L 30 10 L 20 10 L 10 10 L 0 10 Z" fill="#aabbcc"/></svg>`,
+      stitch: { type: "satinColumn", density: 0.5 } satisfies StitchParams,
+    });
+    const warnings: string[] = [];
+    convertProjectToSvg(makeProject([el]), warnings);
+    expect(warnings).toHaveLength(0);
+  });
+
+  it("satinColumn degenerado ainda cai no fallback pra tatami e avisa", () => {
+    const el = makeElement({
+      color: "#ed1c24",
+      svgContent: `<svg viewBox="0 0 200 200"><path d="M100 170 L 50 50 Z" fill="#aabbcc"/></svg>`,
+      stitch: { type: "satinColumn", density: 0.5 } satisfies StitchParams,
+    });
+    const warnings: string[] = [];
+    const svg = convertProjectToSvg(makeProject([el]), warnings);
     expect(svg).not.toContain("inkstitch:satin_column");
     expect(svg).toContain('inkstitch:fill_method="auto_fill"');
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("Tatami");
   });
 
   it("ripple emite line_count/join_style/repeats/bean_stitch_repeats quando definidos", () => {
@@ -466,5 +501,40 @@ describe("buildElementPreviewSvg", () => {
     expect(preview).toContain('width="100mm"');
     expect(preview).toContain('height="100mm"');
     expect(preview).toContain('viewBox="0 0 100 100"');
+  });
+
+  it("satinColumn: preview e export passam pelo MESMO dispatch (elementToSvgGroup) — extrai os 2 trilhos de verdade nos dois, não só no export", () => {
+    // mesma forma "escada" alongada usada no teste de convertProjectToSvg —
+    // antes desta consolidação, buildElementPreviewSvg NUNCA chamava a
+    // extração de trilhos (satinColumnFromComplexShape/satinColumnToSvgGroup);
+    // mandava o contorno bruto anotado como satin_column="true", divergindo
+    // do resultado real do export pra esse tipo de ponto especificamente.
+    const el = makeElement({
+      color: "#336699",
+      svgPath: "M 0 0 L 800 0 L 800 200 L 0 200 Z", // 200x50mm no canvas
+      svgContent: `<svg viewBox="0 0 40 10"><path d="M 0 0 L 10 0 L 20 0 L 30 0 L 40 0 L 40 10 L 30 10 L 20 10 L 10 10 L 0 10 Z" fill="#aabbcc"/></svg>`,
+      stitch: { type: "satinColumn", density: 0.5 } satisfies StitchParams,
+    });
+    const preview = buildElementPreviewSvg(el, canvas);
+    expect(preview).toContain('inkstitch:satin_column="true"');
+    expect(preview).toContain('fill="none"');
+    expect(preview).toContain('stroke="#336699"');
+    const dMatch = /(?<![a-zA-Z])d="([^"]+)"/.exec(preview);
+    expect(dMatch).not.toBeNull();
+    // 2 trilhos (2 subcaminhos "M"), cada um com vários pontos — mesma
+    // assinatura conferida no teste equivalente de convertProjectToSvg acima.
+    expect((dMatch![1]!.match(/M/g) ?? []).length).toBe(2);
+    expect((dMatch![1]!.match(/L/g) ?? []).length).toBeGreaterThan(4);
+  });
+
+  it("satinColumn degenerado no preview cai no fallback pra tatami — mesmo comportamento do export", () => {
+    const el = makeElement({
+      color: "#ed1c24",
+      svgContent: `<svg viewBox="0 0 200 200"><path d="M100 170 L 50 50 Z" fill="#aabbcc"/></svg>`,
+      stitch: { type: "satinColumn", density: 0.5 } satisfies StitchParams,
+    });
+    const preview = buildElementPreviewSvg(el, canvas);
+    expect(preview).not.toContain("inkstitch:satin_column");
+    expect(preview).toContain('inkstitch:fill_method="auto_fill"');
   });
 });
