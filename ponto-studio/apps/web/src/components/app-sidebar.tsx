@@ -1,11 +1,12 @@
 import * as React from "react"
-import { FolderKanban, ImageUp, Type as TypeIcon, Download, History as HistoryIcon, Trash2 } from "lucide-react"
+import { FolderKanban, ImageUp, Type as TypeIcon, Download, History as HistoryIcon, Trash2, Sparkles } from "lucide-react"
 import { Link } from "react-router-dom"
-import type { CanvasSize } from "@ponto-studio/shared"
+import type { CanvasSize, DesignTemplate } from "@ponto-studio/shared"
 
 import { Logo } from "@/components/logo"
 import { NavMain } from "@/components/nav-main"
 import { NavUser } from "@/components/nav-user"
+import { TemplatesGallery } from "@/components/TemplatesGallery"
 import {
   Sidebar,
   SidebarContent,
@@ -37,6 +38,17 @@ export interface ProjectActions {
   onHistory: () => void
   onDeleteProject: () => void
   deleting: boolean
+  /** Só presente quando o usuário logado é admin — "Publicar como matriz". */
+  onPublishAsTemplate?: () => void
+}
+
+/** Biblioteca de matrizes (catálogo global) — presente só no Editor. */
+export interface TemplatesGalleryProps {
+  templates: DesignTemplate[]
+  loading: boolean
+  onInsert: (template: DesignTemplate) => void
+  /** Só presente quando o usuário logado é admin. */
+  onDelete?: (templateId: string) => void
 }
 
 interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
@@ -44,6 +56,8 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
   projectContext?: ProjectContext
   /** Presente só no Editor — grupos Arquivo/Editar abaixo do bloco Projeto. */
   projectActions?: ProjectActions
+  /** Presente só no Editor — galeria de matrizes prontas pra arrastar/clicar pro canvas. */
+  templatesGallery?: TemplatesGalleryProps
 }
 
 const navGroups = [
@@ -65,7 +79,7 @@ const navGroups = [
  * NavUser no footer, colapsável pra ícones com SidebarRail. No Editor, também
  * carrega o bloco "Projeto" e os grupos Editar/Arquivo (via projectActions).
  */
-export function AppSidebar({ projectContext, projectActions, ...props }: AppSidebarProps) {
+export function AppSidebar({ projectContext, projectActions, templatesGallery, ...props }: AppSidebarProps) {
   return (
     <Sidebar collapsible="icon" variant="inset" {...props}>
       <SidebarHeader>
@@ -98,6 +112,15 @@ export function AppSidebar({ projectContext, projectActions, ...props }: AppSide
               <p className="text-muted-foreground mt-0.5 text-xs">
                 {Math.round(projectContext.canvas.widthMm)} × {Math.round(projectContext.canvas.heightMm)} mm
               </p>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {templatesGallery && (
+          <SidebarGroup className="group-data-[collapsible=icon]:hidden">
+            <SidebarGroupLabel>Matrizes</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <TemplatesGallery {...templatesGallery} />
             </SidebarGroupContent>
           </SidebarGroup>
         )}
@@ -136,6 +159,13 @@ export function AppSidebar({ projectContext, projectActions, ...props }: AppSide
                       <HistoryIcon /> <span>Histórico</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
+                  {projectActions.onPublishAsTemplate && (
+                    <SidebarMenuItem>
+                      <SidebarMenuButton onClick={projectActions.onPublishAsTemplate} tooltip="Publicar como matriz">
+                        <Sparkles /> <span>Publicar como matriz</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  )}
                   <SidebarMenuItem>
                     <SidebarMenuButton
                       onClick={projectActions.onDeleteProject}

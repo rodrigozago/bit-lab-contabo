@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { rectToSvgPath, parseSvgPathBounds, shapeGeometryToSvgPath, svgPathToPoints } from "./geometry.ts";
+import {
+  rectToSvgPath,
+  parseSvgPathBounds,
+  shapeGeometryToSvgPath,
+  svgPathToPoints,
+  scalePoints,
+  pointsToSvgPath,
+} from "./geometry.ts";
 import type { Editor as TldrawEditor, TLShape } from "@tldraw/tldraw";
 
 /** Mock mínimo de editor.getShapeGeometry(shape) — só o que shapeGeometryToSvgPath usa. */
@@ -115,5 +122,36 @@ describe("svgPathToPoints", () => {
   it("null pra svgPath ausente ou com menos de 3 pontos", () => {
     expect(svgPathToPoints(undefined)).toBeNull();
     expect(svgPathToPoints("M 10 20 L 30 40 Z")).toBeNull(); // só 2 pontos
+  });
+});
+
+describe("scalePoints", () => {
+  it("escala em torno da origem e desloca pro destino", () => {
+    const points = [{ x: 0, y: 0 }, { x: 10, y: 20 }];
+    expect(scalePoints(points, 2, 100, 50)).toEqual([
+      { x: 100, y: 50 },
+      { x: 120, y: 90 },
+    ]);
+  });
+
+  it("preserva a posição relativa entre múltiplos pontos (não só o bounding box)", () => {
+    // triângulo assimétrico — se só o bbox fosse escalado, a forma se perderia
+    const points = [{ x: 0, y: 0 }, { x: 40, y: 0 }, { x: 10, y: 30 }];
+    const scaled = scalePoints(points, 0.5, 0, 0);
+    expect(scaled).toEqual([{ x: 0, y: 0 }, { x: 20, y: 0 }, { x: 5, y: 15 }]);
+  });
+});
+
+describe("pointsToSvgPath", () => {
+  it("monta um path M/L/Z fechado a partir dos pontos, em ordem", () => {
+    expect(pointsToSvgPath([{ x: 10, y: 20 }, { x: 30, y: 40 }, { x: 50, y: 60 }])).toBe(
+      "M 10 20 L 30 40 L 50 60 Z"
+    );
+  });
+
+  it("faz round-trip com svgPathToPoints", () => {
+    const original = "M 10 20 L 30 40 L 50 60 Z";
+    const points = svgPathToPoints(original)!;
+    expect(pointsToSvgPath(points)).toBe(original);
   });
 });

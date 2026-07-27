@@ -263,6 +263,34 @@ export interface EmbroideryProject {
   updatedAt: string;
 }
 
+// ─── Biblioteca de matrizes (catálogo global) ─────────────────────────────────
+
+/**
+ * Matriz de bordado pronta, publicada por um admin a partir de um projeto
+ * existente dele mesmo — catálogo GLOBAL (sem ownerId), visível pra todos os
+ * usuários logados. É uma CÓPIA/snapshot no momento da publicação: editar ou
+ * apagar o projeto de origem depois não afeta a matriz já publicada.
+ * `canvas` é o bastidor de REFERÊNCIA usado no contain-fit ao inserir num
+ * projeto de bastidor diferente (ver insertTemplate em Editor.tsx).
+ */
+export interface DesignTemplate {
+  id: string;
+  name: string;
+  canvas: CanvasSize;
+  elements: EmbroideryElement[];
+  /** sub (OIDC) do admin que publicou — só auditoria, não usado em UI de filtro */
+  createdBy: string;
+  createdAt: string;
+}
+
+/** O cliente nunca reenvia `elements`/`canvas` — o backend copia do projeto já salvo. */
+export interface PublishTemplateRequest {
+  /** projeto do próprio admin a copiar */
+  projectId: string;
+  /** nome de exibição no catálogo — pode divergir do nome do projeto privado */
+  name: string;
+}
+
 // ─── API Contracts ────────────────────────────────────────────────────────────
 
 export interface CreateProjectRequest {

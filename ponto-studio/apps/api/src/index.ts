@@ -9,6 +9,7 @@ import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { projectsRoutes } from "./routes/projects.js";
 import { hoopsRoutes } from "./routes/hoops.js";
+import { templatesRoutes } from "./routes/templates.js";
 import { exportRoutes } from "./routes/export.js";
 import { uploadRoutes } from "./routes/upload.js";
 import { analyzeRoutes } from "./routes/analyze.js";
@@ -101,6 +102,7 @@ await app.register(staticFiles, {
 
 await app.register(projectsRoutes, { prefix: "/api/projects" });
 await app.register(hoopsRoutes, { prefix: "/api/hoops" });
+await app.register(templatesRoutes, { prefix: "/api/templates" });
 await app.register(exportRoutes, { prefix: "/api/export" });
 await app.register(uploadRoutes, { prefix: "/api/upload" });
 await app.register(analyzeRoutes, { prefix: "/api/analyze" });

@@ -12,14 +12,23 @@ import {
 import "@tldraw/tldraw/tldraw.css";
 import type { ImperativePanelHandle } from "react-resizable-panels";
 import { PanelRight, Eye } from "lucide-react";
-import { HOOP_PX_PER_MM, type CanvasSize, type EmbroideryElement, type EmbroideryProject } from "@ponto-studio/shared";
+import { HOOP_PX_PER_MM, type CanvasSize, type DesignTemplate, type EmbroideryElement, type EmbroideryProject } from "@ponto-studio/shared";
 import { useProjectStore, type SaveStatus } from "../store/projectStore.ts";
 import { api } from "../api/client.ts";
-import { rectToSvgPath, parseSvgPathBounds, shapeGeometryToSvgPath, svgPathToPoints } from "../utils/geometry.ts";
+import { useAuth } from "../lib/auth.ts";
+import {
+  rectToSvgPath,
+  parseSvgPathBounds,
+  shapeGeometryToSvgPath,
+  svgPathToPoints,
+  scalePoints,
+  pointsToSvgPath,
+} from "../utils/geometry.ts";
 import { splitSvgByColor, splitSvgIntoRegions, recolorSvg } from "../utils/svgLayers.ts";
 import { findShapeByElementId, setShapesHidden } from "../utils/canvasShapes.ts";
 import { findLayerMetrics, suggestStitchParams } from "../utils/stitchHeuristics.ts";
 import { PropertiesPanel } from "./PropertiesPanel.tsx";
+import { TEMPLATE_DRAG_MIME } from "./TemplatesGallery.tsx";
 import { PartsPanel } from "./PartsPanel.tsx";
 import { CanvasToolbar } from "./CanvasToolbar.tsx";
 import { ExportModal } from "./ExportModal.tsx";
@@ -27,6 +36,7 @@ import { ImportModal } from "./ImportModal.tsx";
 import { TextToolModal } from "./TextToolModal.tsx";
 import { useToast } from "./Toast.tsx";
 import { HistoryModal } from "./HistoryModal.tsx";
+import { PublishTemplateModal } from "./PublishTemplateModal.tsx";
 import type { ImportConfirmPayload } from "./ImportModal.tsx";
 import { AppSidebar } from "@/components/app-sidebar";
 import { ModeToggle } from "@/components/mode-toggle";
@@ -174,10 +184,37 @@ export function Editor({ project, onProjectChange }: Props) {
     retrySync,
   } = useProjectStore(project, onProjectChange);
 
+  const { me } = useAuth();
   const [showExport, setShowExport] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [showTextTool, setShowTextTool] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showPublishTemplate, setShowPublishTemplate] = useState(false);
+  // ── Biblioteca de matrizes (catálogo global) ──
+  // Lista carregada uma vez ao montar o editor — dado read-only desacoplado
+  // do projeto atual, não entra no projectStore.
+  const [templates, setTemplates] = useState<DesignTemplate[]>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await api.templates.list();
+        if (!cancelled) setTemplates(list);
+      } catch (err) {
+        if (!cancelled) {
+          toast.error(
+            `Erro ao carregar a biblioteca de matrizes: ${err instanceof Error ? err.message : "erro desconhecido"}`
+          );
+        }
+      } finally {
+        if (!cancelled) setTemplatesLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [toast]);
   const [tldrawEditor, setTldrawEditor] = useState<TldrawEditor | null>(null);
   const [selectedShapeIds, setSelectedShapeIds] = useState<TLShapeId[]>([]);
   // ── Preview de bordado no canvas (Fase 8.2) ──
@@ -867,6 +904,132 @@ export function Editor({ project, onProjectChange }: Props) {
     }
   }
 
+  /**
+   * Insere uma matriz da biblioteca (catálogo global) no projeto atual —
+   * mesma mecânica usada pra recriar elementos salvos no canvas (ver o
+   * `loadSavedElements` dentro de `handleMount`), só que com uma
+   * transformação afim (escala uniforme + translação) por cima e registrando
+   * cada parte como um `EmbroideryElement` NOVO (não é só visual).
+   *
+   * Como `hoopPageBounds` sempre tem origem fixa em (0,0), tanto o bastidor
+   * de referência da matriz quanto o do projeto atual compartilham o mesmo
+   * referencial — não há offset escondido, só escalar e transladar.
+   *
+   * Sem `dropPoint` (clique): centraliza o bloco inteiro no bastidor atual.
+   * Com `dropPoint` (arrastar, já convertido via `editor.screenToPage`):
+   * centraliza o bloco no ponto de drop, sem mexer na câmera.
+   */
+  async function insertTemplate(template: DesignTemplate, dropPoint?: { x: number; y: number }) {
+    if (!tldrawEditor) return;
+
+    const templateHoop = hoopPageBounds(template.canvas);
+    const targetHoop = hoopPageBounds(localProject.canvas);
+    const scale = Math.min(targetHoop.w / templateHoop.w, targetHoop.h / templateHoop.h);
+    const scaledW = templateHoop.w * scale;
+    const scaledH = templateHoop.h * scale;
+    const destX = dropPoint ? dropPoint.x - scaledW / 2 : targetHoop.x + (targetHoop.w - scaledW) / 2;
+    const destY = dropPoint ? dropPoint.y - scaledH / 2 : targetHoop.y + (targetHoop.h - scaledH) / 2;
+
+    // Um só importGroupId compartilhado por TODOS os elementos desta
+    // inserção (liga o bloco inteiro pra mover/redimensionar junto — mesmo
+    // mecanismo do import de imagem).
+    const importGroupId = crypto.randomUUID();
+    const rotatedAfter: Array<{ id: TLShapeId; rotation: number }> = [];
+
+    try {
+      for (const el of template.elements) {
+        const rotation = el.rotation ?? 0;
+
+        if (el.svgContent) {
+          const bounds = parseSvgPathBounds(el.svgPath) ?? { x: 0, y: 0, w: templateHoop.w, h: templateHoop.h };
+          const newX = destX + bounds.x * scale;
+          const newY = destY + bounds.y * scale;
+          const newW = bounds.w * scale;
+          const newH = bounds.h * scale;
+          const newSvgPath = rectToSvgPath(newX, newY, newW, newH);
+
+          const elementId = addElement(newSvgPath, el.color, el.svgContent, {
+            groupId: importGroupId, groupName: template.name,
+            stitch: el.stitch, stitchSuggested: false,
+          });
+          knownElementIdsRef.current.add(elementId);
+          if (rotation !== 0) updateElement(elementId, { rotation });
+
+          const recolored = recolorSvg(el.svgContent, el.color);
+          const dataUrl = await svgToDataUrl(recolored);
+          const assetId = AssetRecordType.createId();
+          tldrawEditor.createAssets([{
+            id: assetId, type: "image", typeName: "asset",
+            props: { name: `bordado-${el.color}.svg`, src: dataUrl, w: newW, h: newH, mimeType: "image/svg+xml", isAnimated: false },
+            meta: {},
+          }]);
+          const shapeId = createShapeId();
+          tldrawEditor.createShape({
+            id: shapeId, type: "image", x: newX, y: newY,
+            props: { assetId, w: newW, h: newH },
+            meta: { layer: "embroidery", elementId, importGroupId, importGroupName: template.name },
+          } as Parameters<typeof tldrawEditor.createShape>[0]);
+          if (rotation !== 0) rotatedAfter.push({ id: shapeId, rotation });
+        } else {
+          // Parte nativa: transforma CADA ponto do polígono (não só o
+          // bounding box) — preserva a silhueta exata de elipse/traço livre.
+          const points = svgPathToPoints(el.svgPath);
+          if (!points) continue;
+          const newPoints = scalePoints(points, scale, destX, destY);
+          const newSvgPath = pointsToSvgPath(newPoints);
+
+          const elementId = addElement(newSvgPath, el.color, undefined, {
+            groupId: importGroupId, groupName: template.name,
+            stitch: el.stitch, stitchSuggested: false,
+          });
+          knownElementIdsRef.current.add(elementId);
+          if (rotation !== 0) updateElement(elementId, { rotation });
+
+          const shapeId = createShapeId();
+          tldrawEditor.createShape({
+            id: shapeId, type: "draw", x: 0, y: 0,
+            props: { segments: [{ type: "straight", points: newPoints }], isClosed: true, isComplete: true, size: "s" },
+            meta: { layer: "embroidery", elementId },
+          } as Parameters<typeof tldrawEditor.createShape>[0]);
+          if (rotation !== 0) rotatedAfter.push({ id: shapeId, rotation });
+        }
+      }
+
+      for (const { id, rotation } of rotatedAfter) {
+        tldrawEditor.rotateShapesBy([id], rotation);
+      }
+
+      // Zoom só no clique — no drag-and-drop a câmera não deve pular pra
+      // longe de onde o usuário acabou de soltar.
+      if (!dropPoint) {
+        tldrawEditor.zoomToBounds(
+          {
+            x: Math.min(targetHoop.x, destX), y: Math.min(targetHoop.y, destY),
+            w: Math.max(targetHoop.w, scaledW), h: Math.max(targetHoop.h, scaledH),
+          },
+          { inset: 40 }
+        );
+      }
+    } catch (err) {
+      toast.error(
+        `Erro ao inserir a matriz: ${err instanceof Error ? err.message : "erro desconhecido"}`
+      );
+    }
+  }
+
+  async function handleDeleteTemplate(templateId: string) {
+    const previous = templates;
+    setTemplates((ts) => ts.filter((t) => t.id !== templateId));
+    try {
+      await api.templates.delete(templateId);
+    } catch (err) {
+      setTemplates(previous);
+      toast.error(
+        `Erro ao remover a matriz: ${err instanceof Error ? err.message : "erro desconhecido"}`
+      );
+    }
+  }
+
   return (
     <SidebarProvider
       style={
@@ -887,6 +1050,13 @@ export function Editor({ project, onProjectChange }: Props) {
           onHistory: () => setShowHistory(true),
           onDeleteProject: handleDeleteProject,
           deleting,
+          ...(me?.isAdmin ? { onPublishAsTemplate: () => setShowPublishTemplate(true) } : {}),
+        }}
+        templatesGallery={{
+          templates,
+          loading: templatesLoading,
+          onInsert: (template) => { void insertTemplate(template); },
+          ...(me?.isAdmin ? { onDelete: handleDeleteTemplate } : {}),
         }}
       />
       <SidebarInset className="overflow-hidden">
@@ -927,7 +1097,22 @@ export function Editor({ project, onProjectChange }: Props) {
             {/* isolate: cria stacking context próprio pro tldraw, senão os z-index
                 internos dele (até 1000) vazam pro contexto raiz e cobrem os
                 portais do Radix (dropdown do usuário/logout, tooltip da sidebar). */}
-            <div className="relative h-full isolate">
+            <div
+              className="relative h-full isolate"
+              onDragOver={(e) => {
+                // preventDefault é obrigatório aqui — sem ele o onDrop nunca dispara
+                if (e.dataTransfer.types.includes(TEMPLATE_DRAG_MIME)) e.preventDefault();
+              }}
+              onDrop={(e) => {
+                const templateId = e.dataTransfer.getData(TEMPLATE_DRAG_MIME);
+                if (!templateId || !tldrawEditor) return;
+                e.preventDefault();
+                const template = templates.find((t) => t.id === templateId);
+                if (!template) return;
+                const dropPoint = tldrawEditor.screenToPage({ x: e.clientX, y: e.clientY });
+                void insertTemplate(template, dropPoint);
+              }}
+            >
               <Tldraw onMount={handleMount} components={tldrawComponents} />
               {tldrawEditor && <CanvasToolbar editor={tldrawEditor} selectedShapeIds={selectedShapeIds} />}
             </div>
@@ -990,6 +1175,14 @@ export function Editor({ project, onProjectChange }: Props) {
             projectId={localProject.id}
             onClose={() => setShowHistory(false)}
             onRestored={() => navigate(0)}
+          />
+        )}
+        {showPublishTemplate && (
+          <PublishTemplateModal
+            projectId={localProject.id}
+            defaultName={localProject.name}
+            onClose={() => setShowPublishTemplate(false)}
+            onPublished={(template) => setTemplates((ts) => [template, ...ts])}
           />
         )}
         {importing && (

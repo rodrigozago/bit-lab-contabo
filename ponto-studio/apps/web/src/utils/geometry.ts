@@ -116,3 +116,26 @@ export function svgPathToPoints(svgPath: string | undefined): Array<{ x: number;
   }
   return points;
 }
+
+/**
+ * Escala e translada uma lista de pontos — usado pra inserir uma matriz da
+ * biblioteca (catálogo global de templates) escalada/reposicionada no
+ * bastidor de destino, preservando a posição relativa entre as partes. Como
+ * o bastidor de origem e o de destino sempre têm origem fixa em (0,0) (ver
+ * `hoopPageBounds`), a transformação é direta: sem offset escondido a
+ * descontar, só escalar cada ponto e somar o destino.
+ */
+export function scalePoints(
+  points: Array<{ x: number; y: number }>,
+  scale: number,
+  destX: number,
+  destY: number
+): Array<{ x: number; y: number }> {
+  return points.map((p) => ({ x: destX + p.x * scale, y: destY + p.y * scale }));
+}
+
+/** Inverso de `svgPathToPoints`: monta um "d" M/L/Z fechado a partir de pontos, em ordem. */
+export function pointsToSvgPath(points: Array<{ x: number; y: number }>): string {
+  const r = (n: number) => +n.toFixed(2);
+  return points.map((p, i) => `${i === 0 ? "M" : "L"} ${r(p.x)} ${r(p.y)}`).join(" ") + " Z";
+}

@@ -12,6 +12,8 @@ import type {
   CanvasSize,
   StitchPreviewJobStatus,
   Hoop,
+  DesignTemplate,
+  PublishTemplateRequest,
 } from "@ponto-studio/shared";
 
 export interface ProjectVersionMeta {
@@ -53,6 +55,14 @@ export const api = {
     create: (body: { name: string; widthMm: number; heightMm: number }) =>
       request<Hoop>("/hoops", { method: "POST", body: JSON.stringify(body) }),
     delete: (id: string) => request<null>(`/hoops/${id}`, { method: "DELETE" }),
+  },
+  templates: {
+    // Catálogo global de matrizes prontas — qualquer usuário logado vê
+    list: () => request<DesignTemplate[]>("/templates"),
+    // Publica um projeto do próprio usuário como matriz — só admin (403 senão)
+    publish: (body: PublishTemplateRequest) =>
+      request<DesignTemplate>("/templates", { method: "POST", body: JSON.stringify(body) }),
+    delete: (id: string) => request<null>(`/templates/${id}`, { method: "DELETE" }),
   },
   export: {
     create: (body: ExportRequest) =>

@@ -40,3 +40,17 @@ CREATE TABLE IF NOT EXISTS project_versions (
 );
 
 CREATE INDEX IF NOT EXISTS project_versions_project_idx ON project_versions (project_id, created_at DESC);
+
+-- Biblioteca de matrizes prontas (catálogo global) — publicado a partir de um
+-- projeto existente do próprio admin; sem owner_id porque é visível pra
+-- TODOS os usuários logados (primeira tabela sem escopo por usuário).
+CREATE TABLE IF NOT EXISTS design_templates (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  -- sub (OIDC) do admin que publicou — só auditoria, nunca usado em WHERE
+  created_by TEXT NOT NULL,
+  name TEXT NOT NULL,
+  canvas_width_mm REAL NOT NULL,
+  canvas_height_mm REAL NOT NULL,
+  elements JSONB NOT NULL DEFAULT '[]',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
