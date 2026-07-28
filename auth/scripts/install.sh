@@ -9,8 +9,8 @@
 #   2. Cria auth/.env (se não existir) — pede POSTGRES_PASSWORD, SESSION_SECRET,
 #      INITIAL_ADMIN_EMAIL, INITIAL_ADMIN_PASSWORD
 #   3. docker compose build + up -d (postgres, redis, auth em 127.0.0.1:4002)
-#   4. Copia nginx/bit-lab.tech.conf (com o bloco auth.bit-lab.tech e o gate
-#      do ponto.bit-lab.tech) pra /etc/nginx/conf.d (ou sites-enabled), testa
+#   4. Copia nginx/bit-lab.tech.conf (com os blocos auth.bit-lab.tech e
+#      apps.bit-lab.tech) pra /etc/nginx/conf.d (ou sites-enabled), testa
 #      e recarrega o nginx
 #
 # Idempotente — pode rodar de novo a qualquer momento pra atualizar.
@@ -121,7 +121,7 @@ echo "  1. DNS: auth.bit-lab.tech e apps.bit-lab.tech apontando pro mesmo IP de 
 echo "  2. Certificado /etc/ssl/cloudflare/bit-lab.tech.pem cobre esses subdomínios (wildcard *.bit-lab.tech)"
 echo "  3. https://auth.bit-lab.tech/login carrega a tela de login"
 echo "  4. https://apps.bit-lab.tech carrega o dashboard (pede login se você não estiver logado)"
-echo "  5. https://ponto.bit-lab.tech redireciona pro login se você não estiver logado"
+echo "  5. https://bordado.digital redireciona pro login se você não estiver logado"
 echo ""
 echo "Logs:      docker compose -f $PROJECT_DIR/docker-compose.yml logs -f"
 echo "Atualizar: git pull && $SCRIPT_DIR/install.sh"

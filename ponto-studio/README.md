@@ -1,10 +1,10 @@
-# 🪡 Ponto Studio
+# 🪡 Bordado Digital
 
-> O Canva do Bordado — plataforma web para criação e exportação de designs de bordado
+> Plataforma web para criação e exportação de designs de bordado
 
 ## O que é
 
-Ponto Studio é uma ferramenta web simples onde qualquer pessoa pode:
+Bordado Digital é uma ferramenta web simples onde qualquer pessoa pode:
 
 1. **Importar** uma imagem (PNG/JPG) como referência
 2. **Analisar** a imagem — 100% local, sem IA: k-means (OpenCV) separa as
@@ -56,7 +56,7 @@ REDIS_URL=redis://localhost:6379 EXPORTS_DIR=../../apps/api/exports python3 work
 # Sobe toda a stack: Web, API, Worker Python e Redis
 docker-compose up --build
 
-# Web:    http://127.0.0.1:3003  (proxied publicamente via ponto.bit-lab.tech)
+# Web:    http://127.0.0.1:3003  (proxied publicamente via bordado.digital)
 # API:    http://127.0.0.1:4001  (uso interno/debug — não exposta publicamente)
 # Redis:  redis://redis:6379    (interno, sem porta publicada)
 ```
@@ -132,7 +132,7 @@ Projeto (JSON) → API → Salva SVG → RPUSH embroidery:jobs (Redis)
 |----------|-----------|--------|
 | `REDIS_URL` | URL de conexão ao Redis | `redis://localhost:6379` |
 | `PORT` | Porta da API | `3001` |
-| `PUBLIC_URL` | URL base pública da API (para URLs de download) | `http://localhost:3001` (`https://ponto.bit-lab.tech` nesta VPS) |
+| `PUBLIC_URL` | URL base pública da API (para URLs de download) | `http://localhost:3001` (`https://bordado.digital` nesta VPS) |
 | `EXPORTS_DIR` | Diretório de saída do worker | `/exports` |
 | `ROLLBAR_SERVER_TOKEN` | Token servidor (secreto) do Rollbar — **erros** da API e do worker. Sem ele, vira no-op. | *(vazio = desligado)* |
 | `SLACK_METRICS_WEBHOOK` | Incoming Webhook do Slack — **feed de métricas** por job (worker). Sem ele, o worker não posta nada. | *(vazio = desligado)* |

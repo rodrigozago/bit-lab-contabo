@@ -7,7 +7,7 @@ interface LogoProps extends React.HTMLAttributes<HTMLImageElement> {
 }
 
 /**
- * Marca do Ponto Studio — logo PNG com suporte a dark mode.
+ * Marca do Bordado Digital — logo PNG com suporte a dark mode.
  * - light: logo.png (padrão, fundo branco)
  * - dark: logo-dark.png (fundo escuro)
  * - transparent: logo-transparent.png (sem fundo)
@@ -24,7 +24,7 @@ export function Logo({ size = 40, className, variant = "default", ...props }: Lo
   return (
     <img
       src={src}
-      alt="Ponto Studio"
+      alt="Bordado Digital"
       width={size}
       height={size}
       className={className}

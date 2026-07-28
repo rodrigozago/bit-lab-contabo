@@ -1,4 +1,4 @@
-# Decisões Técnicas — Ponto Studio
+# Decisões Técnicas — Bordado Digital
 
 ---
 

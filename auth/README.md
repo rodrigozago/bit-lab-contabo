@@ -41,7 +41,7 @@ convite é resgatado pra essa conta já existente, sem criar uma segunda.
   — CRUD de usuários, apps (+ toggle de self-signup), acessos (+ papel) e
   links de convite. A API JSON por trás mora em `/admin/api/*` neste serviço.
 - **OIDC:** `Provider` real montado (discovery, JWKS, `/auth`, `/token`,
-  `/userinfo`) — clients registrados: `face-lab`, `ponto-studio`. Ver
+  `/userinfo`) — clients registrados: `face-lab`, `bordado-digital`. Ver
   comentário em `src/oidc.js`.
 
 ## Rodando localmente
@@ -55,15 +55,15 @@ curl http://127.0.0.1:4002/health
 Pra testar o fluxo completo:
 ```bash
 # sem sessão → 401
-curl -i http://127.0.0.1:4002/verify?app=ponto-studio
+curl -i http://127.0.0.1:4002/verify?app=bordado-digital
 
 # login (usa as credenciais de INITIAL_ADMIN_EMAIL/PASSWORD do .env)
 curl -i -c /tmp/cookies.txt -X POST http://127.0.0.1:4002/login \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "email=SEU_EMAIL&password=SUA_SENHA"
 
-# com sessão + acesso concedido (ponto-studio é semeado automaticamente) → 200
-curl -i -b /tmp/cookies.txt "http://127.0.0.1:4002/verify?app=ponto-studio"
+# com sessão + acesso concedido (bordado-digital é semeado automaticamente) → 200
+curl -i -b /tmp/cookies.txt "http://127.0.0.1:4002/verify?app=bordado-digital"
 
 # app sem grant → 403
 curl -i -b /tmp/cookies.txt "http://127.0.0.1:4002/verify?app=nao-existe"
@@ -83,9 +83,9 @@ sudo ./scripts/install.sh
 
 Prepara `.env` (pergunta as senhas se faltarem), builda e sobe
 Postgres+Redis+auth+web, e sincroniza o `nginx/bit-lab.tech.conf` (que já traz
-os blocos `auth.bit-lab.tech`, `apps.bit-lab.tech` e o gate do
-`ponto.bit-lab.tech`) — com backup do conf anterior e teste (`nginx -t`) antes
-de recarregar.
+os blocos `auth.bit-lab.tech` e `apps.bit-lab.tech` — o gate do
+`bordado.digital` vive em `nginx/bordado.digital.conf`, próprio) — com backup
+do conf anterior e teste (`nginx -t`) antes de recarregar.
 
 ## Adicionando um novo app ao gate
 
@@ -93,8 +93,8 @@ de recarregar.
    concede acesso aos usuários certos em Acessos (ou gera um link de convite
    em Links de convite).
 2. No nginx, adiciona no server block do domínio desse app o mesmo bloco
-   `auth_request` usado em `ponto.bit-lab.tech` (troca só o slug na query
-   string `?app=` e a porta do `proxy_pass` de destino).
+   `auth_request` usado nos outros apps (troca só o slug na query string
+   `?app=` e a porta do `proxy_pass` de destino).
 
 Nenhuma mudança no serviço `auth` em si é necessária.
 

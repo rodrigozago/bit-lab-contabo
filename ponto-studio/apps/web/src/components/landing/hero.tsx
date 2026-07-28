@@ -54,7 +54,7 @@ export function Hero() {
                 <Screenshot
                   srcLight="/hero-light.svg"
                   srcDark="/hero-dark.svg"
-                  alt="Editor do Ponto Studio"
+                  alt="Editor do Bordado Digital"
                   width={1248}
                   height={765}
                   loading="eager"

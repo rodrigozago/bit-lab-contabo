@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# install.sh — Instala/atualiza o Ponto Studio na VPS bit-lab (ponto.bit-lab.tech)
+# install.sh — Instala/atualiza o Bordado Digital na VPS bit-lab (bordado.digital)
 #
 # Uso:
 #   ./scripts/install.sh                       # pede a chave da OpenRouter se faltar
@@ -9,8 +9,8 @@
 #   1. Confere docker/docker compose
 #   2. Cria ponto-studio/.env (se não existir) com OPENROUTER_API_KEY
 #   3. docker compose build + up -d (web:127.0.0.1:3003, api:127.0.0.1:4001, redis/worker internos)
-#   4. Copia nginx/bit-lab.tech.conf (atualizado com o bloco ponto.bit-lab.tech)
-#      para /etc/nginx/conf.d/ (ou sites-enabled), testa e recarrega o nginx
+#   4. Copia nginx/bordado.digital.conf para /etc/nginx/conf.d/ (ou sites-enabled),
+#      testa e recarrega o nginx
 #
 # Idempotente — pode rodar de novo a qualquer momento para atualizar.
 set -euo pipefail
@@ -18,14 +18,14 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"       # .../bit-lab-agents/ponto-studio
 REPO_ROOT="$(cd "$PROJECT_DIR/.." && pwd)"        # .../bit-lab-agents
-NGINX_SRC="$REPO_ROOT/nginx/bit-lab.tech.conf"
-NGINX_CONF_NAME="bit-lab.tech.conf"
+NGINX_SRC="$REPO_ROOT/nginx/bordado.digital.conf"
+NGINX_CONF_NAME="bordado.digital.conf"
 
 log()  { echo "🪡  $*"; }
 warn() { echo "⚠️   $*" >&2; }
 die()  { echo "❌ $*" >&2; exit 1; }
 
-log "Ponto Studio — instalação em $PROJECT_DIR"
+log "Bordado Digital — instalação em $PROJECT_DIR"
 
 # ── 1. Pré-requisitos ─────────────────────────────────────────────────────────
 command -v docker >/dev/null 2>&1 || die "docker não encontrado. Instale o Docker antes de continuar."
@@ -111,9 +111,9 @@ echo ""
 log "Instalação concluída!"
 echo ""
 echo "Confirme antes de considerar tudo pronto:"
-echo "  1. DNS: ponto.bit-lab.tech apontando para o mesmo IP de bit-lab.tech (via Cloudflare)"
-echo "  2. Certificado /etc/ssl/cloudflare/bit-lab.tech.pem cobre ponto.bit-lab.tech (wildcard *.bit-lab.tech)"
-echo "  3. https://ponto.bit-lab.tech carrega o editor"
+echo "  1. DNS: bordado.digital apontando para o mesmo IP do servidor (via Cloudflare)"
+echo "  2. Certificado /etc/ssl/cloudflare/bordado.digital.{pem,key} existem e são válidos"
+echo "  3. https://bordado.digital carrega o editor"
 echo ""
 echo "Logs:            docker compose -f $PROJECT_DIR/docker-compose.yml logs -f"
 echo "Atualizar:       git pull && $SCRIPT_DIR/install.sh"

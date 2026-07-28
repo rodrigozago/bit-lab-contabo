@@ -4,9 +4,10 @@ import type { EmbroideryProject, EmbroideryElement, StitchParams } from "@ponto-
 export type SaveStatus = "idle" | "saving" | "saved" | "error";
 
 /**
- * Store local do projeto com sync automático para a API (modelo Canva: edita
- * → salva sozinho em background). onSync é chamado com debounce de 600ms após
- * qualquer mutação; saveStatus reflete o resultado pra dar feedback visual.
+ * Store local do projeto com sync automático para a API (edita → salva
+ * sozinho em background, sem botão "Salvar"). onSync é chamado com debounce
+ * de 600ms após qualquer mutação; saveStatus reflete o resultado pra dar
+ * feedback visual.
  */
 export function useProjectStore(
   initial: EmbroideryProject,

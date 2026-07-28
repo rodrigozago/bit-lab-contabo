@@ -1,5 +1,5 @@
 """
-Ponto Studio — Embroidery Worker
+Bordado Digital — Embroidery Worker
 =================================
 Lê jobs da fila Redis (LIST "embroidery:jobs") e converte SVG → arquivo de
 bordado usando o BINÁRIO OFICIAL DO INK/STITCH (rodado via subprocess, ver

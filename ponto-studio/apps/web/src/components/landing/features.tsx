@@ -28,7 +28,7 @@ const FEATURES: Feature[] = [
   {
     title: "Foto vira vetor",
     description:
-      "Envie uma foto e o Ponto Studio separa as cores em regiões prontas pra bordar.",
+      "Envie uma foto e o Bordado Digital separa as cores em regiões prontas pra bordar.",
     icon: <Image className="size-5 stroke-1" />,
   },
   {

@@ -1,15 +1,15 @@
 # FRD — Functional Requirements Document
-## Ponto Studio v0.1
+## Bordado Digital v0.1
 
 ---
 
 ## 1. Visão Geral
 
-Ponto Studio é uma aplicação web que permite a usuários domésticos de máquinas de bordado
+Bordado Digital é uma aplicação web que permite a usuários domésticos de máquinas de bordado
 criar designs visuais simples e exportá-los em formatos compatíveis com suas máquinas
 (DST, PES, JEF), sem necessidade de conhecimento técnico em software de bordado.
 
-**Princípio central:** o usuário pensa em criação visual (como o Canva), não em bordado técnico.
+**Princípio central:** o usuário pensa em criação visual, não em bordado técnico.
 
 ---
 

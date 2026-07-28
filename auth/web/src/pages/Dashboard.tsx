@@ -18,22 +18,22 @@ const roleLabel: Record<MyAccess["role"], string> = {
   app_admin: "Admin",
 }
 
-// O slug do app (client_id OIDC, ex: "ponto-studio", "face-lab") não é igual
-// ao subdomínio de verdade (nginx: ponto.bit-lab.tech, face.bit-lab.tech) —
+// O slug do app (client_id OIDC, ex: "bordado-digital", "face-lab") não é
+// igual ao subdomínio de verdade (nginx: bordado.digital, face.bit-lab.tech) —
 // só on-air coincide. Fallback: assume slug === subdomínio pra apps futuros
 // que sigam essa convenção.
 const APP_HOST: Record<string, string> = {
-  "ponto-studio": "ponto.bit-lab.tech",
+  "bordado-digital": "bordado.digital",
   "face-lab": "face.bit-lab.tech",
   "on-air": "on-air.bit-lab.tech",
 }
 
 // Cada app tem sua própria rota de entrada pós-login (não é sempre "/") —
-// ponto-studio manda pra "/app"; face-lab não tem uma rota única, então
+// bordado-digital manda pra "/app"; face-lab não tem uma rota única, então
 // aproxima pelo papel central (app_admin -> /producer, end_user -> /me).
 // on-air não está aqui porque a raiz "/" já é a Home logada.
 const APP_LAUNCH_PATH: Record<string, string | ((role: MyAccess["role"]) => string)> = {
-  "ponto-studio": "/app",
+  "bordado-digital": "/app",
   "face-lab": (role) => (role === "app_admin" ? "/producer" : "/me"),
 }
 

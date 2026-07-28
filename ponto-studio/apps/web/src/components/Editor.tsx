@@ -92,7 +92,7 @@ function HoopOverlay({ canvas }: { canvas: CanvasSize }) {
   );
 }
 
-// ── Indicador de autosave (modelo Canva: sem botão "Salvar", só status) ────────
+// ── Indicador de autosave (sem botão "Salvar", só status) ────────────────────
 
 /** "Salvo agora" / "Salvo há 23min" / "Salvo há 2h" / "Salvo há 2 dias" */
 function formatSavedAgo(iso: string): string {

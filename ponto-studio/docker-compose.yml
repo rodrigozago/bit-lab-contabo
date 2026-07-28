@@ -38,7 +38,7 @@ services:
       - "127.0.0.1:4001:3001"
     environment:
       PORT: "3001"
-      PUBLIC_URL: "https://ponto.bit-lab.tech"
+      PUBLIC_URL: "https://bordado.digital"
       REDIS_URL: "redis://redis:6379"
       # vars discretas (não DATABASE_URL composta) — evita bug de senha com
       # caracteres especiais quebrando parse de URL, mesmo padrão do face-lab
@@ -48,8 +48,8 @@ services:
       PGDATABASE: ponto
       NODE_ENV: production
       OIDC_ISSUER: "https://auth.bit-lab.tech"
-      OIDC_CLIENT_ID: "ponto-studio"
-      OIDC_CLIENT_SECRET: "${PONTO_STUDIO_OIDC_SECRET}"
+      OIDC_CLIENT_ID: "bordado-digital"
+      OIDC_CLIENT_SECRET: "${BORDADO_DIGITAL_OIDC_SECRET}"
       EXPORTS_TTL_HOURS: "${EXPORTS_TTL_HOURS:-24}"
       UPLOADS_TTL_HOURS: "${UPLOADS_TTL_HOURS:-24}"
       ROLLBAR_SERVER_TOKEN: "${ROLLBAR_SERVER_TOKEN:-}"

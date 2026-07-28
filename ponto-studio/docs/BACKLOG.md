@@ -1,9 +1,9 @@
-# Ponto Studio — Backlog Alpha
+# Bordado Digital — Backlog Alpha
 
 Índice de features para o teste alpha. Consolida o que já está implementado, o
 que precisa melhorar e o que falta.
 
-> **Tracking no Jira:** [projeto PONTO — Ponto Studio DEV](https://bit-lab.atlassian.net/browse/PONTO).
+> **Tracking no Jira:** [projeto PONTO — Bordado Digital DEV](https://bit-lab.atlassian.net/browse/PONTO).
 > Toda linha das tabelas abaixo tem uma issue correspondente (Epic por seção,
 > Task por item ID). Use o Jira para status/atribuição durante a execução;
 > este arquivo continua sendo a fonte de verdade do escopo e das decisões.
@@ -30,9 +30,9 @@ atrelados à conta) e controle de quem pode entrar.
 | ID | Status | Prio | Item |
 |----|--------|------|------|
 | AUTH-1 | ❌ | P0 | **SSO in-app (padrão face-lab / BFF OIDC).** API vira o client OIDC confidencial (`openid-client`), a SPA nunca vê tokens. Rotas `/api/auth/login`, `/api/auth/callback`, `/api/auth/logout`, `/api/me`. Sessão via cookie + Redis. Espelha `is_admin` do auth. |
-| AUTH-2 | ❌ | P0 | **Registrar `ponto-studio` como client OIDC no serviço `auth`** (`auth/src/oidc.js`): `client_id: 'ponto-studio'`, secret via env `PONTO_STUDIO_OIDC_SECRET`, `redirect_uris` de prod + local. O app `ponto-studio` já está semeado em `bootstrapAdmin.js`. |
+| AUTH-2 | ❌ | P0 | **Registrar `bordado-digital` como client OIDC no serviço `auth`** (`auth/src/oidc.js`): `client_id: 'bordado-digital'`, secret via env `BORDADO_DIGITAL_OIDC_SECRET`, `redirect_uris` de prod + local. O app `bordado-digital` já está semeado em `bootstrapAdmin.js`. |
 | AUTH-3 | ❌ | P0 | **Gate de login no front.** `AuthContext` + `useAuth` (igual `face-lab/apps/web/src/lib/auth.ts`), tela de login/redirect, e proteção do Editor (só entra logado). |
-| AUTH-4 | 🔧 | P1 | **Ajustar o gate nginx de `ponto.bit-lab.tech`.** Hoje há `auth_request` no nginx (gate grosso de página). Com o SSO in-app, isso duplicaria o login → remover/relaxar o `auth_request` e deixar o app controlar (para conseguir mostrar telas de "aguardando aprovação"). |
+| AUTH-4 | 🔧 | P1 | **Ajustar o gate nginx de `bordado.digital`.** Hoje há `auth_request` no nginx (gate grosso de página). Com o SSO in-app, isso duplicaria o login → remover/relaxar o `auth_request` e deixar o app controlar (para conseguir mostrar telas de "aguardando aprovação"). |
 | AUTH-5 | ❌ | P1 | **Ownership de projeto por usuário** (ver DATA-1). Sem isso, login não protege nada — qualquer logado veria qualquer projeto. |
 
 ## EPIC-ADMIN — Aprovação de contas 🗣️
@@ -121,7 +121,7 @@ Player de simulação, baseado na sequência ordenada de pontos:
 
 | ID | Status | Prio | Item |
 |----|--------|------|------|
-| INF-1 | ✅ | — | Docker compose (web/api/worker/redis), portas em loopback, nginx `ponto.bit-lab.tech`, `install.sh`. |
+| INF-1 | ✅ | — | Docker compose (web/api/worker/redis), portas em loopback, nginx `bordado.digital`, `install.sh`. |
 | INF-2 | 🔧 | P0 | **Deploy do alpha na VPS**: `git pull` + rebuild de `worker/api/web` (o erro `KeyError: 'svgFile'` era imagem worker desatualizada). Documentar o passo no `install.sh`. |
 | INF-3 | ❌ | P1 | Postgres para o ponto-studio (depende de DATA-1). Pode reusar o padrão do `auth`/`face-lab`. |
 | INF-4 | 🔧 | P2 | Volume/limpeza de `exports/` e `uploads/` (arquivos de análise/preview/export acumulam). |
@@ -151,5 +151,5 @@ Player de simulação, baseado na sequência ordenada de pontos:
 
 ## Ainda a confirmar
 
-- **AUTH-4 — gate nginx:** remover o `auth_request` de `ponto.bit-lab.tech`
+- **AUTH-4 — gate nginx:** remover o `auth_request` de `bordado.digital`
   quando o SSO in-app entrar (senão login duplo). Confirmar no deploy.

@@ -3,7 +3,7 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import { config } from "../config.js";
 import { getRedis } from "../redis.js";
 
-// Cookie HOST-ONLY em ponto.bit-lab.tech — nunca Domain=.bit-lab.tech, pra não
+// Cookie HOST-ONLY em bordado.digital — nunca Domain=.bit-lab.tech, pra não
 // interferir com o bl_session do auth (que também chega neste host e é ignorado).
 export const COOKIE_NAME = "ps_session";
 const KEY_PREFIX = "pssession:";

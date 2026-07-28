@@ -83,12 +83,12 @@ function AuthGate({ children }: { children: React.ReactNode }) {
             <CardContent className="grid p-0 md:grid-cols-2">
               <div className="flex flex-col items-center justify-center gap-4 p-8 text-center md:p-10">
                 <span className="text-4xl">🪡</span>
-                <h1 className="text-2xl font-bold">Ponto Studio</h1>
+                <h1 className="text-2xl font-bold">Bordado Digital</h1>
                 {pending ? (
                   <>
                     <p className="text-sm font-semibold text-primary">Conta em análise</p>
                     <p className="text-sm text-muted-foreground">
-                      Sua conta foi criada, mas ainda não tem acesso ao Ponto Studio — um admin precisa
+                      Sua conta foi criada, mas ainda não tem acesso ao Bordado Digital — um admin precisa
                       aprovar sua solicitação antes que você possa entrar.
                     </p>
                   </>

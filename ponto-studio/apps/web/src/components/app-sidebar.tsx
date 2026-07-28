@@ -91,7 +91,7 @@ export function AppSidebar({ projectContext, projectActions, templatesGallery, .
                   <Logo size={24} className="text-current" />
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-medium">Ponto Studio</span>
+                  <span className="truncate font-medium">Bordado Digital</span>
                   <span className="truncate text-xs">Estúdio de bordado</span>
                 </div>
               </Link>

@@ -1,4 +1,4 @@
-# Segurança pré-lançamento — Ponto Studio + auth/ (SSO)
+# Segurança pré-lançamento — Bordado Digital + auth/ (SSO)
 
 > **Documento de prontidão pra lançamento.** Auditoria feita em 2026-07-20 lendo o código de
 > `ponto-studio/` (web + api + worker) e `auth/` (provider OIDC/SSO). Cada item tem severidade, o
@@ -12,7 +12,7 @@
 > sessão (commits da Fase 10 — ver git log, prefixo "Segurança:"). O que RESTA é operacional e depende
 > de você, não de código: (a) **criar a conta/projetos no Rollbar** e pôr os tokens nos `.env` de
 > produção (o código já lê `ROLLBAR_SERVER_TOKEN`/`VITE_ROLLBAR_CLIENT_TOKEN` e fica no-op sem eles);
-> (b) **gerar os segredos de produção** frescos (`SESSION_SECRET`, `PONTO_STUDIO_OIDC_SECRET`/
+> (b) **gerar os segredos de produção** frescos (`SESSION_SECRET`, `BORDADO_DIGITAL_OIDC_SECRET`/
 > `OIDC_CLIENT_SECRET`, `POSTGRES_PASSWORD`, `INITIAL_ADMIN_PASSWORD`); (c) **confirmar HSTS/headers no
 > nginx** da VPS (item 8 — a parte que fica no nginx, fora deste repo); (d) **decidir o self-signup** do
 > ponto-studio (item 13); (e) **backups** do Postgres + volume `jwks` (seção 19); (f) **disparar um erro
@@ -121,7 +121,7 @@ com segredo vazio e o handshake OIDC quebra silenciosamente (ou pior, aceita um 
 - [ ] Remover o fallback `""` de `OIDC_CLIENT_SECRET` (e reavaliar os outros `env(...)` com fallback de
       prod: `publicUrl`, `databaseUrl`, `oidc.issuer` — em produção devem ser obrigatórios, não ter
       default de localhost).
-- [ ] Garantir que `PONTO_STUDIO_OIDC_SECRET` (no auth) e `OIDC_CLIENT_SECRET` (no ponto) sejam **o mesmo
+- [ ] Garantir que `BORDADO_DIGITAL_OIDC_SECRET` (no auth) e `OIDC_CLIENT_SECRET` (no ponto) sejam **o mesmo
       valor forte**, único por ambiente.
 
 ---
@@ -134,7 +134,7 @@ qualquer site e permite credenciais. Hoje o cookie `ps_session` é `SameSite=lax
 demais e frágil (qualquer mudança futura pra `SameSite=none` viraria CSRF/vazamento).
 
 **Correção:**
-- [ ] Fixar `origin` na origem do app: `origin: [config.publicUrl]` (ex.: `https://ponto.bit-lab.tech`),
+- [ ] Fixar `origin` na origem do app: `origin: [config.publicUrl]` (ex.: `https://bordado.digital`),
       mantendo `credentials: true`. Em dev, incluir `http://localhost:<porta>`.
 
 ---
@@ -296,12 +296,12 @@ ponto-studio vai ser aberto (qualquer um cria conta e usa) ou fechado (admin pro
       alerta se cair.
 - [ ] **Backups:** Postgres do auth (usuários/acessos) e do ponto (projetos) + volume `jwks` — rotina de
       backup testada (fazer um restore de teste).
-- [ ] **Segredos de produção:** gerar frescos e únicos (`SESSION_SECRET`, `PONTO_STUDIO_OIDC_SECRET`/
+- [ ] **Segredos de produção:** gerar frescos e únicos (`SESSION_SECRET`, `BORDADO_DIGITAL_OIDC_SECRET`/
       `OIDC_CLIENT_SECRET`, `POSTGRES_PASSWORD`, `INITIAL_ADMIN_PASSWORD`) — não reusar valores de dev. O
       `INITIAL_ADMIN_PASSWORD` deve ser trocado após o primeiro login.
 - [ ] **`.env.example` atualizado** em auth e ponto com todas as vars novas (Rollbar incluso) e sem valores
       reais.
-- [ ] **HTTPS/HSTS** confirmado no nginx pra `ponto.bit-lab.tech` e `auth.bit-lab.tech`.
+- [ ] **HTTPS/HSTS** confirmado no nginx pra `bordado.digital` e `auth.bit-lab.tech`.
 
 ---
 

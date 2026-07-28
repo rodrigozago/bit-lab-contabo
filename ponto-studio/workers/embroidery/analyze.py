@@ -1,5 +1,5 @@
 """
-Ponto Studio — Análise de imagem por processamento digital (sem IA)
+Bordado Digital — Análise de imagem por processamento digital (sem IA)
 ====================================================================
 Pipeline: quantização k-means → limpeza morfológica → vetorização (VTracer)
 → SVG com um <g> por cor (todas as regiões da mesma cor, mesmo desconectadas,

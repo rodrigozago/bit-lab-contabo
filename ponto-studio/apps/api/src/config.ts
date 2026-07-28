@@ -45,7 +45,7 @@ export const config = {
 
   oidc: {
     issuer: envStrict("OIDC_ISSUER", "https://auth.bit-lab.tech"),
-    clientId: envStrict("OIDC_CLIENT_ID", "ponto-studio"),
+    clientId: envStrict("OIDC_CLIENT_ID", "bordado-digital"),
     // dev tem um placeholder; em PRODUÇÃO é obrigatório (o `envStrict` aborta
     // se faltar). Antes o default era "" pra todo ambiente e o client subia
     // sem segredo em silêncio na produção.

@@ -3,7 +3,7 @@ const apps = require('./models/apps')
 const appAccess = require('./models/appAccess')
 
 const SEED_APPS = [
-  { slug: 'ponto-studio', name: 'Ponto Studio' },
+  { slug: 'bordado-digital', name: 'Bordado Digital' },
   { slug: 'face-lab', name: 'Face Lab' },
   { slug: 'on-air', name: 'On Air' },
   { slug: 'sentinela', name: 'Sentinela' },

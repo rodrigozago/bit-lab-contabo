@@ -42,7 +42,7 @@ export function Footer() {
             <FooterColumn className="col-span-2 sm:col-span-3 md:col-span-1">
               <a href="/" className="flex items-center gap-2 text-xl font-bold">
                 <span className="text-2xl">🪡</span>
-                Ponto Studio
+                Bordado Digital
               </a>
               <p className="text-muted-foreground text-sm text-balance">
                 Digitalize bordados direto do navegador.
@@ -64,7 +64,7 @@ export function Footer() {
             ))}
           </FooterContent>
           <FooterBottom>
-            <span>© {new Date().getFullYear()} Ponto Studio. Todos os direitos reservados.</span>
+            <span>© {new Date().getFullYear()} Bordado Digital. Todos os direitos reservados.</span>
             <ModeToggle variant="ghost" />
           </FooterBottom>
         </FooterContainer>

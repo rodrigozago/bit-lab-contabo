@@ -1,4 +1,4 @@
-# Arquitetura do Sistema — Ponto Studio
+# Arquitetura do Sistema — Bordado Digital
 
 ## Visão Geral
 

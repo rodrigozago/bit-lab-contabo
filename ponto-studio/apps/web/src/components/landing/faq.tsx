@@ -10,7 +10,7 @@ const FAQS = [
   {
     question: "Quais máquinas são compatíveis?",
     answer:
-      "O Ponto Studio exporta nos formatos DST, PES e JEF, cobrindo a maioria das máquinas domésticas e industriais das marcas mais populares. Também dá pra exportar em SVG pra usar em outros programas.",
+      "O Bordado Digital exporta nos formatos DST, PES e JEF, cobrindo a maioria das máquinas domésticas e industriais das marcas mais populares. Também dá pra exportar em SVG pra usar em outros programas.",
   },
   {
     question: "Quais formatos de arquivo posso exportar?",
@@ -20,7 +20,7 @@ const FAQS = [
   {
     question: "Preciso saber digitalizar pra usar?",
     answer:
-      "Não. O Ponto Studio separa as cores da sua imagem automaticamente e sugere os pontos. Você ajusta o que quiser, sem precisar ser especialista.",
+      "Não. O Bordado Digital separa as cores da sua imagem automaticamente e sugere os pontos. Você ajusta o que quiser, sem precisar ser especialista.",
   },
   {
     question: "Funciona com foto de celular?",

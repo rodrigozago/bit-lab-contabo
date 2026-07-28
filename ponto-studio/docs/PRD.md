@@ -1,5 +1,5 @@
 # PRD — Product Requirements Document
-## Ponto Studio v0.1 — POC
+## Bordado Digital v0.1 — POC
 
 ---
 
@@ -12,7 +12,7 @@ e focados em usuários profissionais. Não existe uma alternativa simples, web-b
 ## Solução
 
 Uma ferramenta web simples que abstrai a complexidade técnica do bordado. O usuário cria
-visualmente (como no Canva) e o sistema cuida da conversão técnica para máquina.
+visualmente e o sistema cuida da conversão técnica para máquina.
 
 ---
 

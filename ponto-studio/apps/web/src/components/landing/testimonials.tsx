@@ -10,7 +10,7 @@ interface Testimonial {
 const TESTIMONIALS: Testimonial[] = [
   {
     quote:
-      "Eu levava horas digitalizando cada logo à mão. Com o Ponto Studio, entrego pros clientes no mesmo dia.",
+      "Eu levava horas digitalizando cada logo à mão. Com o Bordado Digital, entrego pros clientes no mesmo dia.",
     name: "Marina Alves",
     role: "Ateliê Ponto de Encontro",
   },

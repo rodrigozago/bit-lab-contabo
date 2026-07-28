@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# setup.sh — Inicializa o ambiente de desenvolvimento do Ponto Studio
+# setup.sh — Inicializa o ambiente de desenvolvimento do Bordado Digital
 set -euo pipefail
 
-echo "🪡  Ponto Studio — Setup"
+echo "🪡  Bordado Digital — Setup"
 echo "========================"
 
 # Verifica dependências
