@@ -391,6 +391,7 @@ export function Editor({ project, onProjectChange }: Props) {
                   hasFill: (shape as SimpleShape).props.hasFill,
                   hasStroke: (shape as SimpleShape).props.hasStroke,
                   strokeWidth: (shape as SimpleShape).props.strokeWidth,
+                  cornerRadius: (shape as SimpleShape).props.cornerRadius,
                 },
               }
             : undefined;
@@ -582,7 +583,8 @@ export function Editor({ project, onProjectChange }: Props) {
               props: {
                 kind: el.simpleShape.kind, w: rect.w, h: rect.h,
                 hasFill: el.simpleShape.hasFill, hasStroke: el.simpleShape.hasStroke,
-                strokeWidth: el.simpleShape.strokeWidth, color: el.color,
+                strokeWidth: el.simpleShape.strokeWidth, cornerRadius: el.simpleShape.cornerRadius,
+                color: el.color,
               },
               meta: {
                 layer: "embroidery", elementId: el.id,
@@ -950,6 +952,7 @@ export function Editor({ project, onProjectChange }: Props) {
                     hasFill: patch.simpleShape.hasFill,
                     hasStroke: patch.simpleShape.hasStroke,
                     strokeWidth: patch.simpleShape.strokeWidth,
+                    cornerRadius: patch.simpleShape.cornerRadius,
                   }
                 : {}),
             },
@@ -1160,7 +1163,8 @@ export function Editor({ project, onProjectChange }: Props) {
             props: {
               kind: el.simpleShape.kind, w: newW, h: newH,
               hasFill: el.simpleShape.hasFill, hasStroke: el.simpleShape.hasStroke,
-              strokeWidth: el.simpleShape.strokeWidth, color: el.color,
+              strokeWidth: el.simpleShape.strokeWidth, cornerRadius: el.simpleShape.cornerRadius,
+              color: el.color,
             },
             meta: { layer: "embroidery", elementId, importGroupId, importGroupName: template.name },
           } as Parameters<typeof tldrawEditor.createShape>[0]);

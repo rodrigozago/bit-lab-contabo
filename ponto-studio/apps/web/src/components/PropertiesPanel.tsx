@@ -222,6 +222,30 @@ export function PropertiesPanel({ element, onChange, onDelete, regionCount, onSp
                 <div className="text-center text-sm font-semibold text-primary">{simpleShape.strokeWidth}px</div>
               </div>
             )}
+            {/* Só faz sentido pro retângulo — círculo não tem canto. Default
+                é reto (0); o traço em si já vem com junta reta própria (ver
+                SHARP_JOIN_STYLE em SimpleShapeUtil.tsx) — sem esse override
+                de canto o CSS do tldraw arredondava a quina sozinho mesmo
+                com este slider no mínimo. */}
+            {simpleShape.kind === "rectangle" && (
+              <div className="flex flex-col gap-1.5">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Cantos arredondados</p>
+                <div className="flex items-center gap-2">
+                  <span className="w-10 shrink-0 text-xs text-muted-foreground">Reto</span>
+                  <Slider
+                    min={0}
+                    max={80}
+                    step={1}
+                    value={[simpleShape.cornerRadius]}
+                    onValueChange={([v]) => onChange({ simpleShape: { ...simpleShape, cornerRadius: v! } })}
+                  />
+                  <span className="w-10 shrink-0 text-xs text-muted-foreground">80px</span>
+                </div>
+                <div className="text-center text-sm font-semibold text-primary">
+                  {simpleShape.cornerRadius === 0 ? "Reto" : `${simpleShape.cornerRadius}px`}
+                </div>
+              </div>
+            )}
           </div>
         )}
 

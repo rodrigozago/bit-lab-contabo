@@ -29,6 +29,9 @@ export interface SimpleShapeProps {
   hasFill: boolean;
   hasStroke: boolean;
   strokeWidth: number;
+  /** raio dos cantos, em px de canvas — só lido quando kind === "rectangle"
+   *  (círculo não tem canto). 0 = cantos retos, o default. */
+  cornerRadius: number;
   color: string;
 }
 
@@ -41,6 +44,7 @@ export const simpleShapeProps: RecordProps<SimpleShape> = {
   hasFill: T.boolean,
   hasStroke: T.boolean,
   strokeWidth: T.number,
+  cornerRadius: T.number,
   color: T.string,
 };
 

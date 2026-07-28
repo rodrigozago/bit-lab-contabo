@@ -15,9 +15,16 @@ export class SimpleShapeUtil extends ShapeUtil<SimpleShape> {
   static override migrations = simpleShapeMigrations;
 
   override getDefaultProps(): SimpleShape["props"] {
-    return { kind: "rectangle", w: 200, h: 200, hasFill: true, hasStroke: true, strokeWidth: 2, color: "#7c5cbf" };
+    return {
+      kind: "rectangle", w: 200, h: 200,
+      hasFill: true, hasStroke: true, strokeWidth: 2, cornerRadius: 0,
+      color: "#7c5cbf",
+    };
   }
 
+  // Hit-testing/seleção usam o bbox reto mesmo com cantos arredondados — a
+  // mesma simplificação que hasFill/isFilled já faz (área de clique não
+  // segue a silhueta exata), aceitável pro caso de uso.
   getGeometry(shape: SimpleShape) {
     const { kind, w, h, hasFill } = shape.props;
     if (kind === "ellipse") {
@@ -58,13 +65,25 @@ export class SimpleShapeUtil extends ShapeUtil<SimpleShape> {
   };
 }
 
+// `.tl-svg-container` (classe que o SVGContainer do tldraw usa) força
+// `stroke-linejoin/linecap: round` via CSS pra TODO shape customizado —
+// override inline aqui, senão o traço arredonda sozinho nas quinas mesmo com
+// cantos retos (cornerRadius 0), fica mais visível quanto mais grossa a
+// "Espessura do traço". Estilo inline vence a classe do tldraw.
+const SHARP_JOIN_STYLE = { strokeLinejoin: "miter" as const, strokeLinecap: "butt" as const };
+
 function SimpleShapeSvg({ shape }: { shape: SimpleShape }) {
-  const { kind, w, h, hasFill, hasStroke, strokeWidth, color } = shape.props;
+  const { kind, w, h, hasFill, hasStroke, strokeWidth, cornerRadius, color } = shape.props;
   const fill = hasFill ? color : "none";
   const stroke = hasStroke ? color : "none";
   return kind === "ellipse" ? (
     <ellipse cx={w / 2} cy={h / 2} rx={w / 2} ry={h / 2} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
   ) : (
-    <rect width={w} height={h} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
+    <rect
+      width={w} height={h}
+      rx={cornerRadius} ry={cornerRadius}
+      fill={fill} stroke={stroke} strokeWidth={strokeWidth}
+      style={cornerRadius === 0 ? SHARP_JOIN_STYLE : undefined}
+    />
   );
 }

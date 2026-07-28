@@ -224,7 +224,14 @@ export interface EmbroideryElement {
    *  (apps/web/src/shapes/SimpleShape*) — só aparência visual no canvas, não
    *  afeta a lógica de export/Ink-Stitch (essa decide fill/stroke real só
    *  por stitch.type, ver STROKE_FAMILY_TYPES em svgConverter.ts). */
-  simpleShape?: { kind: "rectangle" | "ellipse"; hasFill: boolean; hasStroke: boolean; strokeWidth: number };
+  simpleShape?: {
+    kind: "rectangle" | "ellipse";
+    hasFill: boolean;
+    hasStroke: boolean;
+    strokeWidth: number;
+    /** raio dos cantos, em px de canvas — só usado quando kind === "rectangle" */
+    cornerRadius: number;
+  };
 }
 
 export interface CanvasSize {
