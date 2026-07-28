@@ -1,4 +1,4 @@
-import { HOOP_PX_PER_MM, type EmbroideryProject, type EmbroideryElement, type CanvasSize, type StitchType } from "@ponto-studio/shared";
+import { HOOP_PX_PER_MM, STROKE_FAMILY_STITCH_TYPES as STROKE_FAMILY_TYPES, type EmbroideryProject, type EmbroideryElement, type CanvasSize } from "@ponto-studio/shared";
 import { parseViewBoxDimensions, computeContainTransform, scalePathData, rotatePathData, flattenPathData, type Dimensions } from "./svgTransform.js";
 import { extractSatinRails, type RailPair } from "./satinRails.js";
 
@@ -421,8 +421,6 @@ const DEFAULT_MEANDER_PATTERN = "N4-21c";
  * também entra aqui: `SatinColumn.color` (`lib/elements/satin_column.py`)
  * lê a cor do `stroke`, não do `fill`.
  */
-const STROKE_FAMILY_TYPES: ReadonlySet<StitchType> = new Set(["running", "zigzag", "ripple", "satinColumn"]);
-
 /** density (0–1 da UI) → valor real, por faixa. Ranges calibrados nos defaults do Ink/Stitch. */
 function densityToRange(density: number, [min, max]: readonly [number, number]): number {
   return +(max - density * (max - min)).toFixed(2);

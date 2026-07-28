@@ -180,6 +180,20 @@ export type StitchParams =
   | SatinColumnStitchParams;
 
 /**
+ * Tipos de ponto que exportam como STROKE (fill="none", stroke=cor) em vez
+ * de preenchimento de área — ver `elementToSvgGroup` em svgConverter.ts, a
+ * fonte da verdade de como cada tipo vira SVG pro Ink/Stitch. Compartilhado
+ * porque o frontend usa o mesmo critério pra auto-selecionar um ponto
+ * compatível quando uma forma fica "só contorno" (ver PropertiesPanel.tsx).
+ */
+export const STROKE_FAMILY_STITCH_TYPES: ReadonlySet<StitchType> = new Set([
+  "running",
+  "zigzag",
+  "ripple",
+  "satinColumn",
+]);
+
+/**
  * Uma "parte" do bordado — a unidade única do editor (antes havia dois conceitos
  * paralelos: "áreas" no modelo salvo e "camadas" só no tldraw). Cada parte é uma
  * região de cor com seu tipo de ponto, ordem de costura (posição no array),

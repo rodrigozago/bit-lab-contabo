@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ChevronRight, Scissors, Sparkles, Trash2 } from "lucide-react";
-import type { EmbroideryElement, StitchParams, StitchType } from "@ponto-studio/shared";
+import { STROKE_FAMILY_STITCH_TYPES, type EmbroideryElement, type StitchParams, type StitchType } from "@ponto-studio/shared";
 import { cn } from "@/lib/utils.ts";
 import { Button } from "@/components/ui/button.tsx";
 import { Slider } from "@/components/ui/slider.tsx";
@@ -77,6 +77,31 @@ export function PropertiesPanel({ element, onChange, onDelete, regionCount, onSp
     onChange({ stitch: { ...stitch, ...patch } as StitchParams });
   }
 
+  /**
+   * Preenchimento/Traço são visuais do canvas (ver EmbroideryElement.simpleShape)
+   * e não decidem sozinhos como o bordado exporta — quem decide fill-vs-stroke
+   * de verdade é o tipo de ponto (STROKE_FAMILY_STITCH_TYPES, ver svgConverter.ts).
+   * Sem isso, uma forma "só contorno" na tela podia continuar exportando
+   * preenchida (Tatami é o default). Ao ENTRAR nesse estado (preenchimento
+   * desligado + traço ligado) com um ponto de preenchimento selecionado,
+   * troca automaticamente pro Corrido — o mais parecido com "só contorno".
+   * Não mexe se o ponto atual já for da família traço (zigzag/ondulado/cetim
+   * escolhidos de propósito continuam como estão).
+   */
+  function handleSimpleShapeToggle(patch: { hasFill?: boolean; hasStroke?: boolean }) {
+    if (!simpleShape) return;
+    const updated = { ...simpleShape, ...patch };
+    const wasOutlineOnly = !simpleShape.hasFill && simpleShape.hasStroke;
+    const isOutlineOnly = !updated.hasFill && updated.hasStroke;
+    const enteringOutlineOnly = isOutlineOnly && !wasOutlineOnly;
+    onChange({
+      simpleShape: updated,
+      ...(enteringOutlineOnly && !STROKE_FAMILY_STITCH_TYPES.has(stitch.type)
+        ? { stitch: buildStitchForType(stitch, "running") }
+        : {}),
+    });
+  }
+
   return (
     <SidebarGroup>
       <SidebarGroupLabel>Propriedades</SidebarGroupLabel>
@@ -135,18 +160,14 @@ export function PropertiesPanel({ element, onChange, onDelete, regionCount, onSp
             <label className="flex cursor-pointer items-center gap-2 text-sm">
               <Checkbox
                 checked={simpleShape.hasFill}
-                onCheckedChange={(checked) =>
-                  onChange({ simpleShape: { ...simpleShape, hasFill: checked === true } })
-                }
+                onCheckedChange={(checked) => handleSimpleShapeToggle({ hasFill: checked === true })}
               />
               Preenchimento
             </label>
             <label className="flex cursor-pointer items-center gap-2 text-sm">
               <Checkbox
                 checked={simpleShape.hasStroke}
-                onCheckedChange={(checked) =>
-                  onChange({ simpleShape: { ...simpleShape, hasStroke: checked === true } })
-                }
+                onCheckedChange={(checked) => handleSimpleShapeToggle({ hasStroke: checked === true })}
               />
               Traço
             </label>
