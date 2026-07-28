@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  nextcloud:
+    image: nextcloud:latest
+    container_name: nextcloud
+    ports:
+      - "127.0.0.1:8080:80"
+    volumes:
+      - nextcloud_data:/var/www/html
+      - nextcloud_config:/var/www/html/config
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: nextcloud
+      POSTGRES_USER: nextcloud
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-senha_forte}
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: nextcloud
+      POSTGRES_USER: nextcloud
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-senha_forte}
+    restart: unless-stopped
+
+  modoboa:
+    image: modoboa/modoboa
+    container_name: modoboa
+    ports:
+      - "127.0.0.1:8081:8080"  # webmail
+      - "0.0.0.0:25:25"        # SMTP
+      - "0.0.0.0:143:143"      # IMAP
+      - "0.0.0.0:587:587"      # submission (TLS)
+      - "0.0.0.0:993:993"      # IMAPS
+    volumes:
+      - modoboa_data:/var/lib/modoboa
+      - modoboa_mail:/var/mail
+    environment:
+      ALLOWED_HOSTS: "mail.bit-lab.tech"
+      SECRET_KEY: ${MODOBOA_SECRET_KEY:-mudar_isso_em_producao}
+    restart: unless-stopped
+
+volumes:
+  nextcloud_data:
+  nextcloud_config:
+  postgres_data:
+  modoboa_data:
+  modoboa_mail:
