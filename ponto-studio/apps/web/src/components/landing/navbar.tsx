@@ -2,6 +2,7 @@ import { Menu } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { Logo } from "@/components/logo";
 import {
   Navbar as NavbarComponent,
   NavbarLeft,
@@ -29,7 +30,7 @@ export function Navbar() {
         <NavbarComponent>
           <NavbarLeft>
             <a href="/" className="flex items-center gap-2 text-xl font-bold">
-              <span className="text-2xl">🪡</span>
+              <Logo size={28} variant="transparent" />
               Ponto Studio
             </a>
             <nav className="hidden items-center gap-6 md:flex">
@@ -73,7 +74,7 @@ export function Navbar() {
                     href="/"
                     className="flex items-center gap-2 text-xl font-bold"
                   >
-                    <span className="text-2xl">🪡</span>
+                    <Logo size={28} variant="transparent" />
                     Ponto Studio
                   </a>
                   {NAV_LINKS.map((link) => (

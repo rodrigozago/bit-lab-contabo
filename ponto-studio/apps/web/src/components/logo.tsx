@@ -1,20 +1,35 @@
 import * as React from "react"
+import { useTheme } from "@/components/theme-provider"
 
-interface LogoProps extends React.HTMLAttributes<HTMLSpanElement> {
+interface LogoProps extends React.HTMLAttributes<HTMLImageElement> {
   size?: number
+  variant?: "default" | "transparent"
 }
 
-/** Marca do Ponto Studio — o 🪡 no mesmo papel do Logo SVG do template. */
-export function Logo({ size = 24, className, style, ...props }: LogoProps) {
+/**
+ * Marca do Ponto Studio — logo PNG com suporte a dark mode.
+ * - light: logo.png (padrão, fundo branco)
+ * - dark: logo-dark.png (fundo escuro)
+ * - transparent: logo-transparent.png (sem fundo)
+ */
+export function Logo({ size = 40, className, variant = "default", ...props }: LogoProps) {
+  const { theme } = useTheme()
+
+  const src = variant === "transparent"
+    ? "/logo-transparent.png"
+    : theme === "dark"
+      ? "/logo-dark.png"
+      : "/logo.png"
+
   return (
-    <span
-      role="img"
-      aria-label="Ponto Studio"
+    <img
+      src={src}
+      alt="Ponto Studio"
+      width={size}
+      height={size}
       className={className}
-      style={{ fontSize: size * 0.8, lineHeight: 1, ...style }}
+      style={{ objectFit: "contain" }}
       {...props}
-    >
-      🪡
-    </span>
+    />
   )
 }
