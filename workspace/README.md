@@ -9,7 +9,8 @@ Stack completo de workspace self-hosted (Google Workspace alternativa) com:
 - VPS Linux (Ubuntu 20.04+) — testado em Contabo
 - Docker + Docker Compose instalados
 - Nginx rodando (reverse proxy)
-- SSL certificate pra `bit-lab.tech` (certbot)
+- Origin Certificate wildcard da Cloudflare em `/etc/ssl/cloudflare/bit-lab.tech.{pem,key}` (já usado pelos outros apps de `*.bit-lab.tech`)
+- Certificado Let's Encrypt específico pra `mail.bit-lab.tech` (ver seção 2.1 — motivo do DNS-only)
 - Portas abertas: 25, 143, 587, 993 (email)
 
 ## 1. Setup inicial
@@ -55,17 +56,40 @@ docker-compose logs -f
 
 ## 2. Nginx (reverse proxy)
 
-### 2.1 SSL Certificate
+### 2.1 SSL Certificate — 2 certificados diferentes, de propósito
 
-Se você ainda não tem cert pra `bit-lab.tech`:
+`cloud.bit-lab.tech` e `mail.bit-lab.tech` NÃO usam o mesmo tipo de
+certificado, porque um fica atrás do proxy da Cloudflare e o outro não pode
+ficar (e-mail exige DNS-only).
 
-```bash
-sudo certbot certonly --standalone \
-  -d cloud.bit-lab.tech \
-  -d mail.bit-lab.tech
-```
+**`cloud.bit-lab.tech`** — reutiliza o Origin Certificate wildcard que você
+já tem em `/etc/ssl/cloudflare/bit-lab.tech.{pem,key}` (mesmo cert que
+`ponto.bit-lab.tech`/`bordado.digital`/etc. usam). Nenhuma ação necessária
+aqui além de manter o registro DNS `cloud` como **Proxied** (nuvem laranja)
+na Cloudflare — pode deixar o wildcard cobrir, não precisa de registro
+específico.
 
-Se você já tem wildcard `*.bit-lab.tech`, reutiliza.
+**`mail.bit-lab.tech`** — precisa de certificado público de verdade (Let's
+Encrypt), porque este host tem que ficar **DNS only** (nuvem cinza) na
+Cloudflare pra e-mail funcionar (ver seção 4.2 — SMTP/IMAP não passam pelo
+proxy dela de jeito nenhum). Sem o proxy no meio, um Origin Certificate
+apareceria como "não confiável" pro navegador de quem acessa o webmail.
+
+Passo a passo:
+1. Na Cloudflare, crie um registro A específico pra `mail` (nome `mail`,
+   aponta pro IP do servidor) e deixe explicitamente **DNS only** — isso
+   sobrepõe o wildcard só pra esse host exato; `cloud`, `studio`, `auth` etc.
+   continuam Proxied normalmente, sem nenhum efeito colateral.
+2. Espere a propagação (`dig mail.bit-lab.tech` deve devolver o IP real do
+   servidor, não um IP da Cloudflare).
+3. Gere o certificado (HTTP-01, funciona porque o host já está DNS-only):
+   ```bash
+   sudo certbot certonly --standalone -d mail.bit-lab.tech
+   ```
+   Fica em `/etc/letsencrypt/live/mail.bit-lab.tech/{fullchain,privkey}.pem`
+   — já é o caminho que `nginx.conf` espera.
+4. Renovação automática — o certbot já instala um timer/cron; confirme com
+   `sudo certbot renew --dry-run`.
 
 ### 2.2 Ativar config Nginx
 
@@ -139,8 +163,15 @@ https://mail.bit-lab.tech/admin (usuário default: `admin` / `password`)
    - **SPF**: `v=spf1 mx -all`
    - **DMARC**: `v=DMARC1; p=none` (começa fraco, depois muda pra `quarantine`/`reject`)
 
+O MX aponta pro hostname `mail.bit-lab.tech` — confirme que o **registro A**
+desse hostname (não o MX em si, DNS não deixa proxied em MX de qualquer
+jeito) está **DNS only** na Cloudflare (ver seção 2.1). Se estiver Proxied,
+a entrega de e-mail simplesmente não chega — servidores remotos tentam
+conectar na porta 25 do IP da Cloudflare, que não aceita SMTP.
+
 ```bash
-# Verificar se DNS está ok
+# Verificar se DNS está ok — deve devolver o IP REAL do servidor, não um IP da Cloudflare
+dig +short mail.bit-lab.tech
 dig MX bordado.digital
 dig TXT bordado.digital
 ```
@@ -253,6 +284,11 @@ telnet mail.bit-lab.tech 25
 - Verificar `docker stats`
 
 ### 8.3 Certificado SSL expirou
+
+O de `cloud.bit-lab.tech` é o Origin Certificate da Cloudflare (validade
+longa, ~15 anos — não renova via certbot, é reemitido manualmente no painel
+da Cloudflare se precisar). Só o de `mail.bit-lab.tech` (Let's Encrypt, 90
+dias) precisa de renovação automática:
 
 ```bash
 sudo certbot renew
