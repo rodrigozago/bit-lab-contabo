@@ -15,7 +15,7 @@ export class SimpleShapeUtil extends ShapeUtil<SimpleShape> {
   static override migrations = simpleShapeMigrations;
 
   override getDefaultProps(): SimpleShape["props"] {
-    return { kind: "rectangle", w: 200, h: 200, hasFill: true, hasStroke: true, color: "#7c5cbf" };
+    return { kind: "rectangle", w: 200, h: 200, hasFill: true, hasStroke: true, strokeWidth: 2, color: "#7c5cbf" };
   }
 
   getGeometry(shape: SimpleShape) {
@@ -59,12 +59,12 @@ export class SimpleShapeUtil extends ShapeUtil<SimpleShape> {
 }
 
 function SimpleShapeSvg({ shape }: { shape: SimpleShape }) {
-  const { kind, w, h, hasFill, hasStroke, color } = shape.props;
+  const { kind, w, h, hasFill, hasStroke, strokeWidth, color } = shape.props;
   const fill = hasFill ? color : "none";
   const stroke = hasStroke ? color : "none";
   return kind === "ellipse" ? (
-    <ellipse cx={w / 2} cy={h / 2} rx={w / 2} ry={h / 2} fill={fill} stroke={stroke} strokeWidth={2} />
+    <ellipse cx={w / 2} cy={h / 2} rx={w / 2} ry={h / 2} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
   ) : (
-    <rect width={w} height={h} fill={fill} stroke={stroke} strokeWidth={2} />
+    <rect width={w} height={h} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
   );
 }

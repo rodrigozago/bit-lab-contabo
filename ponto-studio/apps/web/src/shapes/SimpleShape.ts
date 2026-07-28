@@ -28,6 +28,7 @@ export interface SimpleShapeProps {
   h: number;
   hasFill: boolean;
   hasStroke: boolean;
+  strokeWidth: number;
   color: string;
 }
 
@@ -39,6 +40,7 @@ export const simpleShapeProps: RecordProps<SimpleShape> = {
   h: T.number,
   hasFill: T.boolean,
   hasStroke: T.boolean,
+  strokeWidth: T.number,
   color: T.string,
 };
 

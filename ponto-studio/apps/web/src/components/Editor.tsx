@@ -390,6 +390,7 @@ export function Editor({ project, onProjectChange }: Props) {
                   kind: (shape as SimpleShape).props.kind,
                   hasFill: (shape as SimpleShape).props.hasFill,
                   hasStroke: (shape as SimpleShape).props.hasStroke,
+                  strokeWidth: (shape as SimpleShape).props.strokeWidth,
                 },
               }
             : undefined;
@@ -581,7 +582,7 @@ export function Editor({ project, onProjectChange }: Props) {
               props: {
                 kind: el.simpleShape.kind, w: rect.w, h: rect.h,
                 hasFill: el.simpleShape.hasFill, hasStroke: el.simpleShape.hasStroke,
-                color: el.color,
+                strokeWidth: el.simpleShape.strokeWidth, color: el.color,
               },
               meta: {
                 layer: "embroidery", elementId: el.id,
@@ -945,7 +946,11 @@ export function Editor({ project, onProjectChange }: Props) {
             props: {
               ...(patch.color ? { color: patch.color } : {}),
               ...(patch.simpleShape
-                ? { hasFill: patch.simpleShape.hasFill, hasStroke: patch.simpleShape.hasStroke }
+                ? {
+                    hasFill: patch.simpleShape.hasFill,
+                    hasStroke: patch.simpleShape.hasStroke,
+                    strokeWidth: patch.simpleShape.strokeWidth,
+                  }
                 : {}),
             },
           });
@@ -1155,7 +1160,7 @@ export function Editor({ project, onProjectChange }: Props) {
             props: {
               kind: el.simpleShape.kind, w: newW, h: newH,
               hasFill: el.simpleShape.hasFill, hasStroke: el.simpleShape.hasStroke,
-              color: el.color,
+              strokeWidth: el.simpleShape.strokeWidth, color: el.color,
             },
             meta: { layer: "embroidery", elementId, importGroupId, importGroupName: template.name },
           } as Parameters<typeof tldrawEditor.createShape>[0]);

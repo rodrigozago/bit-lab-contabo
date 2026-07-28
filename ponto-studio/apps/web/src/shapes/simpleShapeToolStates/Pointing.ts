@@ -39,6 +39,7 @@ export class Pointing extends StateNode {
               kind: this.editor.getStyleForNextShape(SimpleShapeKindStyle),
               hasFill: true,
               hasStroke: true,
+              strokeWidth: 2,
               color: "#7c5cbf",
             },
           },
@@ -82,7 +83,7 @@ export class Pointing extends StateNode {
         type: "simple-shape",
         x: originPagePoint.x,
         y: originPagePoint.y,
-        props: { kind, hasFill: true, hasStroke: true, color: "#7c5cbf", ...size },
+        props: { kind, hasFill: true, hasStroke: true, strokeWidth: 2, color: "#7c5cbf", ...size },
       },
     ]);
 

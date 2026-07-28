@@ -150,6 +150,23 @@ export function PropertiesPanel({ element, onChange, onDelete, regionCount, onSp
               />
               Traço
             </label>
+            {simpleShape.hasStroke && (
+              <div className="flex flex-col gap-1.5">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Espessura do traço</p>
+                <div className="flex items-center gap-2">
+                  <span className="w-10 shrink-0 text-xs text-muted-foreground">1px</span>
+                  <Slider
+                    min={1}
+                    max={20}
+                    step={1}
+                    value={[simpleShape.strokeWidth]}
+                    onValueChange={([v]) => onChange({ simpleShape: { ...simpleShape, strokeWidth: v! } })}
+                  />
+                  <span className="w-10 shrink-0 text-xs text-muted-foreground">20px</span>
+                </div>
+                <div className="text-center text-sm font-semibold text-primary">{simpleShape.strokeWidth}px</div>
+              </div>
+            )}
           </div>
         )}
 
