@@ -1,5 +1,5 @@
 import * as React from "react"
-import { useTheme } from "@/components/theme-provider"
+import { useTheme } from "@/hooks/use-theme"
 
 interface LogoProps extends React.HTMLAttributes<HTMLImageElement> {
   size?: number
