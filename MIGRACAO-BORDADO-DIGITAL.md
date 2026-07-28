@@ -30,8 +30,13 @@ antigo (órfão).
 
 ### 1. Backup do Postgres do `auth`
 
+Rodar de dentro de `bit-lab-agents/auth` (ou `bit-lab-contabo/auth` na VPS) —
+`docker compose exec` já resolve o container certo do serviço `postgres`
+sem precisar saber o nome/hash gerado pelo Compose:
+
 ```bash
-docker exec -t <container_postgres_auth> pg_dump -U bitlab_auth bitlab_auth > backup_auth_$(date +%Y%m%d).sql
+cd auth
+docker compose exec -T postgres pg_dump -U bitlab_auth bitlab_auth > backup_auth_$(date +%Y%m%d).sql
 ```
 
 ### 2. Renomear o slug do app no banco (SQL direto, sem delete+insert)
@@ -43,9 +48,15 @@ UPDATE apps SET slug = 'bordado-digital', name = 'Bordado Digital'
 WHERE slug = 'ponto-studio';
 ```
 
-Rodar contra o Postgres do `auth`:
+Rodar contra o Postgres do `auth` (direto via `-c`, sem precisar de arquivo):
 ```bash
-docker exec -i <container_postgres_auth> psql -U bitlab_auth -d bitlab_auth < migracao.sql
+docker compose exec -T postgres psql -U bitlab_auth -d bitlab_auth \
+  -c "UPDATE apps SET slug = 'bordado-digital', name = 'Bordado Digital' WHERE slug = 'ponto-studio';"
+```
+
+Ou, se preferir salvar num arquivo `migracao.sql` primeiro:
+```bash
+docker compose exec -T postgres psql -U bitlab_auth -d bitlab_auth < migracao.sql
 ```
 
 Confirme antes de seguir:
