@@ -4,6 +4,7 @@ import {
   MousePointer2,
   Hand,
   Pencil,
+  PenTool,
   Square,
   Circle,
   Eraser,
@@ -33,7 +34,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.tsx";
 
-type ToolKey = "select" | "hand" | "draw" | "rectangle" | "ellipse" | "eraser";
+type ToolKey = "select" | "hand" | "draw" | "vectorPath" | "rectangle" | "ellipse" | "eraser";
 
 interface ToolDef {
   key: ToolKey;
@@ -43,15 +44,22 @@ interface ToolDef {
 
 // Só o essencial pra desenhar/delimitar área de bordado (mesmo conjunto que a
 // antiga toolbar horizontal do tldraw): seleção, mover, desenho livre, as 2
-// formas mais úteis e borracha.
+// formas mais úteis e borracha. "Caneta" é um shape customizado (curvas
+// Bézier reais + edição de nó/âncora) — ver apps/web/src/shapes/.
 const TOOLS: ToolDef[] = [
   { key: "select", label: "Selecionar (V)", icon: MousePointer2 },
   { key: "hand", label: "Mover tela (H)", icon: Hand },
   { key: "draw", label: "Desenhar (D)", icon: Pencil },
+  { key: "vectorPath", label: "Caneta (P)", icon: PenTool },
   { key: "rectangle", label: "Retângulo (R)", icon: Square },
   { key: "ellipse", label: "Elipse (O)", icon: Circle },
   { key: "eraser", label: "Borracha (E)", icon: Eraser },
 ];
+
+/** id da tool customizada registrada no tldraw (ver VectorPathTool.ts) vs. a
+ * key interna desta toolbar — nomes diferentes por convenção do tldraw
+ * (ids de tool costumam ser kebab/lowercase). */
+const VECTOR_PATH_TOOL_ID = "vector-path";
 
 interface Props {
   editor: TldrawEditor;
@@ -77,6 +85,7 @@ export function CanvasToolbar({ editor, selectedShapeIds }: Props) {
       setActive((prev) => {
         const id = editor.getCurrentToolId();
         if (id === "geo") return lastGeo.current;
+        if (id === VECTOR_PATH_TOOL_ID) return "vectorPath";
         if (id === "select" || id === "hand" || id === "draw" || id === "eraser") return id;
         return prev; // ferramentas fora do rail (ex.: laser) — mantém o último
       });
@@ -90,6 +99,8 @@ export function CanvasToolbar({ editor, selectedShapeIds }: Props) {
       lastGeo.current = key;
       editor.setStyleForNextShapes(GeoShapeGeoStyle, key);
       editor.setCurrentTool("geo");
+    } else if (key === "vectorPath") {
+      editor.setCurrentTool(VECTOR_PATH_TOOL_ID);
     } else {
       editor.setCurrentTool(key);
     }

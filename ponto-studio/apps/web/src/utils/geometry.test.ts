@@ -66,6 +66,17 @@ describe("parseSvgPathBounds", () => {
     expect(bounds.w).toBeCloseTo(80, 0);
     expect(bounds.h).toBeCloseTo(50, 0);
   });
+
+  it("com \"d\" contendo curvas (C, de um vector-path), o bbox inclui os pontos de controle — conservador, não um bug", () => {
+    // extração ingênua (todo par de números é x/y) continua correta pra
+    // M/L/C — nunca há flags de arco (A está banido do alfabeto do
+    // vector-path) — só fica levemente maior que o bbox real da curva por
+    // incluir os pontos de controle, o que é aceitável pro caso de uso
+    // (reposicionar o shape no lugar certo ao reabrir o projeto).
+    const d = "M 0 0 C 0 30 100 30 100 0"; // curva com controle bem acima da corda
+    const bounds = parseSvgPathBounds(d)!;
+    expect(bounds).toEqual({ x: 0, y: 0, w: 100, h: 30 });
+  });
 });
 
 describe("shapeGeometryToSvgPath", () => {

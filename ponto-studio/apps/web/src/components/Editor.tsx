@@ -27,6 +27,15 @@ import {
 import { splitSvgByColor, splitSvgIntoRegions, recolorSvg } from "../utils/svgLayers.ts";
 import { findShapeByElementId, setShapesHidden } from "../utils/canvasShapes.ts";
 import { findLayerMetrics, suggestStitchParams } from "../utils/stitchHeuristics.ts";
+import {
+  svgPathToVectorPathVertices,
+  vectorPathShapeToSvgPath,
+  vectorPathVerticesToSvgPath,
+  scaleVectorPathVertices,
+} from "../utils/vectorPath.ts";
+import { VectorPathShapeUtil } from "../shapes/VectorPathShapeUtil.tsx";
+import { VectorPathTool } from "../shapes/VectorPathTool.ts";
+import type { VectorPathShape } from "../shapes/VectorPathShape.ts";
 import { PropertiesPanel } from "./PropertiesPanel.tsx";
 import { TEMPLATE_DRAG_MIME } from "./TemplatesGallery.tsx";
 import { PartsPanel } from "./PartsPanel.tsx";
@@ -153,6 +162,12 @@ const baseTldrawComponents: Omit<TLComponents, "OnTheCanvas"> = {
   ActionsMenu: null,
   QuickActions: null,
 };
+
+// Referências estáveis (fora do componente) — o tldraw compara identidade
+// desses arrays a cada render; recriá-los inline forçaria o SDK a refazer o
+// setup de shapeUtils/tools sempre.
+const vectorPathShapeUtils = [VectorPathShapeUtil];
+const vectorPathTools = [VectorPathTool];
 
 // ── Main Editor Component ─────────────────────────────────────────────────────
 
@@ -334,12 +349,15 @@ export function Editor({ project, onProjectChange }: Props) {
           const cy = bounds.y + bounds.h / 2;
           const isRect = shape.type === "geo" && (shape.props as { geo?: string }).geo === "rectangle";
           const props = shape.props as { w?: number; h?: number };
-          const svgPath = isRect && props.w != null && props.h != null
-            ? rectToSvgPath(cx - props.w / 2, cy - props.h / 2, props.w, props.h)
-            : shapeGeometryToSvgPath(editor, shape, { x: cx, y: cy });
+          const svgPath = shape.type === "vector-path"
+            ? vectorPathShapeToSvgPath(shape as VectorPathShape, { x: cx, y: cy })
+            : isRect && props.w != null && props.h != null
+              ? rectToSvgPath(cx - props.w / 2, cy - props.h / 2, props.w, props.h)
+              : shapeGeometryToSvgPath(editor, shape, { x: cx, y: cy });
           if (!svgPath) continue;
 
-          const newElementId = addElement(svgPath, "#7c5cbf");
+          const newColor = shape.type === "vector-path" ? (shape as VectorPathShape).props.color : "#7c5cbf";
+          const newElementId = addElement(svgPath, newColor);
           knownElementIdsRef.current.add(newElementId);
           editor.updateShape({ id: shape.id, type: shape.type, meta: { ...shape.meta, elementId: newElementId } });
         }
@@ -350,23 +368,44 @@ export function Editor({ project, onProjectChange }: Props) {
           if (to.typeName !== "shape") continue;
           const shape = to as TLShape;
           const prevShape = from as TLShape;
-          const elementId = shape.meta?.["elementId"] as string | undefined;
+          let elementId = shape.meta?.["elementId"] as string | undefined;
           const bounds = editor.getShapePageBounds(shape.id);
+
+          // vector-path nasce com 1 vértice só (Idle.onPointerDown, ver
+          // shapes/toolStates/) e ganha os demais em updates sucessivos
+          // enquanto o usuário clica com a caneta — nunca "completo" no
+          // evento added, diferente de retângulo/elipse/traço livre (que já
+          // chegam prontos numa única transação). Promove assim que tiver
+          // vértices suficientes pra formar um path de verdade (>= 2).
+          if (!elementId && shape.type === "vector-path" && bounds) {
+            const cx = bounds.x + bounds.w / 2;
+            const cy = bounds.y + bounds.h / 2;
+            const svgPath = vectorPathShapeToSvgPath(shape as unknown as VectorPathShape, { x: cx, y: cy });
+            if (svgPath) {
+              elementId = addElement(svgPath, (shape as unknown as VectorPathShape).props.color);
+              knownElementIdsRef.current.add(elementId);
+              editor.updateShape({ id: shape.id, type: shape.type, meta: { ...shape.meta, elementId } });
+            }
+          }
+
           if (elementId && bounds) {
             // Salva a forma NÃO rotacionada centrada no centro da AABB (que
             // coincide com o centro do shape rotacionado) + rotation à parte.
             // Salvar a própria AABB inflava o bbox e o export encolhia o
             // desenho via contain-fit; a rotação é aplicada pelo worker ao
             // redor desse mesmo centro. Retângulo usa o atalho barato (w/h
-            // das props, sem passar pela geometria poligonalizada); qualquer
-            // outro tipo (elipse, traço livre) usa a geometria REAL do shape
-            // — antes disso, TUDO virava um retângulo aqui, perdendo a forma
-            // desenhada de verdade.
+            // das props, sem passar pela geometria poligonalizada); vector-path
+            // serializa as curvas reais (M/L/C); qualquer outro tipo (elipse,
+            // traço livre) usa a geometria poligonalizada do shape — antes
+            // disso, TUDO virava um retângulo aqui, perdendo a forma desenhada
+            // de verdade.
             const cx = bounds.x + bounds.w / 2;
             const cy = bounds.y + bounds.h / 2;
             const isRect = shape.type === "geo" && (shape.props as { geo?: string }).geo === "rectangle";
             let svgPath: string | null;
-            if (isRect) {
+            if (shape.type === "vector-path") {
+              svgPath = vectorPathShapeToSvgPath(shape as unknown as VectorPathShape, { x: cx, y: cy });
+            } else if (isRect) {
               const props = shape.props as { w?: number; h?: number };
               let w = props.w, h = props.h;
               if (w == null || h == null) {
@@ -488,13 +527,43 @@ export function Editor({ project, onProjectChange }: Props) {
             continue;
           }
 
-          // Parte nativa (sem svgContent): reconstrói como shape `draw`
-          // fechado usando os pontos reais do svgPath salvo (page-px
-          // absolutos — shape.x/y ficam em 0,0, os pontos do segmento JÁ são
-          // page-space, mesma convenção de saída/entrada usada pelo Passo 2).
-          // Fallback pra um quadrado 100×100 no viewport se o svgPath salvo
-          // não parsear (dado legado/corrompido) — não trava o carregamento
-          // do projeto por causa de uma parte só.
+          // Parte nativa com CURVAS (veio da caneta vetorial): o "d" salvo
+          // tem comando "C" — só vector-path gera isso (rectToSvgPath/
+          // shapeGeometryToSvgPath nunca emitem curva), então a presença de
+          // "C" identifica sem ambiguidade que é pra reconstruir como
+          // vector-path (preservando os pontos de controle), não como um
+          // `draw` reto. Sem campo novo no modelo compartilhado — reparseia
+          // o próprio svgPath (decisão de produto confirmada, ver plano).
+          if (el.svgPath?.includes("C")) {
+            const parsed = svgPathToVectorPathVertices(el.svgPath);
+            if (parsed) {
+              const shapeId = createShapeId();
+              editor.createShape({
+                id: shapeId,
+                type: "vector-path",
+                x: 0,
+                y: 0,
+                opacity: hidden ? 0 : 1,
+                isLocked: hidden,
+                props: { vertices: parsed.vertices, isClosed: parsed.isClosed, color: el.color },
+                meta: {
+                  layer: "embroidery", elementId: el.id,
+                  ...(hidden ? { prevOpacity: 1 } : {}),
+                },
+              } as Parameters<typeof editor.createShape>[0]);
+              if (rotation !== 0) rotatedAfter.push({ id: shapeId, rotation });
+              continue;
+            }
+            // parse falhou (dado corrompido) — cai pro fallback draw abaixo
+          }
+
+          // Parte nativa reta (sem svgContent, sem curva): reconstrói como
+          // shape `draw` fechado usando os pontos reais do svgPath salvo
+          // (page-px absolutos — shape.x/y ficam em 0,0, os pontos do
+          // segmento JÁ são page-space, mesma convenção de saída/entrada
+          // usada pelo Passo 2). Fallback pra um quadrado 100×100 no
+          // viewport se o svgPath salvo não parsear (dado legado/corrompido)
+          // — não trava o carregamento do projeto por causa de uma parte só.
           const points = svgPathToPoints(el.svgPath) ?? (() => {
             const cx = vp.x + vp.w / 2, cy = vp.y + vp.h / 2;
             return [
@@ -970,8 +1039,31 @@ export function Editor({ project, onProjectChange }: Props) {
             meta: { layer: "embroidery", elementId, importGroupId, importGroupName: template.name },
           } as Parameters<typeof tldrawEditor.createShape>[0]);
           if (rotation !== 0) rotatedAfter.push({ id: shapeId, rotation });
+        } else if (el.svgPath?.includes("C")) {
+          // Parte vetorial com curvas (veio da caneta) — mesmo critério de
+          // detecção do reload (Passo 6): só vector-path emite "C". Escala
+          // cada vértice (âncora + handles) preservando a curvatura real.
+          const parsed = svgPathToVectorPathVertices(el.svgPath);
+          if (!parsed) continue;
+          const newVertices = scaleVectorPathVertices(parsed.vertices, scale, destX, destY);
+          const newSvgPath = vectorPathVerticesToSvgPath(newVertices, parsed.isClosed);
+
+          const elementId = addElement(newSvgPath, el.color, undefined, {
+            groupId: importGroupId, groupName: template.name,
+            stitch: el.stitch, stitchSuggested: false,
+          });
+          knownElementIdsRef.current.add(elementId);
+          if (rotation !== 0) updateElement(elementId, { rotation });
+
+          const shapeId = createShapeId();
+          tldrawEditor.createShape({
+            id: shapeId, type: "vector-path", x: 0, y: 0,
+            props: { vertices: newVertices, isClosed: parsed.isClosed, color: el.color },
+            meta: { layer: "embroidery", elementId, importGroupId, importGroupName: template.name },
+          } as Parameters<typeof tldrawEditor.createShape>[0]);
+          if (rotation !== 0) rotatedAfter.push({ id: shapeId, rotation });
         } else {
-          // Parte nativa: transforma CADA ponto do polígono (não só o
+          // Parte nativa reta: transforma CADA ponto do polígono (não só o
           // bounding box) — preserva a silhueta exata de elipse/traço livre.
           const points = svgPathToPoints(el.svgPath);
           if (!points) continue;
@@ -1113,7 +1205,12 @@ export function Editor({ project, onProjectChange }: Props) {
                 void insertTemplate(template, dropPoint);
               }}
             >
-              <Tldraw onMount={handleMount} components={tldrawComponents} />
+              <Tldraw
+                onMount={handleMount}
+                components={tldrawComponents}
+                shapeUtils={vectorPathShapeUtils}
+                tools={vectorPathTools}
+              />
               {tldrawEditor && <CanvasToolbar editor={tldrawEditor} selectedShapeIds={selectedShapeIds} />}
             </div>
           </ResizablePanel>
