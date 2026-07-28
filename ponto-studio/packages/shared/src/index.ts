@@ -206,6 +206,11 @@ export interface EmbroideryElement {
   rotation?: number;
   /** true enquanto o stitch veio da heurística automática (limpa ao editar) */
   stitchSuggested?: boolean;
+  /** presente só em partes criadas pelas ferramentas Retângulo/Círculo
+   *  (apps/web/src/shapes/SimpleShape*) — só aparência visual no canvas, não
+   *  afeta a lógica de export/Ink-Stitch (essa decide fill/stroke real só
+   *  por stitch.type, ver STROKE_FAMILY_TYPES em svgConverter.ts). */
+  simpleShape?: { kind: "rectangle" | "ellipse"; hasFill: boolean; hasStroke: boolean };
 }
 
 export interface CanvasSize {

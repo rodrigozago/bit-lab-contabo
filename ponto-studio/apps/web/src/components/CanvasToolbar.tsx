@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, type ComponentType } from "react";
-import { GeoShapeGeoStyle, type Editor as TldrawEditor, type TLShapeId } from "@tldraw/tldraw";
+import { type Editor as TldrawEditor, type TLShapeId } from "@tldraw/tldraw";
+import { SimpleShapeKindStyle } from "@/shapes/SimpleShape.ts";
 import {
   MousePointer2,
   Hand,
-  Pencil,
   PenTool,
   Square,
   Circle,
@@ -34,7 +34,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.tsx";
 
-type ToolKey = "select" | "hand" | "draw" | "vectorPath" | "rectangle" | "ellipse" | "eraser";
+type ToolKey = "select" | "hand" | "vectorPath" | "rectangle" | "ellipse" | "eraser";
 
 interface ToolDef {
   key: ToolKey;
@@ -43,23 +43,26 @@ interface ToolDef {
 }
 
 // Só o essencial pra desenhar/delimitar área de bordado (mesmo conjunto que a
-// antiga toolbar horizontal do tldraw): seleção, mover, desenho livre, as 2
-// formas mais úteis e borracha. "Caneta" é um shape customizado (curvas
-// Bézier reais + edição de nó/âncora) — ver apps/web/src/shapes/.
+// antiga toolbar horizontal do tldraw): seleção, mover, as 2 formas mais
+// úteis e borracha. Ferramentas nativas de criação do tldraw ("Desenhar",
+// "Retângulo", "Elipse") foram removidas por completo (ver overrides.tools em
+// Editor.tsx) — tinham bugs sem correção real (cor livre nunca atualizava,
+// só paleta fixa). "Caneta" e "Retângulo"/"Círculo" são shapes customizados
+// — ver apps/web/src/shapes/.
 const TOOLS: ToolDef[] = [
   { key: "select", label: "Selecionar (V)", icon: MousePointer2 },
   { key: "hand", label: "Mover tela (H)", icon: Hand },
-  { key: "draw", label: "Desenhar (D)", icon: Pencil },
   { key: "vectorPath", label: "Caneta (P)", icon: PenTool },
   { key: "rectangle", label: "Retângulo (R)", icon: Square },
-  { key: "ellipse", label: "Elipse (O)", icon: Circle },
+  { key: "ellipse", label: "Círculo (O)", icon: Circle },
   { key: "eraser", label: "Borracha (E)", icon: Eraser },
 ];
 
-/** id da tool customizada registrada no tldraw (ver VectorPathTool.ts) vs. a
- * key interna desta toolbar — nomes diferentes por convenção do tldraw
- * (ids de tool costumam ser kebab/lowercase). */
+/** id das tools customizadas registradas no tldraw (ver VectorPathTool.ts/
+ * SimpleShapeTool.ts) vs. a key interna desta toolbar — nomes diferentes por
+ * convenção do tldraw (ids de tool costumam ser kebab/lowercase). */
 const VECTOR_PATH_TOOL_ID = "vector-path";
+const SIMPLE_SHAPE_TOOL_ID = "simple-shape";
 
 interface Props {
   editor: TldrawEditor;
@@ -84,9 +87,9 @@ export function CanvasToolbar({ editor, selectedShapeIds }: Props) {
     const update = () =>
       setActive((prev) => {
         const id = editor.getCurrentToolId();
-        if (id === "geo") return lastGeo.current;
+        if (id === SIMPLE_SHAPE_TOOL_ID) return lastGeo.current;
         if (id === VECTOR_PATH_TOOL_ID) return "vectorPath";
-        if (id === "select" || id === "hand" || id === "draw" || id === "eraser") return id;
+        if (id === "select" || id === "hand" || id === "eraser") return id;
         return prev; // ferramentas fora do rail (ex.: laser) — mantém o último
       });
     update();
@@ -97,8 +100,8 @@ export function CanvasToolbar({ editor, selectedShapeIds }: Props) {
   function selectTool(key: ToolKey) {
     if (key === "rectangle" || key === "ellipse") {
       lastGeo.current = key;
-      editor.setStyleForNextShapes(GeoShapeGeoStyle, key);
-      editor.setCurrentTool("geo");
+      editor.setStyleForNextShapes(SimpleShapeKindStyle, key);
+      editor.setCurrentTool(SIMPLE_SHAPE_TOOL_ID);
     } else if (key === "vectorPath") {
       editor.setCurrentTool(VECTOR_PATH_TOOL_ID);
     } else {

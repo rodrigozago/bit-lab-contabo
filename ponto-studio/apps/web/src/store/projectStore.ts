@@ -57,6 +57,8 @@ export function useProjectStore(
       /** parâmetros sugeridos pela heurística (stitchHeuristics) — substituem o default */
       stitch?: StitchParams;
       stitchSuggested?: boolean;
+      /** presente só quando a parte vem das ferramentas Retângulo/Círculo (SimpleShapeTool) */
+      simpleShape?: EmbroideryElement["simpleShape"];
     },
   ) => {
     const el: EmbroideryElement = {
@@ -72,6 +74,7 @@ export function useProjectStore(
       ...(opts?.name ? { name: opts.name } : {}),
       ...(opts?.groupId ? { groupId: opts.groupId } : {}),
       ...(opts?.groupName ? { groupName: opts.groupName } : {}),
+      ...(opts?.simpleShape ? { simpleShape: opts.simpleShape } : {}),
     };
     setProject((p) => {
       const next = { ...p, elements: [...p.elements, el], updatedAt: new Date().toISOString() };

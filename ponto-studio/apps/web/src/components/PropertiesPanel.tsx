@@ -68,7 +68,7 @@ interface Props {
 }
 
 export function PropertiesPanel({ element, onChange, onDelete, regionCount, onSplit }: Props) {
-  const { stitch, color } = element;
+  const { stitch, color, simpleShape } = element;
   const [advancedOpen, setAdvancedOpen] = useState(false);
   // "satin" (legado) usa os mesmos controles de "contour" — sempre foi a mesma coisa
   const selectedOption = stitch.type === "satin" ? "contour" : stitch.type;
@@ -125,6 +125,33 @@ export function PropertiesPanel({ element, onChange, onDelete, regionCount, onSp
             <span className="tabular-nums text-sm text-muted-foreground">{color.toUpperCase()}</span>
           </div>
         </div>
+
+        {/* Só partes criadas pelas ferramentas Retângulo/Círculo (SimpleShapeTool)
+            têm esses 2 controles independentes — a Caneta e formas importadas
+            não têm noção de "preenchimento vs. traço" separada da cor. */}
+        {simpleShape && (
+          <div className="flex flex-col gap-1.5">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Aparência</p>
+            <label className="flex cursor-pointer items-center gap-2 text-sm">
+              <Checkbox
+                checked={simpleShape.hasFill}
+                onCheckedChange={(checked) =>
+                  onChange({ simpleShape: { ...simpleShape, hasFill: checked === true } })
+                }
+              />
+              Preenchimento
+            </label>
+            <label className="flex cursor-pointer items-center gap-2 text-sm">
+              <Checkbox
+                checked={simpleShape.hasStroke}
+                onCheckedChange={(checked) =>
+                  onChange({ simpleShape: { ...simpleShape, hasStroke: checked === true } })
+                }
+              />
+              Traço
+            </label>
+          </div>
+        )}
 
         <div className="flex flex-col gap-1.5">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Densidade</p>

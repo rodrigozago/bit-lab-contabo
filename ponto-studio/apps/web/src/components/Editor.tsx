@@ -8,6 +8,7 @@ import {
   type TLComponents,
   type TLShape,
   type TLShapeId,
+  type TLUiOverrides,
 } from "@tldraw/tldraw";
 import "@tldraw/tldraw/tldraw.css";
 import type { ImperativePanelHandle } from "react-resizable-panels";
@@ -36,6 +37,9 @@ import {
 import { VectorPathShapeUtil } from "../shapes/VectorPathShapeUtil.tsx";
 import { VectorPathTool } from "../shapes/VectorPathTool.ts";
 import type { VectorPathShape } from "../shapes/VectorPathShape.ts";
+import { SimpleShapeUtil } from "../shapes/SimpleShapeUtil.tsx";
+import { SimpleShapeTool } from "../shapes/SimpleShapeTool.ts";
+import type { SimpleShape } from "../shapes/SimpleShape.ts";
 import { PropertiesPanel } from "./PropertiesPanel.tsx";
 import { TEMPLATE_DRAG_MIME } from "./TemplatesGallery.tsx";
 import { PartsPanel } from "./PartsPanel.tsx";
@@ -166,8 +170,26 @@ const baseTldrawComponents: Omit<TLComponents, "OnTheCanvas"> = {
 // Referências estáveis (fora do componente) — o tldraw compara identidade
 // desses arrays a cada render; recriá-los inline forçaria o SDK a refazer o
 // setup de shapeUtils/tools sempre.
-const vectorPathShapeUtils = [VectorPathShapeUtil];
-const vectorPathTools = [VectorPathTool];
+const customShapeUtils = [VectorPathShapeUtil, SimpleShapeUtil];
+const customTools = [VectorPathTool, SimpleShapeTool];
+
+// Remove as ferramentas nativas de criação (Desenhar/Retângulo/Elipse) —
+// tinham bugs sem correção real (cor livre nunca refletia no canvas, só a
+// paleta fixa do tldraw), substituídas pelos shapes/tools customizados acima.
+// `delete` no mapa do useTools remove tanto o botão quanto o atalho de
+// teclado (useKeyboardShortcuts deriva os hotkeys do mesmo mapa). Os shape
+// utils nativos (DrawShapeUtil/GeoShapeUtil) continuam disponíveis via
+// defaultShapeUtils do próprio <Tldraw> — só a CRIAÇÃO é bloqueada, shapes
+// `draw`/`geo` de projetos salvos antes desta mudança continuam renderizando
+// (fallback legado em loadSavedElements/insertTemplate).
+const tldrawOverrides: TLUiOverrides = {
+  tools(_editor, tools) {
+    delete tools["draw"];
+    delete tools["rectangle"];
+    delete tools["ellipse"];
+    return tools;
+  },
+};
 
 // ── Main Editor Component ─────────────────────────────────────────────────────
 
@@ -348,16 +370,30 @@ export function Editor({ project, onProjectChange }: Props) {
           const cx = bounds.x + bounds.w / 2;
           const cy = bounds.y + bounds.h / 2;
           const isRect = shape.type === "geo" && (shape.props as { geo?: string }).geo === "rectangle";
+          const isSimpleRect = shape.type === "simple-shape" && (shape.props as SimpleShape["props"]).kind === "rectangle";
           const props = shape.props as { w?: number; h?: number };
           const svgPath = shape.type === "vector-path"
             ? vectorPathShapeToSvgPath(shape as VectorPathShape, { x: cx, y: cy })
-            : isRect && props.w != null && props.h != null
+            : (isRect || isSimpleRect) && props.w != null && props.h != null
               ? rectToSvgPath(cx - props.w / 2, cy - props.h / 2, props.w, props.h)
               : shapeGeometryToSvgPath(editor, shape, { x: cx, y: cy });
           if (!svgPath) continue;
 
-          const newColor = shape.type === "vector-path" ? (shape as VectorPathShape).props.color : "#7c5cbf";
-          const newElementId = addElement(svgPath, newColor);
+          const newColor = shape.type === "vector-path"
+            ? (shape as VectorPathShape).props.color
+            : shape.type === "simple-shape"
+              ? (shape as SimpleShape).props.color
+              : "#7c5cbf";
+          const simpleShapeOpts = shape.type === "simple-shape"
+            ? {
+                simpleShape: {
+                  kind: (shape as SimpleShape).props.kind,
+                  hasFill: (shape as SimpleShape).props.hasFill,
+                  hasStroke: (shape as SimpleShape).props.hasStroke,
+                },
+              }
+            : undefined;
+          const newElementId = addElement(svgPath, newColor, undefined, simpleShapeOpts);
           knownElementIdsRef.current.add(newElementId);
           editor.updateShape({ id: shape.id, type: shape.type, meta: { ...shape.meta, elementId: newElementId } });
         }
@@ -402,10 +438,11 @@ export function Editor({ project, onProjectChange }: Props) {
             const cx = bounds.x + bounds.w / 2;
             const cy = bounds.y + bounds.h / 2;
             const isRect = shape.type === "geo" && (shape.props as { geo?: string }).geo === "rectangle";
+            const isSimpleRect = shape.type === "simple-shape" && (shape.props as SimpleShape["props"]).kind === "rectangle";
             let svgPath: string | null;
             if (shape.type === "vector-path") {
               svgPath = vectorPathShapeToSvgPath(shape as unknown as VectorPathShape, { x: cx, y: cy });
-            } else if (isRect) {
+            } else if (isRect || isSimpleRect) {
               const props = shape.props as { w?: number; h?: number };
               let w = props.w, h = props.h;
               if (w == null || h == null) {
@@ -523,6 +560,34 @@ export function Editor({ project, onProjectChange }: Props) {
               },
             } as Parameters<typeof editor.createShape>[0]);
 
+            if (rotation !== 0) rotatedAfter.push({ id: shapeId, rotation });
+            continue;
+          }
+
+          // Parte criada pelas ferramentas Retângulo/Círculo (SimpleShapeTool)
+          // — reconstrói direto de el.simpleShape (kind/hasFill/hasStroke) +
+          // bbox do svgPath salvo, sem precisar reparsear curva nenhuma.
+          if (el.simpleShape) {
+            const rect = parseSvgPathBounds(el.svgPath) ?? {
+              x: vp.x + (vp.w - 100) / 2, y: vp.y + (vp.h - 100) / 2, w: 100, h: 100,
+            };
+            const shapeId = createShapeId();
+            editor.createShape({
+              id: shapeId,
+              type: "simple-shape",
+              x: rect.x, y: rect.y,
+              opacity: hidden ? 0 : 1,
+              isLocked: hidden,
+              props: {
+                kind: el.simpleShape.kind, w: rect.w, h: rect.h,
+                hasFill: el.simpleShape.hasFill, hasStroke: el.simpleShape.hasStroke,
+                color: el.color,
+              },
+              meta: {
+                layer: "embroidery", elementId: el.id,
+                ...(hidden ? { prevOpacity: 1 } : {}),
+              },
+            } as Parameters<typeof editor.createShape>[0]);
             if (rotation !== 0) rotatedAfter.push({ id: shapeId, rotation });
             continue;
           }
@@ -860,7 +925,34 @@ export function Editor({ project, onProjectChange }: Props) {
     if (!tldrawEditor) return;
 
     const el = localProject.elements.find((e) => e.id === elementId);
-    if (!el?.svgContent) return;
+    if (!el) return;
+
+    if (!el.svgContent) {
+      // Parte nativa (sem svgContent): vector-path e simple-shape têm props
+      // de cor/aparência próprias que refletem o elemento no canvas — o
+      // `draw` legado (formas nativas pré-migração) não tem, limitação
+      // pré-existente fora de escopo aqui. Sem este bloco, mudar a cor
+      // salvava no projeto mas o desenho na tela nunca refletia — o bug
+      // reportado.
+      if (patch.color || patch.simpleShape) {
+        const shape = findShapeByElementId(tldrawEditor, elementId);
+        if (shape && shape.type === "vector-path" && patch.color) {
+          tldrawEditor.updateShape({ id: shape.id, type: "vector-path", props: { color: patch.color } });
+        } else if (shape && shape.type === "simple-shape") {
+          tldrawEditor.updateShape({
+            id: shape.id,
+            type: "simple-shape",
+            props: {
+              ...(patch.color ? { color: patch.color } : {}),
+              ...(patch.simpleShape
+                ? { hasFill: patch.simpleShape.hasFill, hasStroke: patch.simpleShape.hasStroke }
+                : {}),
+            },
+          });
+        }
+      }
+      return;
+    }
     // `localProject` deste closure ainda não viu o updateElement — aplica o
     // patch em cima pra gerar preview/recolor com o estado novo.
     const merged = { ...el, ...patch } as EmbroideryElement;
@@ -1039,6 +1131,35 @@ export function Editor({ project, onProjectChange }: Props) {
             meta: { layer: "embroidery", elementId, importGroupId, importGroupName: template.name },
           } as Parameters<typeof tldrawEditor.createShape>[0]);
           if (rotation !== 0) rotatedAfter.push({ id: shapeId, rotation });
+        } else if (el.simpleShape) {
+          // Retângulo/Círculo (SimpleShapeTool) — escala bbox + kind/hasFill/
+          // hasStroke direto, mesmo critério de reconstrução do reload.
+          const bounds = parseSvgPathBounds(el.svgPath) ?? { x: 0, y: 0, w: templateHoop.w, h: templateHoop.h };
+          const newX = destX + bounds.x * scale;
+          const newY = destY + bounds.y * scale;
+          const newW = bounds.w * scale;
+          const newH = bounds.h * scale;
+          const newSvgPath = rectToSvgPath(newX, newY, newW, newH);
+
+          const elementId = addElement(newSvgPath, el.color, undefined, {
+            groupId: importGroupId, groupName: template.name,
+            stitch: el.stitch, stitchSuggested: false,
+            simpleShape: el.simpleShape,
+          });
+          knownElementIdsRef.current.add(elementId);
+          if (rotation !== 0) updateElement(elementId, { rotation });
+
+          const shapeId = createShapeId();
+          tldrawEditor.createShape({
+            id: shapeId, type: "simple-shape", x: newX, y: newY,
+            props: {
+              kind: el.simpleShape.kind, w: newW, h: newH,
+              hasFill: el.simpleShape.hasFill, hasStroke: el.simpleShape.hasStroke,
+              color: el.color,
+            },
+            meta: { layer: "embroidery", elementId, importGroupId, importGroupName: template.name },
+          } as Parameters<typeof tldrawEditor.createShape>[0]);
+          if (rotation !== 0) rotatedAfter.push({ id: shapeId, rotation });
         } else if (el.svgPath?.includes("C")) {
           // Parte vetorial com curvas (veio da caneta) — mesmo critério de
           // detecção do reload (Passo 6): só vector-path emite "C". Escala
@@ -1208,8 +1329,9 @@ export function Editor({ project, onProjectChange }: Props) {
               <Tldraw
                 onMount={handleMount}
                 components={tldrawComponents}
-                shapeUtils={vectorPathShapeUtils}
-                tools={vectorPathTools}
+                shapeUtils={customShapeUtils}
+                tools={customTools}
+                overrides={tldrawOverrides}
               />
               {tldrawEditor && <CanvasToolbar editor={tldrawEditor} selectedShapeIds={selectedShapeIds} />}
             </div>
