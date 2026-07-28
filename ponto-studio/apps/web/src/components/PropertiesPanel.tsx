@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ChevronRight, Scissors, Sparkles, Trash2 } from "lucide-react";
-import { STROKE_FAMILY_STITCH_TYPES, type EmbroideryElement, type StitchParams, type StitchType } from "@ponto-studio/shared";
+import { HOOP_PX_PER_MM, STROKE_FAMILY_STITCH_TYPES, type EmbroideryElement, type StitchParams, type StitchType } from "@ponto-studio/shared";
 import { cn } from "@/lib/utils.ts";
 import { Button } from "@/components/ui/button.tsx";
 import { Slider } from "@/components/ui/slider.tsx";
@@ -67,14 +67,36 @@ interface Props {
   onSplit?: () => void;
 }
 
+/** Converte mm (largura real do Ziguezague, Ink/Stitch) pro px do canvas
+ * (mesma escala de HOOP_PX_PER_MM usada em todo o resto do editor), com
+ * clamp na faixa que o slider "Espessura do traço" aceita (1–20px). */
+function mmToStrokeWidthPx(widthMm: number): number {
+  return Math.max(1, Math.min(20, Math.round(widthMm * HOOP_PX_PER_MM)));
+}
+
 export function PropertiesPanel({ element, onChange, onDelete, regionCount, onSplit }: Props) {
   const { stitch, color, simpleShape } = element;
   const [advancedOpen, setAdvancedOpen] = useState(false);
   // "satin" (legado) usa os mesmos controles de "contour" — sempre foi a mesma coisa
   const selectedOption = stitch.type === "satin" ? "contour" : stitch.type;
 
+  /**
+   * Monta o patch de um novo StitchParams — e, quando o resultado é
+   * Ziguezague numa forma com traço ligado, sincroniza junto a espessura
+   * visual do traço (simpleShape.strokeWidth, px) com a largura real do
+   * ponto (widthMm) pra o que se vê no canvas bater com o que sai bordado.
+   * Sem isso, "Largura" (mm, real) e "Espessura do traço" (px, só visual)
+   * seriam 2 controles desencontrados pro mesmo conceito.
+   */
+  function stitchPatch(nextStitch: StitchParams): Partial<EmbroideryElement> {
+    if (nextStitch.type === "zigzag" && simpleShape?.hasStroke) {
+      return { stitch: nextStitch, simpleShape: { ...simpleShape, strokeWidth: mmToStrokeWidthPx(nextStitch.widthMm) } };
+    }
+    return { stitch: nextStitch };
+  }
+
   function setStitch(patch: Partial<StitchParams>) {
-    onChange({ stitch: { ...stitch, ...patch } as StitchParams });
+    onChange(stitchPatch({ ...stitch, ...patch } as StitchParams));
   }
 
   /**
@@ -84,9 +106,12 @@ export function PropertiesPanel({ element, onChange, onDelete, regionCount, onSp
    * Sem isso, uma forma "só contorno" na tela podia continuar exportando
    * preenchida (Tatami é o default). Ao ENTRAR nesse estado (preenchimento
    * desligado + traço ligado) com um ponto de preenchimento selecionado,
-   * troca automaticamente pro Corrido — o mais parecido com "só contorno".
-   * Não mexe se o ponto atual já for da família traço (zigzag/ondulado/cetim
-   * escolhidos de propósito continuam como estão).
+   * troca automaticamente pro Ziguezague — é o único tipo da família traço
+   * com uma largura de verdade (widthMm), então a "Espessura do traço" que
+   * o usuário já tinha ajustado vira o valor inicial da largura real (mm),
+   * em vez de nascer com o default fixo de 3mm. Não mexe se o ponto atual já
+   * for da família traço (zigzag/corrido/ondulado/cetim escolhidos de
+   * propósito continuam como estão).
    */
   function handleSimpleShapeToggle(patch: { hasFill?: boolean; hasStroke?: boolean }) {
     if (!simpleShape) return;
@@ -94,12 +119,17 @@ export function PropertiesPanel({ element, onChange, onDelete, regionCount, onSp
     const wasOutlineOnly = !simpleShape.hasFill && simpleShape.hasStroke;
     const isOutlineOnly = !updated.hasFill && updated.hasStroke;
     const enteringOutlineOnly = isOutlineOnly && !wasOutlineOnly;
-    onChange({
-      simpleShape: updated,
-      ...(enteringOutlineOnly && !STROKE_FAMILY_STITCH_TYPES.has(stitch.type)
-        ? { stitch: buildStitchForType(stitch, "running") }
-        : {}),
-    });
+
+    if (enteringOutlineOnly && !STROKE_FAMILY_STITCH_TYPES.has(stitch.type)) {
+      const seededWidthMm = Math.max(1, +(updated.strokeWidth / HOOP_PX_PER_MM).toFixed(2));
+      const zigzag = { ...buildStitchForType(stitch, "zigzag"), widthMm: seededWidthMm } as StitchParams;
+      onChange({
+        simpleShape: { ...updated, strokeWidth: mmToStrokeWidthPx(seededWidthMm) },
+        stitch: zigzag,
+      });
+      return;
+    }
+    onChange({ simpleShape: updated });
   }
 
   return (
@@ -129,7 +159,7 @@ export function PropertiesPanel({ element, onChange, onDelete, regionCount, onSp
                     ? "border-primary bg-accent"
                     : "border-input bg-background hover:bg-accent/50"
                 )}
-                onClick={() => onChange({ stitch: buildStitchForType(stitch, opt.value), stitchSuggested: false })}
+                onClick={() => onChange({ ...stitchPatch(buildStitchForType(stitch, opt.value)), stitchSuggested: false })}
               >
                 <span className="font-semibold">{opt.label}</span>
                 <span className="text-xs text-muted-foreground">{opt.desc}</span>
@@ -171,7 +201,11 @@ export function PropertiesPanel({ element, onChange, onDelete, regionCount, onSp
               />
               Traço
             </label>
-            {simpleShape.hasStroke && (
+            {/* Escondido quando o ponto é Ziguezague — "Largura" (mm, abaixo)
+                já controla a espessura de verdade nesse caso, e mantém este
+                valor sincronizado (ver stitchPatch); mostrar os 2 juntos
+                duplicaria o mesmo conceito com unidades diferentes. */}
+            {simpleShape.hasStroke && stitch.type !== "zigzag" && (
               <div className="flex flex-col gap-1.5">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Espessura do traço</p>
                 <div className="flex items-center gap-2">
@@ -227,7 +261,10 @@ export function PropertiesPanel({ element, onChange, onDelete, regionCount, onSp
           </div>
         )}
 
-        {/* Largura — controla o stroke-width do path, é o que dá a largura do ziguezague */}
+        {/* Largura — controla o stroke-width do path, é o que dá a largura do
+            ziguezague (real, em mm). Numa forma Retângulo/Círculo "só
+            contorno", esse valor também é a espessura mostrada no canvas
+            (ver stitchPatch) — a fonte da verdade aqui é o mm, não o px. */}
         {stitch.type === "zigzag" && (
           <div className="flex flex-col gap-1.5">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Largura</p>
