@@ -14,6 +14,7 @@ import { Cta } from "./Cta";
 import { LogoMarquee } from "./LogoMarquee";
 import { About } from "./About";
 import { Contact } from "./Contact";
+import { OnAirSlots } from "./OnAirSlots";
 
 export const blokComponents: SbReactComponentsMap = {
   page: Page,
@@ -27,4 +28,5 @@ export const blokComponents: SbReactComponentsMap = {
   logo_marquee: LogoMarquee,
   about: About,
   contact: Contact,
+  on_air: OnAirSlots,
 };

@@ -10,10 +10,13 @@ type AnyStoryContent = PageStoryContent | ProjectStoryContent;
  * ("/") e a global "config" têm rota própria/uso próprio e não passam
  * por aqui. O componente certo (page ou project) é escolhido pelo
  * `StoryblokStory` com base em `content.component`, então uma única rota
- * cobre `/sobre`, `/contato`, `/projetos` e `/projetos/nome-do-projeto`. */
+ * cobre `/sobre`, `/contato`, `/projetos` e `/projetos/nome-do-projeto`.
+ * "on-air" também fica de fora: é um root layout próprio em app/on-air/,
+ * fora do grupo (site) — sem excluir aqui, esse catch-all tentaria gerar
+ * uma página estática pra "/on-air" e colidiria com essa rota literal. */
 export async function generateStaticParams() {
   const stories = await fetchPublishedStories<AnyStoryContent>({
-    excluding_slugs: "home,config",
+    excluding_slugs: "home,config,on-air",
   });
 
   return stories

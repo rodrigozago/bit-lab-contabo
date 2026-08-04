@@ -73,6 +73,42 @@ Campo `visibility` em `page`/`project`:
 - `private` — 404. É só o ponto de costura pra quando a autenticação real
   (bit-lab-auth) for ligada — ver `src/lib/access.ts`.
 
+## On-air
+
+Página "quem está tocando agora" (disco de vinil, timetable de próximos/já
+tocaram) — porte de [on-air/](../on-air) pro Storyblok, com identidade visual
+própria (Klein Blue/navy, Inter) que **não** herda o verde/grotesk do resto
+do site. É um segundo root layout independente (`src/app/on-air/`, fora do
+grupo `(site)/`) — não tem `SiteNav`/`SiteFooter`, não entra no
+`config.main_nav`, só é alcançável por link direto (`bit-lab.tech/on-air`).
+
+Content type raiz **`on_air_slot`** (pasta `on-air-slots/`, sem `visibility`
+— despublicar a story já esconde o slot):
+
+| campo | tipo |
+|---|---|
+| `artist` | Text, obrigatório |
+| `genre` | Text |
+| `photo` | Asset |
+| `instagram` | Text (handle `@fulano` ou URL) |
+| `starts_at` | **Date/Time** (não só Date) |
+| `ends_at` | **Date/Time** |
+
+Blok nestable **`on_air`** — zero campos, nem `theme`. Pra criar a página:
+
+1. Criar os content types `on_air_slot` e `on_air` acima.
+2. Criar uma story `page` com slug **`on-air`** (raiz, fora de qualquer
+   pasta), `visibility: unlisted` (fica fora do sitemap mas acessível pela
+   URL), com um único blok `on_air` no `body`.
+3. Criar a pasta `on-air-slots/` e popular com stories `on_air_slot` —
+   `starts_at`/`ends_at` sempre em horário de parede de São Paulo (o campo
+   não carrega fuso, é assim que o resto do sistema já assume).
+
+Current/upcoming/past são recalculados no navegador a cada 250ms a partir da
+lista inteira já buscada no server — não tem API própria pra sondar, então
+editar o line-up com alguém já com a aba aberta só aparece depois de
+recarregar a página.
+
 ## Preview / Visual Editor
 
 Em Settings → Visual Editor no space, configure a preview URL:

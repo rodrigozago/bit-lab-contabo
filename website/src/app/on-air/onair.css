@@ -1,0 +1,46 @@
+@import "tailwindcss";
+
+/* Bundle CSS próprio deste root layout — nunca carregado nas páginas de
+ * (site)/, e vice-versa (dois <html> diferentes, navegar entre eles é full
+ * page load). Os nomes de token podem repetir os de app/globals.css sem
+ * colidir por isso mesmo. Paleta idêntica ao on-air.bit-lab.tech original
+ * (on-air/apps/web/src/index.css) — identidade própria, não herda o
+ * verde/grotesk do resto do site. */
+@theme {
+  /* dark navy que casa com o International Klein Blue */
+  --color-background: #060b1d;
+  --color-surface: #0b1330;
+  --color-edge: #1a2547;
+  /* International Klein Blue */
+  --color-accent: #002fa7;
+  /* IKB puro é escuro demais pra texto pequeno sobre navy — versão clareada */
+  --color-accent-bright: #2a5bff;
+  --color-foreground: #e9edfb;
+  --color-muted: #8b95bb;
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+
+body {
+  @apply bg-background text-foreground font-sans antialiased;
+}
+
+@keyframes vinyl-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.vinyl-spin {
+  animation: vinyl-spin 4s linear infinite;
+}
+
+.vinyl-spin-paused {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vinyl-spin {
+    animation: none;
+  }
+}

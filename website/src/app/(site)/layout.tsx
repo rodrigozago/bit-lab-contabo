@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Space_Grotesk } from "next/font/google";
-import "./globals.css";
+import "../globals.css";
 import "@/lib/storyblok-init";
 import { SmoothScroll } from "@/components/chrome/SmoothScroll";
 import { SiteNav } from "@/components/chrome/SiteNav";

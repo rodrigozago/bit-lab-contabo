@@ -143,3 +143,39 @@ export interface ContactBlok extends SectionBlok {
   email?: string;
   phone?: string;
 }
+
+/** Story raiz, pasta `on-air-slots/` — um set de DJ. Sem `visibility`: nunca é
+ * buscada por slug individual, só em lote por `content_type`/`starts_with`;
+ * despublicar no Storyblok já esconde o slot. */
+export interface OnAirSlotStoryContent extends SbBlokData {
+  component: "on_air_slot";
+  artist: string;
+  genre?: string;
+  photo?: StoryblokImage;
+  instagram?: string;
+  /** Campo Date/Time do Storyblok — horário de parede de São Paulo, sem fuso
+   * embutido na string. Convertido em src/lib/onair-time.ts. */
+  starts_at?: string;
+  ends_at?: string;
+}
+
+/** Blok nestable, zero campos — nem `theme`: a seção nunca participa do
+ * claro/escuro do resto do site, mantém a identidade Klein Blue própria. */
+export interface OnAirBlok extends SbBlokData {
+  component: "on_air";
+}
+
+/** Forma já processada de um slot — o que cruza a fronteira server→client em
+ * OnAirClient.tsx. Só ISO strings, nada de `Date` (precisa ser serializável). */
+export interface OnAirSlotView {
+  uid: string;
+  artist: string;
+  genre?: string;
+  photoUrl?: string;
+  photoAlt?: string;
+  /** Como foi cadastrado (@usuario ou URL) — formatar com formatInstagramHandle(). */
+  instagramRaw?: string;
+  instagramUrl?: string;
+  startsAtIso: string;
+  endsAtIso: string;
+}
