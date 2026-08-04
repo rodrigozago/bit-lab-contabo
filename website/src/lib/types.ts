@@ -125,3 +125,21 @@ export interface LogoMarqueeBlok extends SectionBlok {
   heading?: string;
   logos?: LogoItemBlok[];
 }
+
+export interface AboutBlok extends SectionBlok {
+  component: "about";
+  eyebrow?: string;
+  headline: string;
+  bio: object;
+  photo?: StoryblokImage;
+  pillars?: FeatureBlok[];
+}
+
+export interface ContactBlok extends SectionBlok {
+  component: "contact";
+  heading: string;
+  intro?: string;
+  /** Sobrescreve o `contact_email` da story global "config" quando preenchido. */
+  email?: string;
+  phone?: string;
+}

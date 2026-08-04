@@ -21,6 +21,7 @@ export async function ProjectIndex({ blok }: { blok: ProjectIndexBlok }) {
 
   return (
     <section
+      id="portfolio"
       {...storyblokEditable(blok)}
       className={`theme--${theme} section-pad py-24 md:py-32`}
     >

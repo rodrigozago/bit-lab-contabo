@@ -12,6 +12,8 @@ import { RichTextSection } from "./RichTextSection";
 import { DataTable } from "./DataTable";
 import { Cta } from "./Cta";
 import { LogoMarquee } from "./LogoMarquee";
+import { About } from "./About";
+import { Contact } from "./Contact";
 
 export const blokComponents: SbReactComponentsMap = {
   page: Page,
@@ -23,4 +25,6 @@ export const blokComponents: SbReactComponentsMap = {
   data_table: DataTable,
   cta: Cta,
   logo_marquee: LogoMarquee,
+  about: About,
+  contact: Contact,
 };
