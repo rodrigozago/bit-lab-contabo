@@ -20,3 +20,9 @@ auth/data/
 auth/web/dist/
 
 studio/
+
+# website
+website/.env
+website/.env.local
+website/.next/
+website/node_modules/

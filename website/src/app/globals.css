@@ -1,0 +1,159 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------
+ * Tokens
+ * bg/fg near-black/near-white como o placeholder atual de bit-lab.tech;
+ * accent verde (#4ade80) é a cor da marca. Gramática visual inspirada em
+ * 2xa.studio (grid 12 col, blend difference no nav, grain overlay) e
+ * madewithgsap.com (headlines gigantes, tabela de dados, acento único
+ * sobre monocromático).
+ * ------------------------------------------------------------------- */
+:root {
+  --bg: #0a0a0a;
+  --fg: #fdfdfd;
+  --fg-muted: #a1a1aa;
+  --accent: #4ade80;
+  --border: rgba(255, 255, 255, 0.12);
+
+  /* seções claras (theme--light) invertem estes quatro */
+  --bg-inverse: #fdfdfd;
+  --fg-inverse: #0a0a0a;
+  --fg-inverse-muted: #52525b;
+  --border-inverse: rgba(10, 10, 10, 0.12);
+
+  --grid-gap: 10px;
+  --grid-pad: 16px;
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-accent: var(--accent);
+  --color-border: var(--border);
+  --color-bg-inverse: var(--bg-inverse);
+  --color-fg-inverse: var(--fg-inverse);
+  --color-fg-inverse-muted: var(--fg-inverse-muted);
+  --color-border-inverse: var(--border-inverse);
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-space-grotesk);
+}
+
+html {
+  background: var(--bg);
+  color-scheme: dark;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+/* ---------------------------------------------------------------------
+ * Escala tipográfica fluida — headlines de 2xa/madewithgsap são gigantes
+ * (120–250px em desktop) mas precisam colapsar em mobile sem quebrar o
+ * grid. clamp() é onde esse estilo de layout normalmente quebra se não
+ * for tratado desde o início.
+ * ------------------------------------------------------------------- */
+.text-display {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 0.95;
+  font-size: clamp(2.5rem, 4vw + 1.5rem, 8rem);
+  text-transform: uppercase;
+}
+
+.text-heading {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.05;
+  font-size: clamp(1.75rem, 1.5vw + 1.25rem, 3rem);
+}
+
+.text-label {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: clamp(0.6875rem, 0.3vw + 0.625rem, 0.8125rem);
+}
+
+.text-body {
+  font-family: var(--font-sans);
+  line-height: 1.5;
+  font-size: clamp(0.9375rem, 0.2vw + 0.875rem, 1.0625rem);
+}
+
+/* ---------------------------------------------------------------------
+ * Grid de 12 colunas — literal do 2xa.studio (gap 10px, padding 16px)
+ * ------------------------------------------------------------------- */
+.grid-12 {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: var(--grid-gap);
+  padding-inline: var(--grid-pad);
+}
+
+.section-pad {
+  padding-inline: var(--grid-pad);
+}
+
+/* ---------------------------------------------------------------------
+ * Inversão de tema por seção
+ * ------------------------------------------------------------------- */
+.theme--dark {
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.theme--light {
+  background: var(--bg-inverse);
+  color: var(--fg-inverse);
+}
+
+.theme--light .text-fg-muted {
+  color: var(--fg-inverse-muted);
+}
+
+/* ---------------------------------------------------------------------
+ * Chrome: nav com blend difference, grain overlay, page transition
+ * ------------------------------------------------------------------- */
+.nav-blend {
+  mix-blend-mode: difference;
+}
+
+.grain-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  mix-blend-mode: hard-light;
+  opacity: 0.05;
+}
+
+@layer utilities {
+  .glassmorphism {
+    @apply bg-white/10 backdrop-blur-md border border-white/20;
+  }
+}
+
+/* ---------------------------------------------------------------------
+ * Acessibilidade — motion tem que poder ser desligado por completo
+ * ------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -1,0 +1,19 @@
+services:
+  web:
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_STORYBLOK_PUBLIC_TOKEN: ${NEXT_PUBLIC_STORYBLOK_PUBLIC_TOKEN}
+    ports:
+      - "127.0.0.1:3008:3000" # nginx da VPS (bit-lab.tech) proxya pra cá
+    environment:
+      STORYBLOK_PREVIEW_TOKEN: ${STORYBLOK_PREVIEW_TOKEN}
+      NEXT_PUBLIC_STORYBLOK_PUBLIC_TOKEN: ${NEXT_PUBLIC_STORYBLOK_PUBLIC_TOKEN}
+      STORYBLOK_PREVIEW_SECRET: ${STORYBLOK_PREVIEW_SECRET}
+      STORYBLOK_WEBHOOK_SECRET: ${STORYBLOK_WEBHOOK_SECRET}
+    networks: [website]
+    restart: unless-stopped
+
+networks:
+  website:
+    driver: bridge

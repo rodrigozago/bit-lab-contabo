@@ -30,6 +30,12 @@
       "runtimeExecutable": "npx",
       "runtimeArgs": ["-y", "pnpm@9.15.4", "-C", "sentinela", "--filter", "@sentinela/web", "dev"],
       "port": 3000
+    },
+    {
+      "name": "website",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "website"],
+      "port": 3000
     }
   ]
 }
