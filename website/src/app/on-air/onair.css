@@ -7,16 +7,16 @@
  * (on-air/apps/web/src/index.css) — identidade própria, não herda o
  * verde/grotesk do resto do site. */
 @theme {
-  /* dark navy que casa com o International Klein Blue */
-  --color-background: #060b1d;
-  --color-surface: #0b1330;
-  --color-edge: #1a2547;
-  /* International Klein Blue */
-  --color-accent: #002fa7;
-  /* IKB puro é escuro demais pra texto pequeno sobre navy — versão clareada */
-  --color-accent-bright: #2a5bff;
-  --color-foreground: #e9edfb;
-  --color-muted: #8b95bb;
+  /* Paleta light premium — fundo quase branco com blue sofisticado */
+  --color-background: #fafbfc;
+  --color-surface: #ffffff;
+  --color-edge: #e0e7f1;
+  /* Blue premium e elegante (Slate Blue sofisticado) */
+  --color-accent: #0052cc;
+  /* Versão mais clara do blue pra textos pequenos */
+  --color-accent-bright: #4c7bff;
+  --color-foreground: #1a202c;
+  --color-muted: #6b7280;
 
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 }
