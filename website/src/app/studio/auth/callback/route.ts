@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getOidcClient } from "@/lib/studio-oidc";
+import { getOidcClient, REDIRECT_URI, PUBLIC_URL } from "@/lib/studio-oidc";
 import {
   PKCE_COOKIE,
   readPkceCookie,
@@ -7,27 +7,26 @@ import {
 } from "@/lib/studio-session";
 
 export async function GET(request: NextRequest) {
-  const origin = request.nextUrl.origin;
   const params = Object.fromEntries(request.nextUrl.searchParams);
 
   if (params.error) {
-    return NextResponse.redirect(new URL("/?authStatus=error", origin));
+    return NextResponse.redirect(new URL("/?authStatus=error", PUBLIC_URL));
   }
 
   const pkce = await readPkceCookie(request.cookies.get(PKCE_COOKIE)?.value);
   if (!pkce || pkce.state !== params.state) {
-    return NextResponse.redirect(new URL("/?authStatus=error", origin));
+    return NextResponse.redirect(new URL("/?authStatus=error", PUBLIC_URL));
   }
 
-  const oidc = await getOidcClient(origin);
-  const tokenSet = await oidc.callback(`${origin}/auth/callback`, params, {
+  const oidc = await getOidcClient();
+  const tokenSet = await oidc.callback(REDIRECT_URI, params, {
     state: pkce.state,
     code_verifier: pkce.verifier,
   });
 
   const idClaims = tokenSet.claims();
   if (!idClaims.sub) {
-    return NextResponse.redirect(new URL("/?authStatus=error", origin));
+    return NextResponse.redirect(new URL("/?authStatus=error", PUBLIC_URL));
   }
 
   // Email vem do userinfo, não do ID token (mesma observação do sentinela —
@@ -35,7 +34,7 @@ export async function GET(request: NextRequest) {
   const userinfo = await oidc.userinfo(tokenSet);
   const email = String(userinfo.email ?? idClaims.email ?? "");
 
-  const response = NextResponse.redirect(new URL(pkce.returnTo, origin));
+  const response = NextResponse.redirect(new URL(pkce.returnTo, PUBLIC_URL));
 
   const sessionCookie = await createStudioSessionCookie({
     sub: idClaims.sub,

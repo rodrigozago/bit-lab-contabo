@@ -8,9 +8,8 @@ function safeReturnTo(raw: string | null): string {
 
 export async function GET(request: NextRequest) {
   const returnTo = safeReturnTo(request.nextUrl.searchParams.get("returnTo"));
-  const origin = request.nextUrl.origin;
 
-  const oidc = await getOidcClient(origin);
+  const oidc = await getOidcClient();
   const pkce = startPkce(returnTo);
 
   const authUrl = oidc.authorizationUrl({

@@ -15,6 +15,7 @@ services:
       STUDIO_OIDC_CLIENT_ID: ${STUDIO_OIDC_CLIENT_ID}
       STUDIO_OIDC_CLIENT_SECRET: ${STUDIO_OIDC_CLIENT_SECRET}
       STUDIO_SESSION_SECRET: ${STUDIO_SESSION_SECRET}
+      STUDIO_PUBLIC_URL: ${STUDIO_PUBLIC_URL:-https://studio.bit-lab.tech}
     networks: [website]
     restart: unless-stopped
 
