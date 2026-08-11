@@ -7,6 +7,7 @@ const SEED_APPS = [
   { slug: 'face-lab', name: 'Face Lab' },
   { slug: 'on-air', name: 'On Air' },
   { slug: 'sentinela', name: 'Sentinela' },
+  { slug: 'studio', name: 'Studio' },
 ]
 
 /**

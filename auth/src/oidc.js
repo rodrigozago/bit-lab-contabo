@@ -83,6 +83,22 @@ if (process.env.SENTINELA_OIDC_SECRET) {
   console.warn('[oidc] SENTINELA_OIDC_SECRET não definido — client sentinela NÃO registrado.')
 }
 
+if (process.env.STUDIO_OIDC_SECRET) {
+  clients.push({
+    client_id: 'studio',
+    client_secret: process.env.STUDIO_OIDC_SECRET,
+    grant_types: ['authorization_code'],
+    response_types: ['code'],
+    redirect_uris: [
+      'https://studio.bit-lab.tech/auth/callback',
+      ...(IS_PROD ? [] : ['http://localhost:3008/auth/callback']),
+    ],
+    token_endpoint_auth_method: 'client_secret_basic',
+  })
+} else {
+  console.warn('[oidc] STUDIO_OIDC_SECRET não definido — client studio NÃO registrado.')
+}
+
 const configuration = {
   adapter: RedisAdapter,
   clients,

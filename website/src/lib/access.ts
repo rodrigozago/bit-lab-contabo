@@ -1,7 +1,8 @@
 import "server-only";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import type { ISbStoryData } from "@storyblok/react/rsc";
 import type { Visibility } from "./types";
+import type { StudioSession } from "./studio-session";
 
 /**
  * Ponto único de decisão de visibilidade. `page` e `project` carregam um
@@ -31,4 +32,21 @@ export function isIndexable(
   story: ISbStoryData<{ visibility?: Visibility }>,
 ): boolean {
   return (story.content.visibility ?? "public") !== "unlisted";
+}
+
+/**
+ * Variante de `assertViewable` usada só dentro de studio.bit-lab.tech
+ * (app/studio/**). Aqui é onde o comentário acima se realiza: `private`
+ * não dá mais 404, exige sessão via SSO (auth.bit-lab.tech). `bit-lab.tech`
+ * continua chamando `assertViewable` original, sem essa exceção.
+ */
+export function assertViewableInStudio(
+  story: ISbStoryData<{ visibility?: Visibility }> | null,
+  session: StudioSession | null,
+  returnTo: string,
+): asserts story is ISbStoryData<{ visibility?: Visibility }> {
+  if (!story) notFound();
+  if (story.content.visibility === "private" && !session) {
+    redirect(`/auth/login?returnTo=${encodeURIComponent(returnTo)}`);
+  }
 }
