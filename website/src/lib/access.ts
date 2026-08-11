@@ -15,23 +15,33 @@ import type { StudioSession } from "./studio-session";
  * Quando a autenticação real (bit-lab-auth) chegar, é aqui — e só aqui —
  * que o caso "private" troca de notFound() para o gate OIDC.
  */
+/** Normaliza o valor bruto que vem do Storyblok — editores já digitaram
+ * "private " com espaço sobrando no campo (visto em produção), e o field
+ * não garante um valor limpo. Comparação estrita depois disso. */
+function normalizedVisibility(
+  story: ISbStoryData<{ visibility?: Visibility }>,
+): Visibility {
+  const raw = story.content.visibility?.trim();
+  return raw === "unlisted" || raw === "private" ? raw : "public";
+}
+
 export function assertViewable(
   story: ISbStoryData<{ visibility?: Visibility }> | null,
 ): asserts story is ISbStoryData<{ visibility?: Visibility }> {
   if (!story) notFound();
-  if (story.content.visibility === "private") notFound();
+  if (normalizedVisibility(story) === "private") notFound();
 }
 
 export function isListed(
   story: ISbStoryData<{ visibility?: Visibility }>,
 ): boolean {
-  return (story.content.visibility ?? "public") === "public";
+  return normalizedVisibility(story) === "public";
 }
 
 export function isIndexable(
   story: ISbStoryData<{ visibility?: Visibility }>,
 ): boolean {
-  return (story.content.visibility ?? "public") !== "unlisted";
+  return normalizedVisibility(story) !== "unlisted";
 }
 
 /**
@@ -46,7 +56,7 @@ export function assertViewableInStudio(
   returnTo: string,
 ): asserts story is ISbStoryData<{ visibility?: Visibility }> {
   if (!story) notFound();
-  if (story.content.visibility === "private" && !session) {
+  if (normalizedVisibility(story) === "private" && !session) {
     redirect(`/auth/login?returnTo=${encodeURIComponent(returnTo)}`);
   }
 }
