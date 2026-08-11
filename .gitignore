@@ -19,7 +19,10 @@ auth/node_modules/
 auth/data/
 auth/web/dist/
 
-studio/
+# prototype orfão na raiz do repo (studio/create-next-app scaffold, não
+# roteado por nginx) — precisa do "/" no início pra não casar também com
+# website/src/app/studio/ (área real, dentro do website/)
+/studio/
 
 # website
 website/.env

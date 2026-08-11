@@ -1,0 +1,14 @@
+@import "tailwindcss";
+
+/* Bundle CSS próprio deste root layout — mesmo padrão do app/on-air/onair.css:
+ * nunca carregado nas páginas de (site)/ ou on-air/, três <html> diferentes,
+ * navegar entre eles é full page load. */
+@theme {
+  --color-background: #0a0a0a;
+  --color-foreground: #fdfdfd;
+  --color-accent: #4ade80;
+}
+
+body {
+  @apply bg-background text-foreground antialiased;
+}
