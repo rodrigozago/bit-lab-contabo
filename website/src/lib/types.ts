@@ -120,6 +120,16 @@ export interface LogoItemBlok extends SbBlokData {
   logo?: StoryblokImage;
 }
 
+/** Banner CTA genérico com imagem de fundo — reutilizável em qualquer
+ * página (site principal ou studio), sem nada específico embutido. */
+export interface CtaBannerBlok extends SectionBlok {
+  component: "cta_banner";
+  headline: string;
+  cta_label: string;
+  cta_link?: StoryblokLink;
+  background_image?: StoryblokImage;
+}
+
 export interface LogoMarqueeBlok extends SectionBlok {
   component: "logo_marquee";
   heading?: string;
