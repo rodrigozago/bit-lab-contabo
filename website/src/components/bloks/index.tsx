@@ -22,7 +22,6 @@ import { StudioContactForm } from "./StudioContactForm";
 import { PricingPlans } from "./PricingPlans";
 import { CourseCurriculum } from "./CourseCurriculum";
 import { CourseSignupForm } from "./CourseSignupForm";
-import { CtaBanner } from "./CtaBanner";
 
 export const blokComponents: SbReactComponentsMap = {
   page: Page,
@@ -44,5 +43,4 @@ export const blokComponents: SbReactComponentsMap = {
   pricing_plans: PricingPlans,
   course_curriculum: CourseCurriculum,
   course_signup_form: CourseSignupForm,
-  cta_banner: CtaBanner,
 };
