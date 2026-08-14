@@ -19,7 +19,11 @@ export async function generateMetadata({
   params: Promise<{ slug: string[] }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const story = await fetchStory<AnyStoryContent>(`studio/${slug.join("/")}`, { noStore: true });
+  // Sem noStore aqui de propósito — ver o mesmo comentário em
+  // (marketing)/page.tsx: generateMetadata não usa cookies(), forçar
+  // no-store só nela (sem outro sinal dinâmico por perto) quebrava a
+  // geração estática no build.
+  const story = await fetchStory<AnyStoryContent>(`studio/${slug.join("/")}`);
   if (!story) return {};
 
   // "title" existe em page/project; "label" tem "name" no lugar — sem campo

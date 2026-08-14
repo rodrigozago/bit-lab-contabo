@@ -6,7 +6,12 @@ import { getStudioSession } from "@/lib/studio-session";
 import type { PageStoryContent } from "@/lib/types";
 
 export async function generateMetadata(): Promise<Metadata> {
-  const story = await fetchStory<PageStoryContent>("studio", { noStore: true });
+  // Sem noStore aqui de propósito: generateMetadata não usa cookies(), então
+  // não há API de request pra "justificar" dinamismo pro Next — forçar
+  // no-store só nessa função (sem nenhum outro sinal dinâmico por perto) foi
+  // o que quebrava a geração estática no build. Metadata cacheada é aceitável
+  // (revalida via webhook do Storyblok, mesmo padrão do resto do site).
+  const story = await fetchStory<PageStoryContent>("studio");
   if (!story) return {};
   return {
     title: story.content.seo_title || story.content.title,

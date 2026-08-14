@@ -10,8 +10,15 @@ import { OpencdjForm } from "./OpencdjForm";
 import { OpencdjLoginGate } from "./OpencdjLoginGate";
 import { OpencdjIncompleteProfile } from "./OpencdjIncompleteProfile";
 
+// Sem noStore: essa função alimenta generateMetadata() (que não usa
+// cookies(), sem sinal dinâmico próprio) E o corpo da página — forçar
+// no-store aqui quebrou a geração estática no build de /studio, que tem
+// exatamente essa mesma forma (fetch compartilhado entre metadata e body).
+// A página já é dinâmica pelo getStudioSession() logo abaixo; cache "stale"
+// nessa fetch só afeta o copy estático (headline etc.), revalida via
+// webhook do Storyblok como o resto do site.
 async function getConfig(): Promise<OpencdjConfigStoryContent> {
-  const story = await fetchStory<OpencdjConfigStoryContent>("opencdj-config", { noStore: true });
+  const story = await fetchStory<OpencdjConfigStoryContent>("opencdj-config");
   if (!story) notFound();
   return story.content;
 }
