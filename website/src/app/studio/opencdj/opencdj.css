@@ -405,6 +405,18 @@
   width: 100%;
 }
 
+.opencdj-page .textarea {
+  resize: vertical;
+  min-height: 8rem;
+  line-height: 1.6;
+  font-family: var(--font-mono);
+}
+
+.opencdj-page .input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .opencdj-page .input::placeholder {
   color: rgba(0, 255, 65, 0.18);
 }

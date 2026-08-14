@@ -11,8 +11,6 @@ function useTypewriter(text: string, speed = 90, delay = 800) {
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
-    setDisplayed("");
-    setDone(false);
     indexRef.current = 0;
 
     const start = setTimeout(() => {

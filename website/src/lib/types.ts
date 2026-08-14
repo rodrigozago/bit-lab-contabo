@@ -169,16 +169,16 @@ export interface OnAirBlok extends SbBlokData {
  * /opencdj. Excluída do catch-all/sitemap (ver excluding_slugs), igual ao
  * padrão de "config". Vídeo/logo do hero são Assets do Storyblok, não
  * arquivos estáticos — trocáveis sem deploy. */
+// name_label/name_placeholder/contact_label/contact_placeholder existiam aqui
+// antes de nome/instagram/whatsapp virarem dados da conta (sessão SSO) em vez
+// de campos livres do form — ficaram sem uso. Podem continuar existindo na
+// story do Storyblok sem problema (só não são mais lidos daqui).
 export interface OpencdjConfigStoryContent extends SbBlokData {
   component: "opencdj_config";
   headline: string;
   subheadline: string;
   description: string;
   manifesto: object;
-  name_label: string;
-  name_placeholder: string;
-  contact_label: string;
-  contact_placeholder: string;
   genre_label: string;
   genre_placeholder: string;
   submit_text: string;

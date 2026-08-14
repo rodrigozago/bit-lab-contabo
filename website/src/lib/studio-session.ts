@@ -12,6 +12,9 @@ const SESSION_TTL_SECONDS = 60 * 60 * 12; // 12h — sessão curta, SSO cobre o 
 export interface StudioSession {
   sub: string;
   email: string;
+  name: string | null;
+  instagram: string | null;
+  whatsapp: string | null;
 }
 
 function getSecret() {
@@ -23,7 +26,12 @@ function getSecret() {
 export async function createStudioSessionCookie(
   user: StudioSession,
 ): Promise<{ name: string; value: string; maxAge: number }> {
-  const token = await new SignJWT({ email: user.email })
+  const token = await new SignJWT({
+    email: user.email,
+    name: user.name,
+    instagram: user.instagram,
+    whatsapp: user.whatsapp,
+  })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(user.sub)
     .setIssuedAt()
@@ -43,7 +51,13 @@ export async function getStudioSession(): Promise<StudioSession | null> {
   try {
     const { payload } = await jwtVerify(token, getSecret());
     if (!payload.sub) return null;
-    return { sub: payload.sub, email: String(payload.email ?? "") };
+    return {
+      sub: payload.sub,
+      email: String(payload.email ?? ""),
+      name: payload.name ? String(payload.name) : null,
+      instagram: payload.instagram ? String(payload.instagram) : null,
+      whatsapp: payload.whatsapp ? String(payload.whatsapp) : null,
+    };
   } catch {
     return null;
   }

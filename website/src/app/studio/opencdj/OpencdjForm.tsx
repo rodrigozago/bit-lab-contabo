@@ -2,80 +2,52 @@
 
 import { useState } from "react";
 
-interface FieldDef {
-  id: "name" | "contact" | "genre";
-  label: string;
-  placeholder: string;
-}
-
 interface OpencdjFormProps {
-  nameLabel: string;
-  namePlaceholder: string;
-  contactLabel: string;
-  contactPlaceholder: string;
+  name: string;
+  instagram: string;
+  whatsapp: string;
   genreLabel: string;
   genrePlaceholder: string;
   submitText: string;
   successMessage: string;
 }
 
-/** Porta da lógica de form de opencdj/src/App.jsx — 3 campos fixos (não mais
- * um array configurável de campos, ver plano). Inclui um honeypot: bots que
- * preenchem todo input do form marcam esse campo, que fica fora da tela
- * (opencdj.css .honeypot) e nunca é preenchido por gente de verdade. */
+/** Porta da lógica de form de opencdj/src/App.jsx — nome/instagram/whatsapp
+ * agora vêm da conta bit-lab (sessão SSO), pré-preenchidos e desabilitados:
+ * não dá pra inscrever com dado diferente do cadastrado. `genre` continua o
+ * único campo editável. Inclui honeypot: bots que preenchem todo input do
+ * form marcam esse campo, que fica fora da tela (opencdj.css .honeypot) e
+ * nunca é preenchido por gente de verdade. */
 export function OpencdjForm({
-  nameLabel,
-  namePlaceholder,
-  contactLabel,
-  contactPlaceholder,
+  name,
+  instagram,
+  whatsapp,
   genreLabel,
   genrePlaceholder,
   submitText,
   successMessage,
 }: OpencdjFormProps) {
-  const fields: FieldDef[] = [
-    { id: "name", label: nameLabel, placeholder: namePlaceholder },
-    { id: "contact", label: contactLabel, placeholder: contactPlaceholder },
-    { id: "genre", label: genreLabel, placeholder: genrePlaceholder },
-  ];
-
-  const [formData, setFormData] = useState<Record<string, string>>({});
+  const [genre, setGenre] = useState("");
+  const [about, setAbout] = useState("");
   const [honeypot, setHoneypot] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [errors, setErrors] = useState<Record<string, string>>({});
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-    if (errors[e.target.name]) {
-      setErrors({ ...errors, [e.target.name]: "" });
-    }
-  };
-
-  const validate = () => {
-    const next: Record<string, string> = {};
-    fields.forEach((field) => {
-      if (!formData[field.id]?.trim()) {
-        next[field.id] = "campo obrigatório";
-      }
-    });
-    return next;
-  };
+  const [error, setError] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const next = validate();
-    if (Object.keys(next).length > 0) {
-      setErrors(next);
+    if (!genre.trim()) {
+      setError("campo obrigatório");
       return;
     }
+    setError("");
 
     setSubmitting(true);
     try {
       const res = await fetch("/opencdj/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...formData, website_url: honeypot }),
+        body: JSON.stringify({ genre, about, website_url: honeypot }),
       });
       const data = await res.json().catch(() => null);
       if (!res.ok || !data?.ok) {
@@ -87,7 +59,7 @@ export function OpencdjForm({
         err instanceof Error && err.message
           ? err.message
           : "não conseguimos registrar sua inscrição agora. tente de novo em alguns minutos, ou manda um email direto pra rz@bit-lab.tech";
-      setErrors({ _global: message });
+      setError(message);
     } finally {
       setSubmitting(false);
     }
@@ -118,27 +90,66 @@ export function OpencdjForm({
         />
       </div>
 
-      {fields.map((field, i) => (
-        <div key={field.id} className="fieldGroup">
-          <label htmlFor={field.id} className="label">
-            <span className="fieldNum">[{String(i + 1).padStart(2, "0")}]</span>
-            {field.label}
-            <span className="required"> *</span>
-          </label>
-          <input
-            id={field.id}
-            name={field.id}
-            type="text"
-            placeholder={field.placeholder}
-            className={`input${errors[field.id] ? " inputError" : ""}`}
-            value={formData[field.id] || ""}
-            onChange={handleChange}
-          />
-          {errors[field.id] && <span className="errorMsg">! {errors[field.id]}</span>}
-        </div>
-      ))}
+      <div className="fieldGroup">
+        <label htmlFor="name" className="label">
+          <span className="fieldNum">[01]</span>
+          NOME
+        </label>
+        <input id="name" type="text" className="input" value={name} disabled />
+      </div>
 
-      {errors._global && <span className="errorMsg">! {errors._global}</span>}
+      <div className="fieldGroup">
+        <label htmlFor="instagram" className="label">
+          <span className="fieldNum">[02]</span>
+          INSTAGRAM
+        </label>
+        <input id="instagram" type="text" className="input" value={instagram} disabled />
+      </div>
+
+      <div className="fieldGroup">
+        <label htmlFor="whatsapp" className="label">
+          <span className="fieldNum">[03]</span>
+          WHATSAPP
+        </label>
+        <input id="whatsapp" type="text" className="input" value={whatsapp} disabled />
+      </div>
+
+      <div className="fieldGroup">
+        <label htmlFor="genre" className="label">
+          <span className="fieldNum">[04]</span>
+          {genreLabel}
+          <span className="required"> *</span>
+        </label>
+        <input
+          id="genre"
+          name="genre"
+          type="text"
+          placeholder={genrePlaceholder}
+          className={`input${error ? " inputError" : ""}`}
+          value={genre}
+          onChange={(e) => {
+            setGenre(e.target.value);
+            if (error) setError("");
+          }}
+        />
+        {error && <span className="errorMsg">! {error}</span>}
+      </div>
+
+      <div className="fieldGroup">
+        <label htmlFor="about" className="label">
+          <span className="fieldNum">[05]</span>
+          SOBRE VOCÊ / SEU PROJETO
+        </label>
+        <textarea
+          id="about"
+          name="about"
+          rows={5}
+          placeholder="conta um pouco sobre você, seu som — cola links de sets gravados, portfólio, redes..."
+          className="input textarea"
+          value={about}
+          onChange={(e) => setAbout(e.target.value)}
+        />
+      </div>
 
       <button type="submit" className="submitBtn" disabled={submitting}>
         <span>▶ {submitText}</span>

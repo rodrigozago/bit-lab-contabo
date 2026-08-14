@@ -29,8 +29,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL("/?authStatus=error", PUBLIC_URL));
   }
 
-  // Email vem do userinfo, não do ID token (mesma observação do sentinela —
-  // com userinfo habilitado, o ID token só carrega o `sub`).
+  // Email/nome/instagram/whatsapp vêm do userinfo, não do ID token (mesma
+  // observação do sentinela — com userinfo habilitado, o ID token só carrega
+  // o `sub`). instagram/whatsapp só vêm se o scope "profile" foi concedido —
+  // ver login/route.ts.
   const userinfo = await oidc.userinfo(tokenSet);
   const email = String(userinfo.email ?? idClaims.email ?? "");
 
@@ -39,6 +41,9 @@ export async function GET(request: NextRequest) {
   const sessionCookie = await createStudioSessionCookie({
     sub: idClaims.sub,
     email,
+    name: userinfo.name ? String(userinfo.name) : null,
+    instagram: userinfo.instagram ? String(userinfo.instagram) : null,
+    whatsapp: userinfo.whatsapp ? String(userinfo.whatsapp) : null,
   });
   response.cookies.set(sessionCookie.name, sessionCookie.value, {
     httpOnly: true,

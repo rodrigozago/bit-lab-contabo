@@ -8,6 +8,7 @@ import type { OpencdjConfigStoryContent } from "@/lib/types";
 import { OpencdjTypewriter } from "./OpencdjTypewriter";
 import { OpencdjForm } from "./OpencdjForm";
 import { OpencdjLoginGate } from "./OpencdjLoginGate";
+import { OpencdjIncompleteProfile } from "./OpencdjIncompleteProfile";
 
 async function getConfig(): Promise<OpencdjConfigStoryContent> {
   const story = await fetchStory<OpencdjConfigStoryContent>("opencdj-config");
@@ -27,6 +28,9 @@ export default async function OpencdjPage() {
   const session = await getStudioSession();
   if (!session) {
     return <OpencdjLoginGate returnTo="/opencdj" />;
+  }
+  if (!session.name || !session.instagram || !session.whatsapp) {
+    return <OpencdjIncompleteProfile />;
   }
 
   const config = await getConfig();
@@ -84,7 +88,7 @@ export default async function OpencdjPage() {
             /* eslint-disable-next-line @next/next/no-img-element */
             <img src={config.logo.filename} alt="OpenCDJ" className="heroLogo" />
           )}
-          <OpencdjTypewriter text={config.subheadline} />
+          <OpencdjTypewriter key={config.subheadline} text={config.subheadline} />
           <a href="#form" className="heroCta">
             <span className="ctaArrow">▶</span> {config.submit_text}
           </a>
@@ -93,11 +97,11 @@ export default async function OpencdjPage() {
         <div className="heroStatusBar">
           <span className="statusDot">◉</span>
           <span>SYS.ONLINE</span>
-          <span className="statusSep">//</span>
+          <span className="statusSep">{"//"}</span>
           <span>ACESSO.RESTRITO</span>
-          <span className="statusSep">//</span>
+          <span className="statusSep">{"//"}</span>
           <span>NODE.33</span>
-          <span className="statusSep">//</span>
+          <span className="statusSep">{"//"}</span>
           <span>△</span>
         </div>
 
@@ -121,7 +125,7 @@ export default async function OpencdjPage() {
           <span className="corner" data-pos="br" />
 
           <div className="formIntro">
-            <div className="sectionTag">// 01 · MANIFESTO</div>
+            <div className="sectionTag">{"// 01 · MANIFESTO"}</div>
             <h1 className="headline">{config.headline}</h1>
             <p className="description">{config.description}</p>
             <div className="markdownBody">
@@ -131,13 +135,12 @@ export default async function OpencdjPage() {
             </div>
           </div>
 
-          <div className="sectionTag">// 02 · INSCRIÇÃO</div>
+          <div className="sectionTag">{"// 02 · INSCRIÇÃO"}</div>
 
           <OpencdjForm
-            nameLabel={config.name_label}
-            namePlaceholder={config.name_placeholder}
-            contactLabel={config.contact_label}
-            contactPlaceholder={config.contact_placeholder}
+            name={session.name}
+            instagram={session.instagram}
+            whatsapp={session.whatsapp}
             genreLabel={config.genre_label}
             genrePlaceholder={config.genre_placeholder}
             submitText={config.submit_text}
@@ -154,7 +157,7 @@ export default async function OpencdjPage() {
           <a href="mailto:rz@bit-lab.tech" className="footerEmail">
             rz@bit-lab.tech
           </a>
-          <span className="footerSep">//</span>
+          <span className="footerSep">{"//"}</span>
           <span className="footerCopy">© {new Date().getFullYear()} BIT LAB</span>
         </div>
         <div className="footerCode" aria-hidden="true">

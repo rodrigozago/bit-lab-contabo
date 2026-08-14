@@ -3,9 +3,15 @@ import { notifyOpencdjSubmission } from "@/lib/slack";
 import { getStudioSession } from "@/lib/studio-session";
 
 const MAX_LEN = 200;
+const MAX_ABOUT_LEN = 2000;
 
 function isValidField(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0 && value.length <= MAX_LEN;
+}
+
+// "about" é opcional — só valida o tamanho, quando vier.
+function isValidAbout(value: unknown): value is string | undefined {
+  return value === undefined || (typeof value === "string" && value.length <= MAX_ABOUT_LEN);
 }
 
 export async function POST(request: NextRequest) {
@@ -28,15 +34,27 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true });
   }
 
-  const { name, contact, genre } = body;
-  if (!isValidField(name) || !isValidField(contact) || !isValidField(genre)) {
-    return NextResponse.json({ ok: false, error: "campos obrigatórios ausentes" }, { status: 400 });
+  // nome/instagram/whatsapp vêm da sessão, não do body — o form manda esses
+  // campos desabilitados, mas nada impede alguém de forjar o POST direto;
+  // só `genre` é dado do usuário de verdade aqui.
+  if (!session.name || !session.instagram || !session.whatsapp) {
+    return NextResponse.json({ ok: false, error: "perfil incompleto" }, { status: 400 });
+  }
+
+  const { genre, about } = body;
+  if (!isValidField(genre)) {
+    return NextResponse.json({ ok: false, error: "preenche o gênero/vertente" }, { status: 400 });
+  }
+  if (!isValidAbout(about)) {
+    return NextResponse.json({ ok: false, error: "texto muito longo" }, { status: 400 });
   }
 
   const notified = await notifyOpencdjSubmission({
-    name: name.trim(),
-    contact: contact.trim(),
+    name: session.name,
+    instagram: session.instagram,
+    whatsapp: session.whatsapp,
     genre: genre.trim(),
+    about: about?.trim() || undefined,
   });
 
   if (!notified) {

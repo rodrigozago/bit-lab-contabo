@@ -12,8 +12,10 @@ import "server-only";
 
 interface OpencdjSubmission {
   name: string;
-  contact: string;
+  instagram: string;
+  whatsapp: string;
   genre: string;
+  about?: string;
 }
 
 export async function notifyOpencdjSubmission(input: OpencdjSubmission): Promise<boolean> {
@@ -32,10 +34,14 @@ export async function notifyOpencdjSubmission(input: OpencdjSubmission): Promise
         type: "section",
         fields: [
           { type: "mrkdwn", text: `*Nome*\n${input.name}` },
-          { type: "mrkdwn", text: `*Contato*\n${input.contact}` },
+          { type: "mrkdwn", text: `*Instagram*\n${input.instagram}` },
+          { type: "mrkdwn", text: `*WhatsApp*\n${input.whatsapp}` },
           { type: "mrkdwn", text: `*Gênero*\n${input.genre}` },
         ],
       },
+      ...(input.about
+        ? [{ type: "section", text: { type: "mrkdwn", text: `*Sobre*\n${input.about}` } }]
+        : []),
     ],
   };
 

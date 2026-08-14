@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
   const pkce = startPkce(returnTo);
 
   const authUrl = oidc.authorizationUrl({
-    scope: "openid email",
+    scope: "openid email profile",
     state: pkce.state,
     code_challenge: codeChallenge(pkce.verifier),
     code_challenge_method: "S256",
