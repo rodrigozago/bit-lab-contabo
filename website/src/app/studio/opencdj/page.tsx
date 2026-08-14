@@ -11,7 +11,7 @@ import { OpencdjLoginGate } from "./OpencdjLoginGate";
 import { OpencdjIncompleteProfile } from "./OpencdjIncompleteProfile";
 
 async function getConfig(): Promise<OpencdjConfigStoryContent> {
-  const story = await fetchStory<OpencdjConfigStoryContent>("opencdj-config");
+  const story = await fetchStory<OpencdjConfigStoryContent>("opencdj-config", { noStore: true });
   if (!story) notFound();
   return story.content;
 }

@@ -19,11 +19,10 @@ interface EventView {
  * São Paulo, mesma conversão que o on-air já usa (spWallToUtcIso). */
 export async function StudioCalendar({ blok }: { blok: StudioCalendarBlok }) {
   const theme = blok.theme ?? "dark";
-  const stories = await fetchStories<StudioEventStoryContent>({
-    content_type: "studio_event",
-    starts_with: "studio-events/",
-    sort_by: "content.starts_at:asc",
-  });
+  const stories = await fetchStories<StudioEventStoryContent>(
+    { content_type: "studio_event", starts_with: "studio-events/", sort_by: "content.starts_at:asc" },
+    { noStore: true },
+  );
 
   const now = new Date().getTime();
   const events: EventView[] = stories

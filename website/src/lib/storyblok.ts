@@ -26,9 +26,19 @@ async function resolveVersionAndToken() {
 }
 
 /** Busca uma story pelo full_slug (ex.: "home", "sobre", "projetos/foo").
- * Retorna null em 404 — quem chama decide se isso vira notFound(). */
+ * Retorna null em 404 — quem chama decide se isso vira notFound().
+ *
+ * `noStore`: força `cache: "no-store"` mesmo fora de draft mode — usado
+ * pela área studio (SSO), onde toda página já é dinâmica por request
+ * (cookies() via getStudioSession()). Sem isso, o fetch com `next:{tags}`
+ * (cacheável, o default pra (site)) misturado com uma API dinâmica no
+ * mesmo componente faz o Next tropeçar num guard interno próprio — bailout
+ * normal em vez de erro (DYNAMIC_SERVER_USAGE escapando como erro real de
+ * request, não só um sinal interno). Ver create-component-tree.js do Next:
+ * o guard só existe pra combinação de fetch cacheável + API de request. */
 export async function fetchStory<T extends object = object>(
   slug: string,
+  options?: { noStore?: boolean },
 ): Promise<ISbStoryData<T> | null> {
   const { isDraft, version, token } = await resolveVersionAndToken();
   const sbApi = getStoryblokApi();
@@ -37,7 +47,7 @@ export async function fetchStory<T extends object = object>(
     const { data } = await sbApi.getStory(
       slug,
       { version, token, resolve_links: "url" },
-      isDraft ? { cache: "no-store" } : { next: { tags: [CMS_TAG] } },
+      isDraft || options?.noStore ? { cache: "no-store" } : { next: { tags: [CMS_TAG] } },
     );
     return data.story as ISbStoryData<T>;
   } catch (error) {
@@ -48,16 +58,18 @@ export async function fetchStory<T extends object = object>(
 }
 
 /** Lista stories, draft-aware — usado pelo `ProjectIndex` (renderiza a
- * cada request/revalidação, contexto onde draftMode() é permitido). */
+ * cada request/revalidação, contexto onde draftMode() é permitido). Ver
+ * `noStore` em fetchStory() acima — mesmo motivo. */
 export async function fetchStories<T extends object = object>(
   params: ISbStoriesParams,
+  options?: { noStore?: boolean },
 ): Promise<ISbStoryData<T>[]> {
   const { isDraft, version, token } = await resolveVersionAndToken();
   const sbApi = getStoryblokApi();
 
   const { data } = await sbApi.getStories(
     { version, token, ...params },
-    isDraft ? { cache: "no-store" } : { next: { tags: [CMS_TAG] } },
+    isDraft || options?.noStore ? { cache: "no-store" } : { next: { tags: [CMS_TAG] } },
   );
   return data.stories as ISbStoryData<T>[];
 }
