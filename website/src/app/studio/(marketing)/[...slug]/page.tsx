@@ -7,6 +7,11 @@ import type { PageStoryContent, ProjectStoryContent, LabelStoryContent } from "@
 
 type AnyStoryContent = PageStoryContent | ProjectStoryContent | LabelStoryContent;
 
+// Ver o mesmo comentário em (marketing)/page.tsx — getStudioSession() (cookies,
+// dinâmico) + fetch() cacheado dos bloks (LabelIndex etc.) sem esse bail-out
+// explícito derruba o render com DYNAMIC_SERVER_USAGE em produção.
+export const dynamic = "force-dynamic";
+
 /** Catch-all pra qualquer página criada no Storyblok dentro da área studio
  * (slug prefixado "studio/..."). Mesmo padrão do (site)/[...slug]/page.tsx,
  * mas sem `generateStaticParams`: páginas privadas dependem da sessão da
