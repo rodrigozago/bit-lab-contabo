@@ -12,11 +12,16 @@ import { RevealText } from "@/components/motion/RevealText";
  * studio.bit-lab.tech/labels/pista-oculta. Registrado em bloks/index.tsx
  * como "label". Diferente de "project", que hoje não tem componente raiz
  * registrado (a página de detalhe de projeto no site principal não
- * renderiza) — aqui o registro existe de propósito, pra não repetir isso. */
+ * renderiza) — aqui o registro existe de propósito, pra não repetir isso.
+ *
+ * Retorna UM ÚNICO elemento raiz (mesmo padrão de Page.tsx) — uma versão
+ * anterior retornava um Fragment com o `body` como filho irmão do <main>,
+ * o que quebrou a geração/render de TODAS as páginas de label em produção
+ * (DYNAMIC_SERVER_USAGE), mesmo sem nenhum blok em body. */
 export function Label({ blok }: { blok: LabelStoryContent }) {
   return (
-    <>
-      <main {...storyblokEditable(blok)} className="theme--dark grid-12 py-24 md:py-32">
+    <main {...storyblokEditable(blok)}>
+      <div className="theme--dark grid-12 py-24 md:py-32">
         <p className="text-label col-span-12 mb-6 text-accent">LABEL</p>
 
         <RevealText as="h1" className="text-display col-span-12 mb-8 md:col-span-8">
@@ -67,13 +72,13 @@ export function Label({ blok }: { blok: LabelStoryContent }) {
             )}
           </div>
         )}
-      </main>
+      </div>
 
-      {/* Bloks extra abaixo do conteúdo fixo (ex. cta_banner) — mesmo
-       * padrão de Page.tsx pra desenrolar um body. */}
+      {/* Bloks extra abaixo do conteúdo fixo (ex. cta_banner) — fora do
+       * grid-12 acima, pra permitir seções full-bleed. */}
       {blok.body?.map((nested) => (
         <StoryblokServerComponent blok={nested} key={nested._uid} />
       ))}
-    </>
+    </main>
   );
 }
