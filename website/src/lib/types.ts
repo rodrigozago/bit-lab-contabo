@@ -126,6 +126,26 @@ export interface LogoMarqueeBlok extends SectionBlok {
   logos?: LogoItemBlok[];
 }
 
+/** Um cartão de plano — ex. "Club de Membros" na página de preços.
+ * `benefits` é texto livre, um item por linha (mesma convenção de
+ * `headers` em DataTableBlok: string simples, sem precisar de outro blok
+ * nestable só pra lista de bullets). */
+export interface PricingPlanBlok extends SbBlokData {
+  component: "pricing_plan";
+  name: string;
+  price: string;
+  price_note?: string;
+  benefits?: string;
+  cta_label?: string;
+  cta_url?: string;
+}
+
+export interface PricingPlansBlok extends SectionBlok {
+  component: "pricing_plans";
+  heading?: string;
+  plans?: PricingPlanBlok[];
+}
+
 export interface AboutBlok extends SectionBlok {
   component: "about";
   eyebrow?: string;

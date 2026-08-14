@@ -19,6 +19,7 @@ import { Label } from "./Label";
 import { LabelIndex } from "./LabelIndex";
 import { StudioCalendar } from "./StudioCalendar";
 import { StudioContactForm } from "./StudioContactForm";
+import { PricingPlans } from "./PricingPlans";
 
 export const blokComponents: SbReactComponentsMap = {
   page: Page,
@@ -37,4 +38,5 @@ export const blokComponents: SbReactComponentsMap = {
   label_index: LabelIndex,
   studio_calendar: StudioCalendar,
   studio_contact: StudioContactForm,
+  pricing_plans: PricingPlans,
 };
