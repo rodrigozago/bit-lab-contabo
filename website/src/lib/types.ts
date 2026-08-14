@@ -231,6 +231,9 @@ export interface LabelStoryContent extends SbBlokData, SeoFields {
   instagram?: string;
   genres?: string;
   visibility?: Visibility;
+  /** Bloks extra abaixo do conteúdo fixo do label (ex. cta_banner) — mesmo
+   * padrão do body de PageStoryContent, desenrolado em Label.tsx. */
+  body?: SbBlokData[];
 }
 
 /** Blok — vitrine dos labels na landing do studio. Busca sozinho via
