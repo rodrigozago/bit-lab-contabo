@@ -2,6 +2,7 @@ const { Provider } = require('oidc-provider')
 const { getOrCreateJwks } = require('./jwks')
 const RedisAdapter = require('./oidcRedisAdapter')
 const users = require('./models/users')
+const { avatarUrl } = require('./media')
 
 const ISSUER = process.env.ISSUER || 'http://localhost:4000'
 const JWKS_PATH = process.env.JWKS_PATH || '/app/data/jwks.json'
@@ -114,6 +115,11 @@ const configuration = {
   claims: {
     openid: ['sub'],
     email: ['email', 'email_verified', 'is_admin'],
+    // Scope novo — nome/foto de perfil (self-service, ver routes/auth.js).
+    // Nenhum client precisa ser reconfigurado aqui pra usar: é só incluir
+    // "profile" no `scope` do authorizationUrl de cada app consumidor.
+    // Claim names padrão OIDC (name/picture), não os nomes de coluna do banco.
+    profile: ['name', 'picture'],
   },
   interactions: {
     url: (_ctx, interaction) => `/interaction/${interaction.uid}`,
@@ -137,7 +143,14 @@ const configuration = {
         // Claim continua se chamando `is_admin` no wire (não renomeado pra
         // is_superuser) de propósito — é o que ponto-studio já lê no
         // finishAuth() hoje; renomear quebraria sem redeploy coordenado.
-        return { sub: id, email: user.email, email_verified: true, is_admin: user.is_superuser }
+        return {
+          sub: id,
+          email: user.email,
+          email_verified: true,
+          is_admin: user.is_superuser,
+          name: user.name || undefined,
+          picture: avatarUrl(user.avatar_path) || undefined,
+        }
       },
     }
   },

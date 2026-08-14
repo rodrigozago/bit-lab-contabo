@@ -8,6 +8,7 @@ import { api } from "@/lib/api"
 import { AuthGate, RequireSuperuser } from "@/components/AuthGate"
 import { BaseLayout } from "@/layouts/base-layout"
 import { Dashboard } from "@/pages/Dashboard"
+import { Profile } from "@/pages/Profile"
 import { UsersPage } from "@/pages/admin/Users"
 import { AppsPage } from "@/pages/admin/Apps"
 import { AccessPage } from "@/pages/admin/Access"
@@ -40,6 +41,7 @@ export default function App() {
             <BaseLayout>
               <Routes>
                 <Route path="/" element={<Dashboard />} />
+                <Route path="/profile" element={<Profile />} />
                 <Route
                   path="/admin/users"
                   element={<RequireSuperuser><UsersPage /></RequireSuperuser>}

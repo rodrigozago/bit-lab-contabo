@@ -19,6 +19,7 @@ export default defineConfig({
       "/login": "http://localhost:4000",
       "/signup": "http://localhost:4000",
       "/logout": "http://localhost:4000",
+      "/media": "http://localhost:4000",
     },
   },
 });

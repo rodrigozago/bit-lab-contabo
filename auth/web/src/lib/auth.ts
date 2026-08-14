@@ -2,6 +2,8 @@ import { createContext, useContext } from "react";
 
 export interface Me {
   email: string;
+  name: string | null;
+  avatarUrl: string | null;
   isSuperuser: boolean;
 }
 

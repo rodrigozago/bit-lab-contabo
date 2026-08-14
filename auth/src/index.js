@@ -7,6 +7,7 @@ const adminRoutes = require('./routes/admin')
 const interactionRoutes = require('./routes/interaction')
 const oidc = require('./oidc')
 const { rollbar } = require('./rollbar')
+const { MEDIA_DIR } = require('./media')
 
 const PORT = Number(process.env.PORT || 4000)
 
@@ -26,6 +27,11 @@ async function main() {
   app.use(cookieParser())
 
   app.get('/health', (req, res) => res.json({ ok: true, service: 'bit-lab-auth' }))
+
+  // avatares de perfil — arquivo estático, público de propósito (a claim
+  // `picture` do OIDC precisa ser uma URL que qualquer app consumidor
+  // consiga carregar direto no <img>, sem autenticação).
+  app.use('/media', express.static(MEDIA_DIR))
 
   // rotas próprias primeiro — não colidem com as rotas reservadas do oidc-provider
   app.use('/', authRoutes)

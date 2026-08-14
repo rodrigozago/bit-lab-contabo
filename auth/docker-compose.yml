@@ -44,6 +44,7 @@ services:
       STUDIO_OIDC_SECRET: "${STUDIO_OIDC_SECRET}"
       ROLLBAR_SERVER_TOKEN: "${ROLLBAR_SERVER_TOKEN:-}"
       JWKS_PATH: "/app/data/jwks.json"
+      MEDIA_DIR: "/app/media"
       NODE_ENV: production
       PORT: "4000"
     ports:
@@ -51,6 +52,7 @@ services:
       - "127.0.0.1:4002:4000"
     volumes:
       - jwks:/app/data
+      - avatars:/app/media
     depends_on:
       postgres:
         condition: service_healthy
@@ -75,6 +77,7 @@ services:
 volumes:
   pgdata:
   jwks:
+  avatars:
 
 networks:
   auth:

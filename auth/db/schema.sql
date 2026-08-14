@@ -22,6 +22,13 @@ BEGIN
   END IF;
 END $$;
 
+-- Perfil self-service (nome, foto) — nada disso é obrigatório, usuário pode
+-- nunca preencher. avatar_path guarda o caminho relativo dentro de
+-- MEDIA_DIR (ex. "avatars/<id>-<timestamp>.jpg"), nunca a URL completa —
+-- monta a URL pública em src/media.js (avatarUrl()), não aqui.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS name TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_path TEXT;
+
 CREATE TABLE IF NOT EXISTS apps (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   slug TEXT UNIQUE NOT NULL,

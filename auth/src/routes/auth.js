@@ -1,14 +1,47 @@
 const express = require('express')
+const multer = require('multer')
+const path = require('path')
+const fs = require('fs')
 const users = require('../models/users')
 const apps = require('../models/apps')
 const appAccess = require('../models/appAccess')
 const signupTokens = require('../models/signupTokens')
+const auditLog = require('../models/auditLog')
 const session = require('../session')
 const { checkLimit } = require('../rateLimit')
 const { requireSession } = require('../middleware')
 const { renderLogin, renderSignup, renderMessage } = require('../views/login')
+const { MEDIA_DIR, AVATAR_DIR, avatarUrl } = require('../media')
 
 const router = express.Router()
+
+const AVATAR_MIME_EXT = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/webp': '.webp' }
+
+const avatarUpload = multer({
+  storage: multer.diskStorage({
+    destination: AVATAR_DIR,
+    filename: (req, file, cb) => {
+      const ext = AVATAR_MIME_EXT[file.mimetype] || ''
+      cb(null, `${req.user.userId}-${Date.now()}${ext}`)
+    },
+  }),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (!AVATAR_MIME_EXT[file.mimetype]) {
+      return cb(new Error('formato inválido — use PNG, JPEG ou WEBP'))
+    }
+    cb(null, true)
+  },
+})
+
+function toMe(user) {
+  return {
+    email: user.email,
+    name: user.name || null,
+    avatarUrl: avatarUrl(user.avatar_path),
+    isSuperuser: !!user.is_superuser,
+  }
+}
 
 function safeRedirectPath(raw) {
   // Permite redirect pra URLs *.bit-lab.tech (https) ou paths locais — evita open-redirect.
@@ -187,10 +220,93 @@ router.get('/verify', async (req, res) => {
 // GET /api/me — usado pela SPA (apps.bit-lab.tech) pra saber se há sessão e
 // qual o papel do usuário. O cookie bl_session (Domain=.bit-lab.tech) já
 // chega sozinho em qualquer subdomínio, sem precisar de dança OIDC própria.
+// Busca fresco no banco (não só o que tá cacheado na sessão) — mesmo
+// princípio do requireSuperuser em middleware.js: editar o perfil precisa
+// refletir aqui na mesma hora, sem esperar relogar.
 router.get('/api/me', async (req, res) => {
   const current = await session.read(req)
   if (!current) return res.status(401).json({ error: 'não autenticado' })
-  res.json({ email: current.email, isSuperuser: !!current.isSuperuser })
+  const user = await users.findById(current.userId)
+  if (!user) return res.status(401).json({ error: 'não autenticado' })
+  res.json(toMe(user))
+})
+
+// PATCH /api/me — nome e/ou e-mail. Sem verificação de e-mail por link (mesma
+// ressalva de email_verified em src/oidc.js) — troca é direta, só checa
+// formato e unicidade.
+router.patch('/api/me', requireSession, express.json(), async (req, res) => {
+  const { name, email } = req.body
+  const updates = {}
+
+  if (typeof name === 'string') {
+    updates.name = name.trim().slice(0, 100) || null
+  }
+
+  if (typeof email === 'string') {
+    const cleanEmail = email.trim().toLowerCase()
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      return res.status(400).json({ error: 'e-mail inválido' })
+    }
+    if (cleanEmail !== req.user.email) {
+      const existing = await users.findByEmail(cleanEmail)
+      if (existing) return res.status(409).json({ error: 'já existe uma conta com esse e-mail' })
+      updates.email = cleanEmail
+    }
+  }
+
+  if (Object.keys(updates).length === 0) {
+    return res.status(400).json({ error: 'nada pra atualizar' })
+  }
+
+  const updated = await users.updateProfile(req.user.userId, updates)
+  await auditLog.record(req.user, 'user.self_update', req.user.email, updates)
+  res.json(toMe(updated))
+})
+
+// PATCH /api/me/password — self-service, sempre exige a senha atual (ver
+// users.changeOwnPassword). Rate-limit por usuário: não é brute-force de
+// login, mas ainda dá pra tentar adivinhar a senha atual repetidamente.
+router.patch('/api/me/password', requireSession, express.json(), async (req, res) => {
+  const { currentPassword, newPassword } = req.body
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ error: 'preencha a senha atual e a nova' })
+  }
+  if (newPassword.length < 8) {
+    return res.status(400).json({ error: 'a nova senha precisa ter pelo menos 8 caracteres' })
+  }
+
+  const okLimit = await checkLimit(`pwchange:${req.user.userId}`, 5, 15 * 60)
+  if (!okLimit) {
+    return res.status(429).json({ error: 'muitas tentativas — aguarde alguns minutos' })
+  }
+
+  const result = await users.changeOwnPassword(req.user.userId, currentPassword, newPassword)
+  if (!result.ok) return res.status(400).json({ error: result.error })
+
+  await auditLog.record(req.user, 'user.password_change', req.user.email, {})
+  res.json({ ok: true })
+})
+
+// POST /api/me/avatar — multipart, campo "avatar". Substitui o arquivo
+// anterior (apaga o antigo, best-effort — não bloqueia a resposta por isso).
+router.post('/api/me/avatar', requireSession, (req, res, next) => {
+  avatarUpload.single('avatar')(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message || 'falha no upload' })
+    next()
+  })
+}, async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'nenhum arquivo enviado' })
+
+  const previous = await users.findById(req.user.userId)
+  const relativePath = `avatars/${req.file.filename}`
+  const updated = await users.updateAvatarPath(req.user.userId, relativePath)
+
+  if (previous?.avatar_path) {
+    fs.unlink(path.join(MEDIA_DIR, previous.avatar_path), () => {})
+  }
+
+  await auditLog.record(req.user, 'user.avatar_update', req.user.email, {})
+  res.json(toMe(updated))
 })
 
 // GET /api/my-access — apps (+ papel) do usuário logado, pra dashboard dele.
