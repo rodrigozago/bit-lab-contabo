@@ -48,7 +48,7 @@ export default async function StudioCatchAllPage({
 }) {
   const { slug } = await params;
   const path = slug.join("/");
-  const story = await fetchStory<AnyStoryContent>(`studio/${path}`, { noStore: true });
+  const story = await fetchStory<AnyStoryContent>(`studio/${path}`);
   const session = await getStudioSession();
   assertViewableInStudio(story, session, `/${path}`);
 

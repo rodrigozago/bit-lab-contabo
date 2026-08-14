@@ -21,7 +21,7 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function StudioHomePage() {
-  const story = await fetchStory<PageStoryContent>("studio", { noStore: true });
+  const story = await fetchStory<PageStoryContent>("studio");
   const session = await getStudioSession();
   assertViewableInStudio(story, session, "/");
 

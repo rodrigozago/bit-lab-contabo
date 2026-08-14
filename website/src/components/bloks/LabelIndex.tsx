@@ -14,10 +14,10 @@ import { StaggerList } from "@/components/motion/StaggerList";
  * linka full_slug direto porque o site principal É a raiz do domínio). */
 export async function LabelIndex({ blok }: { blok: LabelIndexBlok }) {
   const theme = blok.theme ?? "dark";
-  const stories = await fetchStories<LabelStoryContent>(
-    { content_type: "label", starts_with: "studio/labels/" },
-    { noStore: true },
-  );
+  const stories = await fetchStories<LabelStoryContent>({
+    content_type: "label",
+    starts_with: "studio/labels/",
+  });
   const listed = stories.filter(isListed);
 
   return (
