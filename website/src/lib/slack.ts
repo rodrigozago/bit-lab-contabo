@@ -95,3 +95,33 @@ export async function notifyStudioContact(input: StudioContactSubmission): Promi
     { type: "section", text: { type: "mrkdwn", text: `*Mensagem*\n${input.message}` } },
   ]);
 }
+
+interface CourseSignupSubmission {
+  name: string;
+  instagram: string;
+  whatsapp: string;
+  experience: string;
+  motivation?: string;
+}
+
+/** Notifica inscrições no curso de discotecagem — mesmo webhook do Open CDJ
+ * por enquanto (ver postToSlack), texto/emoji diferentes só pra distinguir
+ * no canal. */
+export async function notifyCourseSignup(input: CourseSignupSubmission): Promise<boolean> {
+  const text = ":headphones: *Nova inscrição — Curso de Discotecagem*";
+  return postToSlack(text, [
+    { type: "section", text: { type: "mrkdwn", text } },
+    {
+      type: "section",
+      fields: [
+        { type: "mrkdwn", text: `*Nome*\n${input.name}` },
+        { type: "mrkdwn", text: `*Instagram*\n${input.instagram}` },
+        { type: "mrkdwn", text: `*WhatsApp*\n${input.whatsapp}` },
+        { type: "mrkdwn", text: `*Nível*\n${input.experience}` },
+      ],
+    },
+    ...(input.motivation
+      ? [{ type: "section", text: { type: "mrkdwn", text: `*Motivação*\n${input.motivation}` } }]
+      : []),
+  ]);
+}

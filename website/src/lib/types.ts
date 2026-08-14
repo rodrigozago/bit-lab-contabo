@@ -263,6 +263,42 @@ export interface StudioContactBlok extends SectionBlok {
   intro?: string;
 }
 
+/** Blok nestable — um módulo do programa do curso de discotecagem. */
+export interface CourseModuleBlok extends SbBlokData {
+  component: "course_module";
+  title: string;
+  description?: string;
+  duration?: string;
+}
+
+/** Blok — programa/currículo do curso, lista de módulos editável no
+ * Storyblok (campo Blocks restrito a course_module). */
+export interface CourseCurriculumBlok extends SectionBlok {
+  component: "course_curriculum";
+  heading?: string;
+  modules?: CourseModuleBlok[];
+}
+
+/** Blok — form de inscrição no curso. Renderizado por
+ * components/bloks/CourseSignupForm.tsx, que decide entre login gate,
+ * perfil incompleto ou o form de verdade conforme getStudioSession()
+ * (ver StudioLoginGate/StudioIncompleteProfile em components/studio/).
+ * `experience_options` é texto comma-separated, mesma convenção de
+ * DataTableBlok.headers/PricingPlanBlok.benefits — evita precisar de
+ * outro blok nestable só pra um select. */
+export interface CourseSignupFormBlok extends SectionBlok {
+  component: "course_signup_form";
+  heading: string;
+  intro?: string;
+  experience_label: string;
+  experience_options: string;
+  motivation_label: string;
+  motivation_placeholder?: string;
+  submit_text: string;
+  success_message: string;
+  return_to?: string;
+}
+
 /** Forma já processada de um slot — o que cruza a fronteira server→client em
  * OnAirClient.tsx. Só ISO strings, nada de `Date` (precisa ser serializável). */
 export interface OnAirSlotView {

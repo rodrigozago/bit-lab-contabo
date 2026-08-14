@@ -11,6 +11,7 @@ const LINKS = [
   { href: "/#sobre", label: "Sobre" },
   { href: "/#labels", label: "Labels" },
   { href: "/#calendario", label: "Calendário" },
+  { href: "/curso-discotecagem", label: "Curso" },
   { href: "/#contato", label: "Contato" },
 ];
 
