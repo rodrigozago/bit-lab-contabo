@@ -62,7 +62,7 @@ function renderLogin({ error, redirect, action = '/login', signupHref } = {}) {
 // "Já tenho conta" pra quem veio de um convite (token) não vai só pro /login
 // — vai pro /invite/redeem, que loga normalmente e DEPOIS resgata o convite
 // pra essa conta já existente (senão o acesso concedido pelo link se perderia).
-function renderSignup({ error, redirect, token, app, lockedEmail } = {}) {
+function renderSignup({ error, redirect, token, app, lockedEmail, name, instagram, whatsapp } = {}) {
   const safeRedirect = escapeHtml(redirect || '')
   const hasAccountHref = token
     ? `/invite/redeem?token=${encodeURIComponent(token)}${redirect ? `&redirect=${encodeURIComponent(redirect)}` : ''}`
@@ -79,13 +79,22 @@ function renderSignup({ error, redirect, token, app, lockedEmail } = {}) {
       <input type="hidden" name="redirect" value="${safeRedirect}" />
       ${token ? `<input type="hidden" name="token" value="${escapeHtml(token)}" />` : ''}
       ${app ? `<input type="hidden" name="app" value="${escapeHtml(app)}" />` : ''}
+      <label>Nome</label>
+      <input type="text" name="name" required ${lockedEmail ? '' : 'autofocus'}
+             value="${escapeHtml(name || '')}" />
       <label>E-mail</label>
-      <input type="email" name="email" required autofocus
+      <input type="email" name="email" required
              ${lockedEmail ? `value="${escapeHtml(lockedEmail)}" readonly` : ''} />
       <label>Senha (mín. 8 caracteres)</label>
       <input type="password" name="password" minlength="8" required />
       <label>Confirme a senha</label>
       <input type="password" name="password2" minlength="8" required />
+      <label>Instagram</label>
+      <input type="text" name="instagram" placeholder="@seuusuario" required
+             value="${escapeHtml(instagram || '')}" />
+      <label>WhatsApp</label>
+      <input type="text" name="whatsapp" placeholder="(00) 00000-0000" required
+             value="${escapeHtml(whatsapp || '')}" />
       <button type="submit">Criar conta</button>
     </form>
   </div>`)

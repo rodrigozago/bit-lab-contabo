@@ -1,7 +1,7 @@
 const bcrypt = require('bcryptjs')
 const { pool } = require('../db')
 
-const PUBLIC_COLUMNS = 'id, email, name, avatar_path, is_superuser, created_at'
+const PUBLIC_COLUMNS = 'id, email, name, instagram, whatsapp, avatar_path, is_superuser, created_at'
 
 async function findByEmail(email) {
   const { rows } = await pool.query('SELECT * FROM users WHERE email = $1', [email.toLowerCase()])
@@ -18,11 +18,12 @@ async function list() {
   return rows
 }
 
-async function create({ email, password, isSuperuser = false }) {
+async function create({ email, password, isSuperuser = false, name, instagram, whatsapp }) {
   const hash = bcrypt.hashSync(password, 12)
   const { rows } = await pool.query(
-    `INSERT INTO users (email, password_hash, is_superuser) VALUES ($1, $2, $3) RETURNING ${PUBLIC_COLUMNS}`,
-    [email.toLowerCase(), hash, isSuperuser]
+    `INSERT INTO users (email, password_hash, is_superuser, name, instagram, whatsapp)
+     VALUES ($1, $2, $3, $4, $5, $6) RETURNING ${PUBLIC_COLUMNS}`,
+    [email.toLowerCase(), hash, isSuperuser, name || null, instagram || null, whatsapp || null]
   )
   return rows[0]
 }
@@ -59,6 +60,14 @@ async function updateProfile(id, updates) {
   if ('email' in updates) {
     fields.push(`email = $${i++}`)
     values.push(updates.email)
+  }
+  if ('instagram' in updates) {
+    fields.push(`instagram = $${i++}`)
+    values.push(updates.instagram)
+  }
+  if ('whatsapp' in updates) {
+    fields.push(`whatsapp = $${i++}`)
+    values.push(updates.whatsapp)
   }
   if (fields.length === 0) return findById(id)
 

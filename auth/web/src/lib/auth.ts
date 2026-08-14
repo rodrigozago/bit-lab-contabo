@@ -3,6 +3,8 @@ import { createContext, useContext } from "react";
 export interface Me {
   email: string;
   name: string | null;
+  instagram: string | null;
+  whatsapp: string | null;
   avatarUrl: string | null;
   isSuperuser: boolean;
 }

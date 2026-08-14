@@ -14,6 +14,8 @@ export function Profile() {
 
   const [name, setName] = React.useState(me?.name ?? "")
   const [email, setEmail] = React.useState(me?.email ?? "")
+  const [instagram, setInstagram] = React.useState(me?.instagram ?? "")
+  const [whatsapp, setWhatsapp] = React.useState(me?.whatsapp ?? "")
   const [savingProfile, setSavingProfile] = React.useState(false)
   const [uploadingAvatar, setUploadingAvatar] = React.useState(false)
 
@@ -25,7 +27,9 @@ export function Profile() {
   React.useEffect(() => {
     setName(me?.name ?? "")
     setEmail(me?.email ?? "")
-  }, [me?.name, me?.email])
+    setInstagram(me?.instagram ?? "")
+    setWhatsapp(me?.whatsapp ?? "")
+  }, [me?.name, me?.email, me?.instagram, me?.whatsapp])
 
   if (!me) return null
 
@@ -35,7 +39,7 @@ export function Profile() {
     e.preventDefault()
     setSavingProfile(true)
     try {
-      await api.patch("/api/me", { name, email })
+      await api.patch("/api/me", { name, email, instagram, whatsapp })
       await refresh()
       toast.success("Perfil atualizado.")
     } catch (err) {
@@ -140,6 +144,24 @@ export function Profile() {
             <div className="flex flex-col gap-2">
               <Label htmlFor="email">E-mail</Label>
               <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="instagram">Instagram</Label>
+              <Input
+                id="instagram"
+                value={instagram}
+                onChange={(e) => setInstagram(e.target.value)}
+                placeholder="@seuusuario"
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="whatsapp">WhatsApp</Label>
+              <Input
+                id="whatsapp"
+                value={whatsapp}
+                onChange={(e) => setWhatsapp(e.target.value)}
+                placeholder="(00) 00000-0000"
+              />
             </div>
             <Button type="submit" disabled={savingProfile} className="self-start">
               {savingProfile ? "Salvando..." : "Salvar"}

@@ -115,11 +115,12 @@ const configuration = {
   claims: {
     openid: ['sub'],
     email: ['email', 'email_verified', 'is_admin'],
-    // Scope novo — nome/foto de perfil (self-service, ver routes/auth.js).
-    // Nenhum client precisa ser reconfigurado aqui pra usar: é só incluir
-    // "profile" no `scope` do authorizationUrl de cada app consumidor.
-    // Claim names padrão OIDC (name/picture), não os nomes de coluna do banco.
-    profile: ['name', 'picture'],
+    // Scope novo — nome/foto/instagram/whatsapp de perfil (self-service, ver
+    // routes/auth.js). Nenhum client precisa ser reconfigurado aqui pra usar:
+    // é só incluir "profile" no `scope` do authorizationUrl de cada app
+    // consumidor. name/picture são claim names padrão OIDC; instagram/
+    // whatsapp não têm equivalente padrão, então usa o nome de coluna mesmo.
+    profile: ['name', 'picture', 'instagram', 'whatsapp'],
   },
   interactions: {
     url: (_ctx, interaction) => `/interaction/${interaction.uid}`,
@@ -150,6 +151,8 @@ const configuration = {
           is_admin: user.is_superuser,
           name: user.name || undefined,
           picture: avatarUrl(user.avatar_path) || undefined,
+          instagram: user.instagram || undefined,
+          whatsapp: user.whatsapp || undefined,
         }
       },
     }

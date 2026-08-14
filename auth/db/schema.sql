@@ -22,12 +22,21 @@ BEGIN
   END IF;
 END $$;
 
--- Perfil self-service (nome, foto) — nada disso é obrigatório, usuário pode
--- nunca preencher. avatar_path guarda o caminho relativo dentro de
--- MEDIA_DIR (ex. "avatars/<id>-<timestamp>.jpg"), nunca a URL completa —
--- monta a URL pública em src/media.js (avatarUrl()), não aqui.
+-- Perfil self-service (nome, foto) — avatar nunca é obrigatório. avatar_path
+-- guarda o caminho relativo dentro de MEDIA_DIR (ex.
+-- "avatars/<id>-<timestamp>.jpg"), nunca a URL completa — monta a URL
+-- pública em src/media.js (avatarUrl()), não aqui.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS name TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_path TEXT;
+
+-- instagram/whatsapp — obrigatórios no signup (routes/auth.js POST /signup),
+-- mas a coluna em si não tem NOT NULL: contas criadas antes dessa mudança
+-- (admin.js POST /api/users, ou signups antigos) ficam com null até
+-- completarem o perfil em apps.bit-lab.tech/profile. Sem CHECK de formato
+-- de propósito — mesmo espírito minimalista do resto do schema (ver
+-- email_verified sempre true em oidc.js).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS instagram TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS whatsapp TEXT;
 
 CREATE TABLE IF NOT EXISTS apps (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

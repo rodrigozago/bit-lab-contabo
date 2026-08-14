@@ -38,6 +38,8 @@ function toMe(user) {
   return {
     email: user.email,
     name: user.name || null,
+    instagram: user.instagram || null,
+    whatsapp: user.whatsapp || null,
     avatarUrl: avatarUrl(user.avatar_path),
     isSuperuser: !!user.is_superuser,
   }
@@ -159,17 +161,24 @@ router.get('/invite/redeem', requireSession, async (req, res) => {
 })
 
 router.post('/signup', express.urlencoded({ extended: false }), async (req, res) => {
-  const { email, password, password2, redirect, token, app: appSlug } = req.body
+  const { email, password, password2, redirect, token, app: appSlug, name, instagram, whatsapp } = req.body
   const ip = req.ip || 'unknown'
-  const fail = (status, error) => res.status(status).type('html').send(renderSignup({ error, redirect, token, app: appSlug }))
+  const fail = (status, error) =>
+    res.status(status).type('html').send(renderSignup({ error, redirect, token, app: appSlug, name, instagram, whatsapp }))
 
   const okRate = await checkLimit(`signup:${ip}`, 5, 60 * 60)
   if (!okRate) return fail(429, 'Muitas contas criadas — tente de novo mais tarde.')
 
   const cleanEmail = (email || '').trim().toLowerCase()
+  const cleanName = (name || '').trim()
+  const cleanInstagram = (instagram || '').trim()
+  const cleanWhatsapp = (whatsapp || '').trim()
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) return fail(400, 'E-mail inválido.')
   if (!password || password.length < 8) return fail(400, 'A senha precisa ter pelo menos 8 caracteres.')
   if (password !== password2) return fail(400, 'As senhas não conferem.')
+  if (!cleanName) return fail(400, 'Preencha seu nome.')
+  if (!cleanInstagram) return fail(400, 'Preencha seu Instagram.')
+  if (!cleanWhatsapp) return fail(400, 'Preencha seu WhatsApp.')
 
   let tokenRow = null
   let selfSignupApp = null
@@ -189,7 +198,13 @@ router.post('/signup', express.urlencoded({ extended: false }), async (req, res)
 
   if (await users.findByEmail(cleanEmail)) return fail(409, 'Já existe uma conta com esse e-mail.')
 
-  const user = await users.create({ email: cleanEmail, password })
+  const user = await users.create({
+    email: cleanEmail,
+    password,
+    name: cleanName,
+    instagram: cleanInstagram,
+    whatsapp: cleanWhatsapp,
+  })
 
   if (tokenRow) {
     await signupTokens.redeem(tokenRow, user.id)
@@ -231,15 +246,23 @@ router.get('/api/me', async (req, res) => {
   res.json(toMe(user))
 })
 
-// PATCH /api/me — nome e/ou e-mail. Sem verificação de e-mail por link (mesma
-// ressalva de email_verified em src/oidc.js) — troca é direta, só checa
-// formato e unicidade.
+// PATCH /api/me — nome, e-mail, instagram, whatsapp. Sem verificação de
+// e-mail por link (mesma ressalva de email_verified em src/oidc.js) — troca
+// é direta, só checa formato e unicidade.
 router.patch('/api/me', requireSession, express.json(), async (req, res) => {
-  const { name, email } = req.body
+  const { name, email, instagram, whatsapp } = req.body
   const updates = {}
 
   if (typeof name === 'string') {
     updates.name = name.trim().slice(0, 100) || null
+  }
+
+  if (typeof instagram === 'string') {
+    updates.instagram = instagram.trim().slice(0, 100) || null
+  }
+
+  if (typeof whatsapp === 'string') {
+    updates.whatsapp = whatsapp.trim().slice(0, 30) || null
   }
 
   if (typeof email === 'string') {
