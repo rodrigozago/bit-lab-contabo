@@ -77,10 +77,17 @@ export function OpencdjForm({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...formData, website_url: honeypot }),
       });
-      if (!res.ok) throw new Error();
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error);
+      }
       setSubmitted(true);
-    } catch {
-      setErrors({ _global: "erro ao enviar, tente novamente" });
+    } catch (err) {
+      const message =
+        err instanceof Error && err.message
+          ? err.message
+          : "não conseguimos registrar sua inscrição agora. tente de novo em alguns minutos, ou manda um email direto pra rz@bit-lab.tech";
+      setErrors({ _global: message });
     } finally {
       setSubmitting(false);
     }

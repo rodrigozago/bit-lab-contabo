@@ -25,7 +25,22 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "campos obrigatórios ausentes" }, { status: 400 });
   }
 
-  await notifyOpencdjSubmission({ name: name.trim(), contact: contact.trim(), genre: genre.trim() });
+  const notified = await notifyOpencdjSubmission({
+    name: name.trim(),
+    contact: contact.trim(),
+    genre: genre.trim(),
+  });
+
+  if (!notified) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error:
+          "não conseguimos registrar sua inscrição agora. tente de novo em alguns minutos, ou manda um email direto pra rz@bit-lab.tech",
+      },
+      { status: 502 },
+    );
+  }
 
   return NextResponse.json({ ok: true });
 }
