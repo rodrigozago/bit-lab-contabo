@@ -1,14 +1,103 @@
 @import "tailwindcss";
 
-/* Bundle CSS próprio deste root layout — mesmo padrão do app/on-air/onair.css:
+/* Bundle CSS próprio deste root layout — mesmo padrão de app/on-air/onair.css:
  * nunca carregado nas páginas de (site)/ ou on-air/, três <html> diferentes,
- * navegar entre eles é full page load. */
-@theme {
-  --color-background: #0a0a0a;
-  --color-foreground: #fdfdfd;
-  --color-accent: #4ade80;
+ * navegar entre eles é full page load.
+ *
+ * Tokens e classes utilitárias abaixo são portados quase 1:1 de
+ * app/globals.css (mesmos valores hex) — é o que permite reaproveitar os
+ * bloks do site principal (Hero, About, Cta, RichTextSection, FeatureGrid,
+ * LogoMarquee) direto na landing do studio, sem reescrevê-los. Se
+ * globals.css mudar esses valores, replicar aqui também (não há import
+ * cross-root-layout possível no Next — cada root é seu próprio bundle). */
+:root {
+  --bg: #0a0a0a;
+  --fg: #fdfdfd;
+  --fg-muted: #a1a1aa;
+  --accent: #4ade80;
+  --border: rgba(255, 255, 255, 0.12);
+
+  --bg-inverse: #fdfdfd;
+  --fg-inverse: #0a0a0a;
+  --fg-inverse-muted: #52525b;
+  --border-inverse: rgba(10, 10, 10, 0.12);
+
+  --grid-gap: 10px;
+  --grid-pad: 16px;
+}
+
+@theme inline {
+  --color-background: var(--bg);
+  --color-foreground: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-accent: var(--accent);
+  --color-border: var(--border);
+  --color-bg-inverse: var(--bg-inverse);
+  --color-fg-inverse: var(--fg-inverse);
+  --color-fg-inverse-muted: var(--fg-inverse-muted);
+  --color-border-inverse: var(--border-inverse);
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-space-grotesk);
 }
 
 body {
   @apply bg-background text-foreground antialiased;
+}
+
+.text-display {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 0.95;
+  font-size: clamp(2.5rem, 4vw + 1.5rem, 8rem);
+  text-transform: uppercase;
+}
+
+.text-heading {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.05;
+  font-size: clamp(1.75rem, 1.5vw + 1.25rem, 3rem);
+}
+
+.text-label {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: clamp(0.6875rem, 0.3vw + 0.625rem, 0.8125rem);
+}
+
+.text-body {
+  font-family: var(--font-sans);
+  line-height: 1.5;
+  font-size: clamp(0.9375rem, 0.2vw + 0.875rem, 1.0625rem);
+}
+
+.grid-12 {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: var(--grid-gap);
+  padding-inline: var(--grid-pad);
+}
+
+.section-pad {
+  padding-inline: var(--grid-pad);
+}
+
+.theme--dark {
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.theme--light {
+  background: var(--bg-inverse);
+  color: var(--fg-inverse);
+}
+
+.theme--light .text-fg-muted {
+  color: var(--fg-inverse-muted);
 }

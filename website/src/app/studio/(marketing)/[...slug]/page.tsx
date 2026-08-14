@@ -3,9 +3,9 @@ import { StoryblokStory } from "@storyblok/react/rsc";
 import { fetchStory } from "@/lib/storyblok";
 import { assertViewableInStudio, isIndexable } from "@/lib/access";
 import { getStudioSession } from "@/lib/studio-session";
-import type { PageStoryContent, ProjectStoryContent } from "@/lib/types";
+import type { PageStoryContent, ProjectStoryContent, LabelStoryContent } from "@/lib/types";
 
-type AnyStoryContent = PageStoryContent | ProjectStoryContent;
+type AnyStoryContent = PageStoryContent | ProjectStoryContent | LabelStoryContent;
 
 /** Catch-all pra qualquer página criada no Storyblok dentro da área studio
  * (slug prefixado "studio/..."). Mesmo padrão do (site)/[...slug]/page.tsx,
@@ -22,8 +22,16 @@ export async function generateMetadata({
   const story = await fetchStory<AnyStoryContent>(`studio/${slug.join("/")}`);
   if (!story) return {};
 
+  // "title" existe em page/project; "label" tem "name" no lugar — sem campo
+  // comum entre os três, resolve o fallback dinamicamente. SbBlokData tem
+  // index signature própria (SbBlokKeyDataTypes), então o acesso direto não
+  // garante string — coage explicitamente.
+  const rawTitle =
+    "title" in story.content ? story.content.title : story.content.name;
+  const fallbackTitle = typeof rawTitle === "string" ? rawTitle : undefined;
+
   return {
-    title: story.content.seo_title || story.content.title,
+    title: story.content.seo_title || fallbackTitle,
     description: story.content.seo_description,
     robots: isIndexable(story) ? undefined : { index: false, follow: false },
   };

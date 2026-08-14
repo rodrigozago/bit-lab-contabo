@@ -15,6 +15,10 @@ import { LogoMarquee } from "./LogoMarquee";
 import { About } from "./About";
 import { Contact } from "./Contact";
 import { OnAirSlots } from "./OnAirSlots";
+import { Label } from "./Label";
+import { LabelIndex } from "./LabelIndex";
+import { StudioCalendar } from "./StudioCalendar";
+import { StudioContactForm } from "./StudioContactForm";
 
 export const blokComponents: SbReactComponentsMap = {
   page: Page,
@@ -29,4 +33,8 @@ export const blokComponents: SbReactComponentsMap = {
   about: About,
   contact: Contact,
   on_air: OnAirSlots,
+  label: Label,
+  label_index: LabelIndex,
+  studio_calendar: StudioCalendar,
+  studio_contact: StudioContactForm,
 };

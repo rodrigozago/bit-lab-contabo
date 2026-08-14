@@ -188,6 +188,61 @@ export interface OpencdjConfigStoryContent extends SbBlokData {
   logo?: StoryblokImage;
 }
 
+/** Story raiz, pasta `studio/labels/` — um selo/coletivo do studio (ex.
+ * Pista Oculta). Página de detalhe própria, renderizada por
+ * components/bloks/Label.tsx (registrado como "label" em bloks/index.tsx —
+ * diferente de "project", que não tem componente raiz registrado hoje). */
+export interface LabelStoryContent extends SbBlokData, SeoFields {
+  component: "label";
+  name: string;
+  tagline?: string;
+  bio: object;
+  photo?: StoryblokImage;
+  instagram?: string;
+  genres?: string;
+  visibility?: Visibility;
+}
+
+/** Blok — vitrine dos labels na landing do studio. Busca sozinho via
+ * content_type "label", mesmo padrão do ProjectIndexBlok. */
+export interface LabelIndexBlok extends SectionBlok {
+  component: "label_index";
+  heading?: string;
+}
+
+/** Story raiz, pasta `studio-events/` (fora de `studio/`, mesmo padrão de
+ * `on-air-slots/`) — um evento/showcase de algum label do studio. Nunca
+ * buscada por slug individual, só em lote pelo StudioCalendar. starts_at/
+ * ends_at são campos Date/Time do Storyblok — horário de parede de São
+ * Paulo, convertidos com spWallToUtcIso() de src/lib/onair-time.ts. */
+export interface StudioEventStoryContent extends SbBlokData {
+  component: "studio_event";
+  title: string;
+  label_name?: string;
+  starts_at: string;
+  ends_at?: string;
+  location?: string;
+  description?: string;
+  link?: string;
+  cover?: StoryblokImage;
+}
+
+/** Blok — calendário de próximos eventos na landing do studio. */
+export interface StudioCalendarBlok extends SectionBlok {
+  component: "studio_calendar";
+  heading?: string;
+}
+
+/** Blok — form de contato público (não confundir com ContactBlok, que é só
+ * display de email/telefone). Submete pra POST /contact/submit, que notifica
+ * via Slack (website/src/lib/slack.ts notifyStudioContact) — sem sessão
+ * exigida, ao contrário do form do /opencdj. */
+export interface StudioContactBlok extends SectionBlok {
+  component: "studio_contact";
+  heading: string;
+  intro?: string;
+}
+
 /** Forma já processada de um slot — o que cruza a fronteira server→client em
  * OnAirClient.tsx. Só ISO strings, nada de `Date` (precisa ser serializável). */
 export interface OnAirSlotView {
