@@ -16,6 +16,7 @@ services:
       STUDIO_OIDC_CLIENT_SECRET: ${STUDIO_OIDC_CLIENT_SECRET}
       STUDIO_SESSION_SECRET: ${STUDIO_SESSION_SECRET}
       STUDIO_PUBLIC_URL: ${STUDIO_PUBLIC_URL:-https://studio.bit-lab.tech}
+      SLACK_OPENCDJ_WEBHOOK_URL: ${SLACK_OPENCDJ_WEBHOOK_URL:-}
     networks: [website]
     restart: unless-stopped
 

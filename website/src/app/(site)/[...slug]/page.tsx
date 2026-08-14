@@ -11,12 +11,14 @@ type AnyStoryContent = PageStoryContent | ProjectStoryContent;
  * por aqui. O componente certo (page ou project) é escolhido pelo
  * `StoryblokStory` com base em `content.component`, então uma única rota
  * cobre `/sobre`, `/contato`, `/projetos` e `/projetos/nome-do-projeto`.
- * "on-air" também fica de fora: é um root layout próprio em app/on-air/,
- * fora do grupo (site) — sem excluir aqui, esse catch-all tentaria gerar
- * uma página estática pra "/on-air" e colidiria com essa rota literal. */
+ * "on-air" e "opencdj" também ficam de fora: são root layouts próprios em
+ * app/on-air/ e app/opencdj/, fora do grupo (site) — sem excluir aqui, esse
+ * catch-all tentaria gerar uma página estática colidindo com essas rotas
+ * literais. "opencdj-config" é a story singleton de copy do /opencdj,
+ * nunca deve virar uma página própria. */
 export async function generateStaticParams() {
   const stories = await fetchPublishedStories<AnyStoryContent>({
-    excluding_slugs: "home,config,on-air",
+    excluding_slugs: "home,config,on-air,opencdj-config",
   });
 
   return stories

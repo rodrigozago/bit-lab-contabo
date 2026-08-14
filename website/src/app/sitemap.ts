@@ -7,7 +7,7 @@ const BASE_URL = "https://bit-lab.tech";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const stories = await fetchPublishedStories<PageStoryContent | ProjectStoryContent>({
-    excluding_slugs: "config",
+    excluding_slugs: "config,opencdj-config",
   });
 
   const entries: MetadataRoute.Sitemap = stories

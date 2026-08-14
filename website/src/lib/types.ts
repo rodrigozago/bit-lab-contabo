@@ -165,6 +165,29 @@ export interface OnAirBlok extends SbBlokData {
   component: "on_air";
 }
 
+/** Story singleton, slug "opencdj-config" — copy + labels do form da página
+ * /opencdj. Excluída do catch-all/sitemap (ver excluding_slugs), igual ao
+ * padrão de "config". Vídeo/logo do hero são Assets do Storyblok, não
+ * arquivos estáticos — trocáveis sem deploy. */
+export interface OpencdjConfigStoryContent extends SbBlokData {
+  component: "opencdj_config";
+  headline: string;
+  subheadline: string;
+  description: string;
+  manifesto: object;
+  name_label: string;
+  name_placeholder: string;
+  contact_label: string;
+  contact_placeholder: string;
+  genre_label: string;
+  genre_placeholder: string;
+  submit_text: string;
+  success_message: string;
+  hero_video_mp4?: StoryblokImage;
+  hero_video_webm?: StoryblokImage;
+  logo?: StoryblokImage;
+}
+
 /** Forma já processada de um slot — o que cruza a fronteira server→client em
  * OnAirClient.tsx. Só ISO strings, nada de `Date` (precisa ser serializável). */
 export interface OnAirSlotView {
