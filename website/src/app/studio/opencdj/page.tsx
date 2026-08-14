@@ -3,9 +3,11 @@ import { notFound } from "next/navigation";
 import { StoryblokServerRichText } from "@storyblok/react/rsc";
 import type { StoryblokRichTextNode } from "@storyblok/react/rsc";
 import { fetchStory } from "@/lib/storyblok";
+import { getStudioSession } from "@/lib/studio-session";
 import type { OpencdjConfigStoryContent } from "@/lib/types";
 import { OpencdjTypewriter } from "./OpencdjTypewriter";
 import { OpencdjForm } from "./OpencdjForm";
+import { OpencdjLoginGate } from "./OpencdjLoginGate";
 
 async function getConfig(): Promise<OpencdjConfigStoryContent> {
   const story = await fetchStory<OpencdjConfigStoryContent>("opencdj-config");
@@ -22,6 +24,11 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function OpencdjPage() {
+  const session = await getStudioSession();
+  if (!session) {
+    return <OpencdjLoginGate returnTo="/opencdj" />;
+  }
+
   const config = await getConfig();
 
   return (

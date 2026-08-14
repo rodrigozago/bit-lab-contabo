@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { notifyOpencdjSubmission } from "@/lib/slack";
+import { getStudioSession } from "@/lib/studio-session";
 
 const MAX_LEN = 200;
 
@@ -8,6 +9,13 @@ function isValidField(value: unknown): value is string {
 }
 
 export async function POST(request: NextRequest) {
+  // A página já barra sem sessão (OpencdjLoginGate), mas isso não impede um
+  // POST direto — o form agora é exclusivo pra quem logou, checa de novo aqui.
+  const session = await getStudioSession();
+  if (!session) {
+    return NextResponse.json({ ok: false, error: "não autenticado" }, { status: 401 });
+  }
+
   let body: Record<string, unknown>;
   try {
     body = await request.json();

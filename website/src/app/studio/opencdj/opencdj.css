@@ -1,12 +1,12 @@
-@import "tailwindcss";
+/* Bundle CSS aninhado dentro de app/studio/ (não é mais root layout — ver
+ * layout.tsx). Sem @import "tailwindcss" aqui: o layout raiz de studio/
+ * (studio.css) já importa, reimportar duplicaria a base/reset no bundle.
+ * Portado quase verbatim de opencdj/src/index.css + App.module.css. Tokens
+ * (--cdj-*) e o fundo/cor que antes viviam em :root/body agora ficam em
+ * .opencdj-page — não pode vazar pro resto da área studio, que compartilha
+ * o mesmo <body>. */
 
-/* Bundle CSS próprio deste root layout — mesmo padrão de app/on-air/onair.css.
- * Portado quase verbatim de opencdj/src/index.css + App.module.css (fontes
- * já vêm via next/font/google no layout.tsx, --font-mono/--font-display
- * setados por lá). Tudo escopado sob .opencdj-page pra não colidir com o
- * resto do site (site global usa nomes de classe curtos tipo .input/.form). */
-
-:root {
+.opencdj-page {
   --cdj-green: #00ff41;
   --cdj-green-dim: rgba(0, 255, 65, 0.55);
   --cdj-green-faint: rgba(0, 255, 65, 0.12);
@@ -14,21 +14,15 @@
   --cdj-glow: 0 0 8px rgba(0, 255, 65, 0.4), 0 0 20px rgba(0, 255, 65, 0.15);
   --cdj-glow-strong: 0 0 10px rgba(0, 255, 65, 0.7), 0 0 30px rgba(0, 255, 65, 0.3);
   --cdj-bg: #050505;
-}
 
-body {
-  margin: 0;
-  font-family: var(--font-mono), "Courier New", monospace;
-  background: var(--cdj-bg);
-  color: var(--cdj-green-dim);
-  -webkit-font-smoothing: antialiased;
-}
-
-.opencdj-page {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
   scroll-behavior: smooth;
+  font-family: var(--font-mono), "Courier New", monospace;
+  background: var(--cdj-bg);
+  color: var(--cdj-green-dim);
+  -webkit-font-smoothing: antialiased;
 }
 
 .opencdj-page ::selection {
