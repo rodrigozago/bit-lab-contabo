@@ -39,11 +39,26 @@ export function SiteNav({ links }: { links: NavLink[] }) {
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="col-span-6 justify-self-end text-label md:hidden"
+          className="col-span-6 flex h-8 w-8 flex-col items-end justify-center justify-self-end gap-[5px] md:hidden"
           aria-expanded={open}
           aria-controls="mobile-nav"
+          aria-label={open ? "Fechar menu" : "Abrir menu"}
         >
-          {open ? "Fechar" : "Menu"}
+          <span
+            className={`h-px w-6 bg-current transition-transform duration-200 ${
+              open ? "translate-y-[3px] rotate-45" : ""
+            }`}
+          />
+          <span
+            className={`h-px w-6 bg-current transition-opacity duration-200 ${
+              open ? "opacity-0" : "opacity-100"
+            }`}
+          />
+          <span
+            className={`h-px w-6 bg-current transition-transform duration-200 ${
+              open ? "-translate-y-[3px] -rotate-45" : ""
+            }`}
+          />
         </button>
       </div>
 
