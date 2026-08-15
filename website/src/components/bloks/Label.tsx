@@ -3,6 +3,7 @@ import { storyblokEditable, StoryblokServerRichText } from "@storyblok/react/rsc
 import type { StoryblokRichTextNode } from "@storyblok/react/rsc";
 import type { LabelStoryContent } from "@/lib/types";
 import { RevealText } from "@/components/motion/RevealText";
+import { StaggerList } from "@/components/motion/StaggerList";
 
 /** Componente RAIZ (não nestable) — página de detalhe de um label, ex.
  * studio.bit-lab.tech/labels/pista-oculta. Registrado em bloks/index.tsx
@@ -60,6 +61,54 @@ export function Label({ blok }: { blok: LabelStoryContent }) {
               INSTAGRAM
             </a>
           )}
+        </div>
+      )}
+
+      {blok.participants && blok.participants.length > 0 && (
+        <div className="col-span-12 mt-20">
+          <p className="text-label mb-8 text-accent">PARTICIPANTES</p>
+
+          <StaggerList className="grid-12 gap-y-10">
+            {blok.participants.map((participant) => (
+              <div key={participant._uid} className="col-span-12 md:col-span-4">
+                {participant.photo?.filename && (
+                  <div className="relative mb-4 aspect-square overflow-hidden">
+                    <Image
+                      src={participant.photo.filename}
+                      alt={participant.photo.alt || participant.name}
+                      fill
+                      className="object-cover"
+                    />
+                  </div>
+                )}
+
+                <p className="text-label">{participant.name}</p>
+
+                {participant.function_label && (
+                  <p className="text-label text-fg-muted">{participant.function_label}</p>
+                )}
+
+                {participant.mini_bio && (
+                  <p className="text-body text-fg-muted mt-2">{participant.mini_bio}</p>
+                )}
+
+                {participant.instagram && (
+                  <a
+                    href={
+                      participant.instagram.startsWith("http")
+                        ? participant.instagram
+                        : `https://instagram.com/${participant.instagram.replace(/^@/, "")}`
+                    }
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-label mt-2 inline-block w-fit border-b border-accent pb-1"
+                  >
+                    INSTAGRAM
+                  </a>
+                )}
+              </div>
+            ))}
+          </StaggerList>
         </div>
       )}
     </main>

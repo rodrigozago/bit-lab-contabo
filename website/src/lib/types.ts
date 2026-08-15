@@ -208,6 +208,18 @@ export interface OpencdjConfigStoryContent extends SbBlokData {
   logo?: StoryblokImage;
 }
 
+/** Blok nestable — um participante/integrante do label (ex. DJ residente).
+ * `mini_bio` é texto curto (não richtext) de propósito — é pra ser mesmo
+ * bem enxuto, tipo um subtítulo, não uma bio completa como a do label. */
+export interface ParticipantBlok extends SbBlokData {
+  component: "participant";
+  name: string;
+  function_label?: string;
+  mini_bio?: string;
+  photo?: StoryblokImage;
+  instagram?: string;
+}
+
 /** Story raiz, pasta `studio/labels/` — um selo/coletivo do studio (ex.
  * Pista Oculta). Página de detalhe própria, renderizada por
  * components/bloks/Label.tsx (registrado como "label" em bloks/index.tsx —
@@ -221,6 +233,10 @@ export interface LabelStoryContent extends SbBlokData, SeoFields {
   instagram?: string;
   genres?: string;
   visibility?: Visibility;
+  /** Lista tipada, mesmo padrão de AboutBlok.pillars — renderizada direto
+   * em Label.tsx, sem passar por StoryblokServerComponent (ver histórico:
+   * um `body: SbBlokData[]` genérico já quebrou a página de label antes). */
+  participants?: ParticipantBlok[];
 }
 
 /** Blok — vitrine dos labels na landing do studio. Busca sozinho via
