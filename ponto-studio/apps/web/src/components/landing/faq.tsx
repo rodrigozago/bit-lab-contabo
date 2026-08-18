@@ -39,9 +39,24 @@ const FAQS = [
   },
 ];
 
+// FAQPage structured data — gerado a partir do mesmo array FAQS que renderiza
+// na tela, pra nunca ficar dessincronizado do conteúdo visível (Google exige
+// isso pra manter o rich result elegível). Ver
+// https://developers.google.com/search/docs/appearance/structured-data/faqpage
+const faqJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: FAQS.map((faq) => ({
+    "@type": "Question",
+    name: faq.question,
+    acceptedAnswer: { "@type": "Answer", text: faq.answer },
+  })),
+};
+
 export function FAQ() {
   return (
     <Section id="faq">
+      <script type="application/ld+json">{JSON.stringify(faqJsonLd)}</script>
       <div className="max-w-container mx-auto flex max-w-[720px] flex-col items-center gap-6 sm:gap-12">
         <h2 className="text-center text-3xl leading-tight font-semibold text-balance sm:text-5xl sm:leading-tight">
           Perguntas frequentes
