@@ -138,9 +138,17 @@ router.post('/api/signup-tokens', async (req, res) => {
   })
   await auditLog.record(req.user, 'signup_token.create', token.id, { role, email: email || null, appIds })
   const url = `https://apps.bit-lab.tech/signup?token=${token.raw}`
-  // Falha no envio não bloqueia a criação do convite — o superuser sempre
-  // pode copiar o link da resposta abaixo como fallback (ver mailClient.js).
-  if (email) mailClient.sendInvite({ to: email, url, expiresAt: token.expires_at })
+  // Texto do e-mail depende do(s) app(s) concedidos — só quando o convite dá
+  // acesso a UM único app é que dá pra escolher um texto específico dele (ex.:
+  // convite do alfa do bordado-digital). Convite pra vários apps de uma vez
+  // cai no texto genérico (ver email/src/templates/invite.js).
+  if (email) {
+    const grantedApps = await appsModel.findByIds(appIds)
+    const appSlug = grantedApps.length === 1 ? grantedApps[0].slug : undefined
+    // Falha no envio não bloqueia a criação do convite — o superuser sempre
+    // pode copiar o link da resposta abaixo como fallback (ver mailClient.js).
+    mailClient.sendInvite({ to: email, url, expiresAt: token.expires_at, appSlug })
+  }
   res.json({ id: token.id, url, expiresAt: token.expires_at })
 })
 

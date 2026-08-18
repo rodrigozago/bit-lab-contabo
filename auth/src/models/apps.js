@@ -10,6 +10,15 @@ async function findBySlug(slug) {
   return rows[0] || null
 }
 
+/** Usado no envio de convite por e-mail — decide o texto certo (ver
+ * routes/admin.js POST /api/signup-tokens) sem precisar de outra ida ao banco
+ * por app. */
+async function findByIds(ids) {
+  if (!ids.length) return []
+  const { rows } = await pool.query('SELECT * FROM apps WHERE id = ANY($1)', [ids])
+  return rows
+}
+
 async function create({ slug, name }) {
   const { rows } = await pool.query(
     'INSERT INTO apps (slug, name) VALUES ($1, $2) RETURNING *',
@@ -52,4 +61,4 @@ async function setTerms(id, { termsVersion, termsUrl }) {
   return rows[0] || null
 }
 
-module.exports = { list, findBySlug, create, ensure, remove, setSelfSignup, setTerms }
+module.exports = { list, findBySlug, findByIds, create, ensure, remove, setSelfSignup, setTerms }
