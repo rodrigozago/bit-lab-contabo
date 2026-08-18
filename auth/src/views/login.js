@@ -1,44 +1,4 @@
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, (c) => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-  }[c]))
-}
-
-// Paleta neutra (aprox. dos tokens OKLCH do shadcn/ui "neutral", modo escuro)
-// + Inter — só pra não destoar visualmente da SPA nova em apps.bit-lab.tech.
-// Continua HTML/CSS puro (essas telas não fazem parte da SPA, ver plano).
-function layout(title, body) {
-  return `<!doctype html>
-<html lang="pt-br">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>${escapeHtml(title)}</title>
-<style>
-  :root { color-scheme: dark; }
-  body { font-family: 'Inter', system-ui, sans-serif; background: #141414; color: #fafafa; display: flex;
-         align-items: center; justify-content: center; height: 100vh; margin: 0; }
-  form, .card { background: #1f1f1f; border: 1px solid #333; padding: 32px; border-radius: 12px; width: 320px; }
-  h1 { font-size: 18px; margin: 0 0 20px; font-weight: 600; }
-  label { display: block; font-size: 13px; color: #a3a3a3; margin-bottom: 4px; }
-  input { width: 100%; padding: 10px; margin-bottom: 16px; border-radius: 8px; border: 1px solid #3a3a3a;
-          background: #141414; color: #fafafa; box-sizing: border-box; font: inherit; }
-  input:read-only { opacity: 0.7; }
-  button { width: 100%; padding: 10px; border-radius: 8px; border: none; background: #7c5cbf;
-           color: #fff; font-weight: 600; cursor: pointer; font: inherit; }
-  .error { color: #f87171; font-size: 13px; margin-bottom: 12px; }
-  .alt { font-size: 13px; color: #a3a3a3; margin-top: 16px; text-align: center; }
-  .alt a { color: #b8a3e8; }
-  .card p { font-size: 14px; line-height: 1.5; color: #d4d4d4; margin: 0 0 12px; }
-  .btn-secondary { display: block; text-align: center; padding: 10px; border-radius: 8px;
-                   background: #333; color: #fff; text-decoration: none; font-weight: 600; }
-</style>
-</head>
-<body>
-${body}
-</body>
-</html>`
-}
+const { escapeHtml, layout } = require('./layout')
 
 // action customizável: o fluxo OIDC posta em /interaction/:uid/login em vez de /login
 function renderLogin({ error, redirect, action = '/login', signupHref } = {}) {
@@ -52,6 +12,7 @@ function renderLogin({ error, redirect, action = '/login', signupHref } = {}) {
     <label>Senha</label>
     <input type="password" name="password" required />
     <button type="submit">Entrar</button>
+    <div class="alt"><a href="/forgot-password${redirect ? `?redirect=${encodeURIComponent(redirect)}` : ''}">Esqueci minha senha</a></div>
     ${signupHref ? `<div class="alt">Não tem conta? <a href="${escapeHtml(signupHref)}">Criar conta</a></div>` : ''}
   </form>`)
 }
@@ -95,12 +56,18 @@ function renderSignup({ error, redirect, token, app, lockedEmail, name, instagra
       <label>WhatsApp</label>
       <input type="text" name="whatsapp" placeholder="(00) 00000-0000" required
              value="${escapeHtml(whatsapp || '')}" />
+      <label style="display:flex;align-items:flex-start;gap:8px;margin-bottom:16px;">
+        <input type="checkbox" name="acceptTerms" required style="width:auto;margin:4px 0 0;" />
+        <span style="font-size:13px;color:#a3a3a3;">Li e aceito os <a href="/legal/termos" target="_blank" rel="noopener" style="color:#b8a3e8;">Termos de Uso</a>
+        e a <a href="/legal/privacidade" target="_blank" rel="noopener" style="color:#b8a3e8;">Política de Privacidade</a>.</span>
+      </label>
       <button type="submit">Criar conta</button>
     </form>
   </div>`)
 }
 
-// Tela de mensagem simples (ex: convite inválido/expirado) — sem form.
+// Tela de mensagem simples (ex: convite inválido/expirado, e-mail verificado
+// com sucesso) — sem form.
 function renderMessage({ title, message }) {
   return layout(`bit-lab — ${title}`, `  <div class="card">
     <h1>${escapeHtml(title)}</h1>
@@ -108,4 +75,59 @@ function renderMessage({ title, message }) {
   </div>`)
 }
 
-module.exports = { renderLogin, renderSignup, renderMessage }
+// Tela mostrada no meio do fluxo OIDC (prompt "consent") quando a conta
+// ainda não confirmou o e-mail — ver routes/interaction.js. Fica "pendurada"
+// aqui até o usuário confirmar (clicando no link do e-mail) e tentar entrar
+// de novo no app — não tenta retomar a interação sozinha.
+function renderVerifyPending({ uid, resent } = {}) {
+  return layout('bit-lab — confirme seu e-mail', `  <div style="display:flex;flex-direction:column;gap:16px;">
+    <div class="card">
+      <h1>Confirme seu e-mail</h1>
+      <p>Antes de continuar, você precisa confirmar seu e-mail — mandamos um
+      link quando você criou a conta.</p>
+      <p>Depois de clicar no link do e-mail, feche esta aba e tente entrar
+      no app de novo.</p>
+      ${resent ? '<p style="color:#a3e8b8;">Reenviamos o e-mail de confirmação.</p>' : ''}
+    </div>
+    <form method="POST" action="/interaction/${escapeHtml(uid)}/resend-verification">
+      <button type="submit">Reenviar e-mail de confirmação</button>
+    </form>
+  </div>`)
+}
+
+function renderForgotPassword({ error, sent, redirect } = {}) {
+  if (sent) {
+    return layout('bit-lab — verifique seu e-mail', `  <div class="card">
+      <h1>Verifique seu e-mail</h1>
+      <p>Se existe uma conta com esse e-mail, mandamos um link pra redefinir a senha. O link expira em 1 hora.</p>
+      <a class="btn-secondary" href="/login">Voltar pro login</a>
+    </div>`)
+  }
+  const safeRedirect = escapeHtml(redirect || '')
+  return layout('bit-lab — esqueci minha senha', `  <form method="POST" action="/forgot-password">
+    <h1>🪡 Esqueci minha senha</h1>
+    ${error ? `<div class="error">${escapeHtml(error)}</div>` : ''}
+    <input type="hidden" name="redirect" value="${safeRedirect}" />
+    <label>E-mail</label>
+    <input type="email" name="email" required autofocus />
+    <button type="submit">Enviar link de redefinição</button>
+    <div class="alt"><a href="/login">Voltar pro login</a></div>
+  </form>`)
+}
+
+function renderResetPassword({ error, token, redirect } = {}) {
+  const safeRedirect = escapeHtml(redirect || '')
+  return layout('bit-lab — nova senha', `  <form method="POST" action="/reset-password">
+    <h1>🪡 Escolha uma nova senha</h1>
+    ${error ? `<div class="error">${escapeHtml(error)}</div>` : ''}
+    <input type="hidden" name="token" value="${escapeHtml(token)}" />
+    <input type="hidden" name="redirect" value="${safeRedirect}" />
+    <label>Nova senha (mín. 8 caracteres)</label>
+    <input type="password" name="password" minlength="8" required autofocus />
+    <label>Confirme a nova senha</label>
+    <input type="password" name="password2" minlength="8" required />
+    <button type="submit">Salvar nova senha</button>
+  </form>`)
+}
+
+module.exports = { renderLogin, renderSignup, renderMessage, renderVerifyPending, renderForgotPassword, renderResetPassword }

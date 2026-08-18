@@ -1,6 +1,7 @@
 const users = require('./models/users')
 const apps = require('./models/apps')
 const appAccess = require('./models/appAccess')
+const { BORDADO_DIGITAL_TERMS_VERSION } = require('./legal')
 
 const SEED_APPS = [
   { slug: 'bordado-digital', name: 'Bordado Digital' },
@@ -20,6 +21,18 @@ async function bootstrap() {
   const seededApps = []
   for (const app of SEED_APPS) {
     seededApps.push(await apps.ensure(app))
+  }
+
+  // Termo próprio do bordado-digital (decisão do alpha) — só seta se ainda
+  // não foi configurado, pra um superuser poder trocar depois pelo painel
+  // sem o bootstrap sobrescrever a cada boot (mesmo cuidado de apps.ensure()
+  // com allow_self_signup).
+  const bordadoDigital = seededApps.find((app) => app.slug === 'bordado-digital')
+  if (bordadoDigital && !bordadoDigital.terms_version) {
+    await apps.setTerms(bordadoDigital.id, {
+      termsVersion: BORDADO_DIGITAL_TERMS_VERSION,
+      termsUrl: '/legal/termos',
+    })
   }
 
   const existing = await users.count()

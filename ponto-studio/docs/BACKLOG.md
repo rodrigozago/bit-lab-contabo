@@ -19,38 +19,56 @@ que precisa melhorar e o que falta.
 
 **Prioridade:** `P0` = bloqueia o alpha · `P1` = importante no alpha · `P2` = pós-alpha.
 
+> **Atualização (2026-08-17):** este documento estava bem atrasado em
+> relação ao código — auth, admin, persistência e o player de exportação já
+> tinham sido implementados sem atualizar as tabelas abaixo. Revisão feita
+> lendo o código atual (`ponto-studio/apps/api`, `ponto-studio/apps/web`,
+> `auth/`) nesta sessão; ver `SEGURANCA-PRE-LANCAMENTO.md` pro estado de
+> segurança em paralelo.
+
 ---
 
 ## EPIC-AUTH — Autenticação & Acesso
 
-O ponto-studio hoje **não tem login** — qualquer um usa e os projetos são
-anônimos. Para o alpha precisamos de identidade por usuário (projetos ficam
-atrelados à conta) e controle de quem pode entrar.
+| ID | Status | Prio | Item |
+|----|--------|------|------|
+| AUTH-1 | ✅ | — | **SSO in-app (BFF OIDC).** Implementado em `apps/api/src/routes/auth.ts` + `services/oidcClient.ts` + `services/session.ts` (`requireSession`). Rotas `/api/auth/login`, `/api/auth/callback`, `/api/auth/logout`, `/api/me` funcionando, sessão via cookie. |
+| AUTH-2 | ✅ | — | `bordado-digital` registrado como client OIDC em `auth/src/oidc.js` (secret via `BORDADO_DIGITAL_OIDC_SECRET`), app semeado em `auth/src/bootstrapAdmin.js`. |
+| AUTH-3 | ✅ | — | Gate de login no front (`apps/web/src/lib/auth.ts`) — editor só abre logado. |
+| AUTH-4 | ✅ | — | Gate nginx simplificado: `nginx/bordado.digital.conf` não usa mais `auth_request` — comentário no próprio arquivo confirma que o SSO in-app assumiu o controle de acesso. |
+| AUTH-5 | ✅ | — | Ownership de projeto por usuário — `owner_id` em `db/schema.sql` + checagem de dono em `projectsRepo.ts` (depende de DATA-1, também ✅). |
+
+## EPIC-ADMIN — Aprovação de contas
+
+> **O modelo mudou desde que este epic foi escrito.** A ideia original era
+> uma fila de solicitações (`access_requests`) com aprovação manual do
+> admin por conta. Isso foi **abandonado** no `auth/` em favor de dois
+> mecanismos mais simples, já implementados e compartilhados por todos os
+> apps do bit-lab (não só o bordado-digital):
+>
+> 1. **Convites** — `signup_tokens` + `signup_token_apps`
+>    (`auth/db/schema.sql`): o superuser gera um link de convite com role e
+>    apps concedidos; uso único, com expiração.
+> 2. **Self-signup por app** — coluna `apps.allow_self_signup` (default
+>    `false`), ligável por app pelo superuser em
+>    `apps.bit-lab.tech/admin/apps` (`auth/web/src/pages/admin/Apps.tsx` →
+>    `PATCH /admin/api/apps/:id/self-signup` → `auth/src/models/apps.js`
+>    `setSelfSignup`). Com a flag ligada, `POST /signup?app=bordado-digital`
+>    (`auth/src/routes/auth.js`) cria a conta e **já concede** `app_access`
+>    (`end_user`) na hora — sem fila, sem aprovação manual.
+>
+> **Decisão pro alpha (2026-08-17): self-signup aberto.** Qualquer pessoa
+> pode criar conta e usar o Bordado Digital direto — sem convite, sem
+> aprovação. Ação operacional: ligar `allow_self_signup` pra
+> `bordado-digital` no painel admin (não é mudança de código).
 
 | ID | Status | Prio | Item |
 |----|--------|------|------|
-| AUTH-1 | ❌ | P0 | **SSO in-app (padrão face-lab / BFF OIDC).** API vira o client OIDC confidencial (`openid-client`), a SPA nunca vê tokens. Rotas `/api/auth/login`, `/api/auth/callback`, `/api/auth/logout`, `/api/me`. Sessão via cookie + Redis. Espelha `is_admin` do auth. |
-| AUTH-2 | ❌ | P0 | **Registrar `bordado-digital` como client OIDC no serviço `auth`** (`auth/src/oidc.js`): `client_id: 'bordado-digital'`, secret via env `BORDADO_DIGITAL_OIDC_SECRET`, `redirect_uris` de prod + local. O app `bordado-digital` já está semeado em `bootstrapAdmin.js`. |
-| AUTH-3 | ❌ | P0 | **Gate de login no front.** `AuthContext` + `useAuth` (igual `face-lab/apps/web/src/lib/auth.ts`), tela de login/redirect, e proteção do Editor (só entra logado). |
-| AUTH-4 | 🔧 | P1 | **Ajustar o gate nginx de `bordado.digital`.** Hoje há `auth_request` no nginx (gate grosso de página). Com o SSO in-app, isso duplicaria o login → remover/relaxar o `auth_request` e deixar o app controlar (para conseguir mostrar telas de "aguardando aprovação"). |
-| AUTH-5 | ❌ | P1 | **Ownership de projeto por usuário** (ver DATA-1). Sem isso, login não protege nada — qualquer logado veria qualquer projeto. |
-
-## EPIC-ADMIN — Aprovação de contas 🗣️
-
-Requisito citado: *"o admin deve permitir o uso da aplicação; o usuário pode
-criar a conta, mas deve esperar o admin aprovar a solicitação"*.
-
-Hoje o `auth` tem `ALLOW_SELF_SIGNUP` que **auto-concede** acesso (usado no
-face-lab). Para o ponto-studio queremos o oposto: signup cria a conta mas
-**NÃO** concede acesso; o admin aprova depois.
-
-| ID | Status | Prio | Item |
-|----|--------|------|------|
-| ADMIN-1 | ✅🗣️ | P0 | **Modelo de "solicitação pendente" — DECIDIDO: fila de solicitações.** Tabela nova `access_requests(user_id, app_id, status, requested_at, decided_at, decided_by)`. O admin vê a fila explícita de pendentes com data e aprova/recusa. |
-| ADMIN-2 | ❌ | P0 | **Signup sem auto-grant para ponto-studio.** Ajustar o fluxo de signup do `auth` para NÃO conceder `app_access` de ponto-studio automaticamente (diferente do face-lab). |
-| ADMIN-3 | 🔧 | P0 | **Painel admin: fila de aprovação.** Estender `auth/src/routes/admin.js` para listar solicitações pendentes e aprovar/recusar (aprovar = `appAccess.grant`). O painel de usuários/apps/acessos já existe. |
-| ADMIN-4 | ❌ | P1 | **Tela "aguardando aprovação" no app.** `/api/me` retorna se o usuário tem acesso a ponto-studio; se não, o front mostra "conta em análise" em vez do editor. |
-| ADMIN-5 | ❌ | P2 | **Notificação ao admin** (e-mail/Slack) quando entra uma solicitação. Pós-alpha. |
+| ~~ADMIN-1~~ | ❌ obsoleto | — | Fila de solicitações (`access_requests`) — não foi implementada, substituída pelo modelo de convite + self-signup acima. |
+| ~~ADMIN-2~~ | ✅ (outro caminho) | — | Substituído: não existe "signup sem auto-grant" — o self-signup por app, quando ligado, sempre concede acesso na hora (é a decisão consciente do alpha). |
+| ~~ADMIN-3~~ | ✅ (outro caminho) | — | Painel admin de convites/self-signup já existe em `auth/web/src/pages/admin/` — não há fila de aprovação porque não há mais fila. |
+| ~~ADMIN-4~~ | ❌ obsoleto | — | Tela "aguardando aprovação" não é necessária — com self-signup aberto, o acesso é imediato. |
+| ~~ADMIN-5~~ | ❌ obsoleto | — | Notificação de solicitação pendente — sem objeto, não há fila. |
 
 ## EPIC-EDITOR — Canvas & Ferramentas
 
@@ -90,7 +108,7 @@ face-lab). Para o ponto-studio queremos o oposto: signup cria a conta mas
 | ID | Status | Prio | Item |
 |----|--------|------|------|
 | EXP-1 | ✅ | — | Exportar DST/PES/JEF (worker) + SVG (síncrono), com download. |
-| EXP-2 | 🔧🗣️ | P0 | **Modal de exportar vira um "player" de simulação.** Ao clicar em "Exportar bordado", abre uma janela com **pré-visualização interativa** + **slider avançar/retroceder** (estilo Cura/Creality) + play/pause/velocidade. **DECIDIDO:** o player e a escolha de formato/botão exportar convivem na **mesma janela** (fluxo único: visualiza e baixa ali). Detalhe abaixo. |
+| EXP-2 | ✅ | — | **Player de simulação no modal de exportar** — implementado em `apps/web/src/components/StitchPlayer.tsx` + `ExportModal.tsx`, player e exportação na mesma janela conforme decidido. |
 | EXP-3 | ✅ | — | Fill hole-aware (par-ímpar) → miolo de letras fica vazio no DST. |
 | EXP-4 | ❌ | P1 | Estimativas no export: nº de pontos, trocas de cor, tempo aproximado, dimensões (mm) — como no visualizador DST de referência. |
 | EXP-5 | ❌ | P2 | Escolha de bastidor/limites e aviso se o desenho extrapola. (Tamanho de bastidor já é escolhido no início.) |
@@ -112,44 +130,55 @@ Player de simulação, baseado na sequência ordenada de pontos:
 
 | ID | Status | Prio | Item |
 |----|--------|------|------|
-| DATA-1 | 🔧 | P0 | **Persistência real de projetos (hoje em memória).** A API guarda projetos num `Map` — some ao reiniciar o container. Migrar para Postgres, com **ownership por usuário** (depende de AUTH-1). |
+| DATA-1 | ✅ | — | **Persistência real de projetos em Postgres**, com ownership por usuário — `db/schema.sql` (tabela `projects`, `owner_id`), `apps/api/src/services/projectsRepo.ts`. |
 | DATA-2 | ❌ | P1 | Lista de projetos do usuário (criar/abrir/renomear/excluir vários). Hoje é 1 projeto por vez via localStorage. |
 | DATA-3 | ✅ | — | Cache de análise no localStorage (mantém entre sessões). |
-| DATA-4 | ❌ | P2 | Versionamento/histórico do projeto. Pós-alpha. |
+| DATA-4 | ✅ | — | **Versionamento/histórico do projeto** — tabela `project_versions` em `db/schema.sql`, snapshot automático com coalescing de 10min (`projectsRepo.ts`). Não estava nem listado na revisão anterior deste doc. |
 
 ## EPIC-INFRA — Infra & Deploy
 
 | ID | Status | Prio | Item |
 |----|--------|------|------|
-| INF-1 | ✅ | — | Docker compose (web/api/worker/redis), portas em loopback, nginx `bordado.digital`, `install.sh`. |
-| INF-2 | 🔧 | P0 | **Deploy do alpha na VPS**: `git pull` + rebuild de `worker/api/web` (o erro `KeyError: 'svgFile'` era imagem worker desatualizada). Documentar o passo no `install.sh`. |
-| INF-3 | ❌ | P1 | Postgres para o ponto-studio (depende de DATA-1). Pode reusar o padrão do `auth`/`face-lab`. |
-| INF-4 | 🔧 | P2 | Volume/limpeza de `exports/` e `uploads/` (arquivos de análise/preview/export acumulam). |
+| INF-1 | ✅ | — | Docker compose (web/api/worker/redis/postgres), portas em loopback, nginx `bordado.digital`, `install.sh`. |
+| INF-2 | ✅ | — | Deploy do alpha na VPS já rodando (`git pull` + rebuild via `install.sh`). |
+| INF-3 | ✅ | — | Postgres do ponto-studio em produção (serviço `postgres` no `docker-compose.yml`, depende de DATA-1 ✅). |
+| INF-4 | 🔧 | P2 | Volume/limpeza de `exports/` e `uploads/` (arquivos de análise/preview/export acumulam) — `EXPORTS_TTL_HOURS`/`UPLOADS_TTL_HOURS` existem, confirmar que o cleanup roda de fato na VPS. |
+| INF-5 | ✅ | — | **Headers de segurança no nginx** (HSTS, X-Content-Type-Options, X-Frame-Options, Referrer-Policy) adicionados em `nginx/bordado.digital.conf` e no bloco `auth.bit-lab.tech` de `nginx/bit-lab.tech.conf` (2026-08-17, ver `SEGURANCA-PRE-LANCAMENTO.md` item 8). `helmet` também adicionado ao serviço `auth` (antes só a API do ponto-studio tinha). |
+| INF-6 | ⏳ ops | P1 | **Backups** de Postgres (auth + ponto-studio) e do volume `jwks` do auth — ainda não existe rotina. Fica pra uma próxima sessão (precisa decidir onde guardar, retenção, teste de restore). |
+
+## EPIC-PLANOS — Cobrança
+
+| ID | Status | Prio | Item |
+|----|--------|------|------|
+| PLAN-1 | ✅ | — | **Sem cobrança no alpha.** Nunca existiu billing real (Stripe etc.) — a landing (`apps/web/src/components/landing/pricing.tsx`) tinha uma tabela cosmética de 3 planos (Grátis/Pro R$29/Ateliê R$79) sem nenhum CTA funcional de pagamento. Substituída (2026-08-17) por uma seção única "gratuito durante o alpha". FAQ e navbar ajustados junto (removida a pergunta sobre cancelamento de plano pago). |
 
 ---
 
 ## Roteiro sugerido para o alpha (P0 primeiro)
 
-1. **EDIT-1 + EDIT-2** — canvas limpo (só áreas) e tldraw enxuto. _Rápido, alto impacto visual._
-2. **AUTH-1..3 + AUTH-2** — SSO in-app (padrão face-lab) + registrar client no `auth`.
-3. **ADMIN-1..3** — modelo de aprovação + signup sem auto-grant + fila no painel admin.
-4. **DATA-1** — persistência + ownership por usuário (destrava AUTH-5 e ADMIN-4).
-5. **EXP-2** — player de simulação no modal de exportar.
-6. **INF-2** — deploy do alpha.
+1. ~~EDIT-1 + EDIT-2~~ — canvas limpo e tldraw enxuto (ver EPIC-EDITOR, ainda 🔧, não revisado nesta rodada).
+2. ~~AUTH-1..5~~ — ✅ todo o epic concluído.
+3. ~~ADMIN~~ — ✅ resolvido por outro caminho (convite + self-signup, ver EPIC-ADMIN acima).
+4. ~~DATA-1, DATA-4~~ — ✅ persistência + versionamento concluídos.
+5. ~~EXP-2~~ — ✅ player de simulação concluído.
+6. ~~INF-2~~ — ✅ deploy do alpha rodando.
+7. **Restante pro go-live**: EPIC-EDITOR (EDIT-1, EDIT-2, EDIT-5 ainda 🔧/❌ — não auditados nesta rodada, conferir estado real antes de assumir pendentes), INF-6 (backups).
 
 ---
 
 ## Decisões tomadas
 
-- **ADMIN-1 — modelo de aprovação:** ✅ **(A) Fila de solicitações** — tabela
-  `access_requests` com a fila explícita de pendentes.
-- **EXP-2 — player:** ✅ **player + exportar na mesma janela** (fluxo único).
-  _A refinar durante a execução:_ granularidade do slider (ponto vs bloco de
-  cor) e se a simulação roda no front (recebe a sequência uma vez) ou pede
-  frames ao worker.
-- **Ordem de execução:** ✅ começar por **Auth + Admin**.
+- **ADMIN — modelo de acesso:** ✅ substituído por **convite (`signup_tokens`) +
+  self-signup por app**. Para `bordado-digital`: **self-signup aberto**
+  (qualquer um cria conta e usa na hora, sem aprovação) — decidido
+  2026-08-17.
+- **EXP-2 — player:** ✅ player + exportar na mesma janela (fluxo único).
+- **PLAN-1 — cobrança:** ✅ sem planos pagos no alpha — acesso gratuito para
+  todos.
+- **Ordem de execução:** ✅ Auth + Admin concluídos primeiro, como planejado.
 
 ## Ainda a confirmar
 
-- **AUTH-4 — gate nginx:** remover o `auth_request` de `bordado.digital`
-  quando o SSO in-app entrar (senão login duplo). Confirmar no deploy.
+- **INF-6 — backups:** rotina de backup de Postgres (auth + ponto-studio) e
+  do volume `jwks` ainda não existe — decidir onde/como antes do go-live
+  "de verdade" (o alpha pode rodar sem, mas é risco real de perda de dados).

@@ -43,6 +43,8 @@ services:
       SENTINELA_OIDC_SECRET: "${SENTINELA_OIDC_SECRET}"
       STUDIO_OIDC_SECRET: "${STUDIO_OIDC_SECRET}"
       ROLLBAR_SERVER_TOKEN: "${ROLLBAR_SERVER_TOKEN:-}"
+      MAIL_SERVICE_URL: "${MAIL_SERVICE_URL:-https://mail.bit-lab.tech}"
+      MAIL_INTERNAL_KEY: "${MAIL_INTERNAL_KEY:-}"
       JWKS_PATH: "/app/data/jwks.json"
       MEDIA_DIR: "/app/media"
       NODE_ENV: production

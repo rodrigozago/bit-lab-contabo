@@ -1,0 +1,13 @@
+services:
+  email:
+    build: .
+    restart: unless-stopped
+    environment:
+      PORT: "4000"
+      RESEND_API_KEY: "${RESEND_API_KEY}"
+      EMAIL_FROM: "${EMAIL_FROM}"
+      INTERNAL_KEY: "${INTERNAL_KEY}"
+    ports:
+      # nginx da VPS (mail.bit-lab.tech) faz proxy_pass pra cá — só loopback,
+      # sem exposição direta. 4001-4005 já ocupadas pelos outros serviços.
+      - "127.0.0.1:4006:4000"

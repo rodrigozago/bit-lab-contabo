@@ -38,6 +38,36 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_path TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS instagram TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS whatsapp TEXT;
 
+-- Verificação de e-mail real (ver email/, mailClient.js, routes/auth.js
+-- GET/POST /verify-email). Default TRUE de propósito: contas já existentes e
+-- contas criadas pelo admin (POST /admin/api/users) NUNCA foram verificadas
+-- por link e não devem ser bloqueadas retroativamente. Só o self-signup
+-- (POST /signup sem token de convite) cria o usuário com FALSE explícito.
+-- Convite não passa por aqui de novo: o token só chega no e-mail certo, já
+-- prova posse (ver decisão em SEGURANCA-PRE-LANCAMENTO.md item 10).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT true;
+
+CREATE TABLE IF NOT EXISTS email_verification_tokens (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash TEXT UNIQUE NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  used_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- "Esqueci minha senha" — não existia antes (reset sempre foi manual, feito
+-- pelo superuser no painel). Mesmo padrão hash-only de signup_tokens: só o
+-- hash fica no banco, o valor bruto só existe na URL enviada por e-mail.
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash TEXT UNIQUE NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  used_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS apps (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   slug TEXT UNIQUE NOT NULL,
@@ -48,6 +78,27 @@ CREATE TABLE IF NOT EXISTS apps (
 -- Self-signup deixou de ser uma flag global (ALLOW_SELF_SIGNUP/
 -- SELF_SIGNUP_GRANT_APPS) — agora é por app, controlado pelo superuser no painel.
 ALTER TABLE apps ADD COLUMN IF NOT EXISTS allow_self_signup BOOLEAN NOT NULL DEFAULT false;
+
+-- Termo de uso PRÓPRIO do app (além do termo global aceito no cadastro,
+-- ver legal_acceptances). NULL = app não exige termo próprio (comportamento
+-- padrão). Setar os dois pra pedir aceite específico no primeiro acesso
+-- daquele app (ver routes/interaction.js, prompt "consent").
+ALTER TABLE apps ADD COLUMN IF NOT EXISTS terms_version TEXT;
+ALTER TABLE apps ADD COLUMN IF NOT EXISTS terms_url TEXT;
+
+-- Aceite de termos/privacidade — scope='global' é o aceite único do
+-- cadastro (obrigatório pra todo mundo); scope=<slug do app> é o aceite do
+-- termo próprio daquele app (só quando apps.terms_version não é nulo).
+-- Versão faz parte da chave: subir a versão invalida aceites antigos sem
+-- precisar apagar histórico (fica registrado quem aceitou qual versão).
+CREATE TABLE IF NOT EXISTS legal_acceptances (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  scope TEXT NOT NULL,
+  version TEXT NOT NULL,
+  accepted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (user_id, scope, version)
+);
 
 -- Nome "app_access" (não "grants") para não colidir conceitualmente com o
 -- modelo interno "Grant" do oidc-provider — são coisas diferentes: isto é

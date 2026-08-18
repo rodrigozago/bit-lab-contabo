@@ -134,12 +134,11 @@ const configuration = {
     return {
       accountId: id,
       async claims() {
-        // ATENÇÃO: email_verified é sempre `true` por design — o signup NÃO
-        // faz verificação de e-mail por link. Nenhum RP deve confiar nesta
-        // claim como garantia de que o e-mail foi confirmado. Se um dia
-        // precisar dessa garantia, implementar verificação no signup e
-        // refletir o valor real aqui. Ver
-        // ponto-studio/docs/SEGURANCA-PRE-LANCAMENTO.md item 10.
+        // email_verified agora reflete o valor real da coluna (ver
+        // db/schema.sql e routes/auth.js GET/POST /verify-email) — antes era
+        // sempre `true` fixo. O próprio /interaction (prompt "consent") já
+        // barra o login de quem não verificou antes de chegar aqui, então
+        // esta claim só deveria valer `false` num RP que pule aquele gate.
         //
         // Claim continua se chamando `is_admin` no wire (não renomeado pra
         // is_superuser) de propósito — é o que ponto-studio já lê no
@@ -147,7 +146,7 @@ const configuration = {
         return {
           sub: id,
           email: user.email,
-          email_verified: true,
+          email_verified: !!user.email_verified,
           is_admin: user.is_superuser,
           name: user.name || undefined,
           picture: avatarUrl(user.avatar_path) || undefined,

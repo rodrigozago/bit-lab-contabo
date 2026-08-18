@@ -1,7 +1,7 @@
 const bcrypt = require('bcryptjs')
 const { pool } = require('../db')
 
-const PUBLIC_COLUMNS = 'id, email, name, instagram, whatsapp, avatar_path, is_superuser, created_at'
+const PUBLIC_COLUMNS = 'id, email, name, instagram, whatsapp, avatar_path, is_superuser, email_verified, created_at'
 
 async function findByEmail(email) {
   const { rows } = await pool.query('SELECT * FROM users WHERE email = $1', [email.toLowerCase()])
@@ -18,12 +18,15 @@ async function list() {
   return rows
 }
 
-async function create({ email, password, isSuperuser = false, name, instagram, whatsapp }) {
+// emailVerified default true: só o self-signup (routes/auth.js) passa
+// `false` explicitamente — convite e criação pelo admin não precisam de
+// verificação (ver comentário em db/schema.sql).
+async function create({ email, password, isSuperuser = false, name, instagram, whatsapp, emailVerified = true }) {
   const hash = bcrypt.hashSync(password, 12)
   const { rows } = await pool.query(
-    `INSERT INTO users (email, password_hash, is_superuser, name, instagram, whatsapp)
-     VALUES ($1, $2, $3, $4, $5, $6) RETURNING ${PUBLIC_COLUMNS}`,
-    [email.toLowerCase(), hash, isSuperuser, name || null, instagram || null, whatsapp || null]
+    `INSERT INTO users (email, password_hash, is_superuser, name, instagram, whatsapp, email_verified)
+     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING ${PUBLIC_COLUMNS}`,
+    [email.toLowerCase(), hash, isSuperuser, name || null, instagram || null, whatsapp || null, emailVerified]
   )
   return rows[0]
 }
@@ -31,6 +34,10 @@ async function create({ email, password, isSuperuser = false, name, instagram, w
 async function resetPassword(id, password) {
   const hash = bcrypt.hashSync(password, 12)
   await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [hash, id])
+}
+
+async function markEmailVerified(id) {
+  await pool.query('UPDATE users SET email_verified = true WHERE id = $1', [id])
 }
 
 async function remove(id) {
@@ -107,6 +114,7 @@ module.exports = {
   list,
   create,
   resetPassword,
+  markEmailVerified,
   remove,
   count,
   verifyPassword,

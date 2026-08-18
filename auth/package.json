@@ -11,6 +11,7 @@
     "bcryptjs": "^2.4.3",
     "cookie-parser": "^1.4.6",
     "express": "^4.19.2",
+    "helmet": "^7.2.0",
     "ioredis": "^5.4.1",
     "multer": "^2.0.0",
     "oidc-provider": "^8.5.1",

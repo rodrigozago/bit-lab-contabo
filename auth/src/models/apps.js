@@ -42,4 +42,14 @@ async function setSelfSignup(id, allowed) {
   return rows[0] || null
 }
 
-module.exports = { list, findBySlug, create, ensure, remove, setSelfSignup }
+/** Liga/desliga termo próprio do app (além do termo global do cadastro) —
+ * termsVersion null = app não exige termo próprio (comportamento padrão). */
+async function setTerms(id, { termsVersion, termsUrl }) {
+  const { rows } = await pool.query(
+    'UPDATE apps SET terms_version = $2, terms_url = $3 WHERE id = $1 RETURNING *',
+    [id, termsVersion || null, termsUrl || null]
+  )
+  return rows[0] || null
+}
+
+module.exports = { list, findBySlug, create, ensure, remove, setSelfSignup, setTerms }

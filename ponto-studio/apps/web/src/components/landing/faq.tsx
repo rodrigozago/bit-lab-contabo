@@ -33,9 +33,9 @@ const FAQS = [
       "Claro. Cada projeto fica salvo com histórico automático, então você volta, ajusta e reexporta quando quiser.",
   },
   {
-    question: "Como funciona o cancelamento?",
+    question: "O Bordado Digital é gratuito?",
     answer:
-      "Nos planos pagos você cancela a qualquer momento, sem multa. Seus projetos continuam acessíveis dentro dos limites do plano gratuito.",
+      "Sim. Durante o alpha, o acesso é 100% gratuito para todo mundo — sem cartão de crédito, sem limite de projetos.",
   },
 ];
 

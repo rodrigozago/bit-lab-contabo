@@ -1,7 +1,14 @@
-import { Gem, Sparkles, Users } from "lucide-react";
+import { CircleCheckBig, Sparkles } from "lucide-react";
 
-import { PricingColumn } from "@/components/ui/pricing-column";
+import { LinkButton } from "@/components/ui/link-button";
 import { Section } from "@/components/ui/section";
+
+const BENEFITS = [
+  "Projetos ilimitados",
+  "Todos os formatos (DST, PES, JEF, SVG)",
+  "Simulador de costura",
+  "Processamento local",
+];
 
 export function Pricing() {
   return (
@@ -9,57 +16,29 @@ export function Pricing() {
       <div className="max-w-container mx-auto flex flex-col items-center gap-6 sm:gap-12">
         <div className="flex flex-col items-center gap-4 text-center">
           <h2 className="max-w-[560px] text-3xl leading-tight font-semibold text-balance sm:text-5xl sm:leading-tight">
-            Planos pra cada etapa
+            Gratuito durante o alpha
           </h2>
           <p className="text-muted-foreground max-w-[640px] text-balance sm:text-lg">
-            Comece de graça e evolua quando o seu ateliê crescer.
+            O Bordado Digital está em fase alpha e todo mundo tem acesso
+            completo, de graça. Sem cartão de crédito.
           </p>
         </div>
-        <div className="grid w-full grid-cols-1 gap-4 md:grid-cols-3">
-          <PricingColumn
-            name="Grátis"
-            icon={<Sparkles className="size-4" />}
-            description="Pra experimentar e fazer seus primeiros bordados."
-            price={0}
-            priceNote="Sem cartão de crédito."
-            cta={{ variant: "glow", label: "Começar grátis", href: "/app" }}
-            features={[
-              "Até 3 projetos",
-              "Exportação SVG",
-              "Simulador de costura",
-              "Processamento local",
-            ]}
-          />
-          <PricingColumn
-            name="Pro"
-            variant="glow-brand"
-            icon={<Gem className="size-4" />}
-            description="Pra quem borda profissionalmente todo dia."
-            price={29}
-            priceNote="Cancele quando quiser."
-            cta={{ variant: "default", label: "Assinar o Pro", href: "/app" }}
-            features={[
-              "Projetos ilimitados",
-              "Todos os formatos (DST, PES, JEF, SVG)",
-              "Camadas ilimitadas",
-              "Histórico automático",
-              "Suporte prioritário",
-            ]}
-          />
-          <PricingColumn
-            name="Ateliê"
-            icon={<Users className="size-4" />}
-            description="Pra equipes e ateliês com vários bordadeiros."
-            price={79}
-            priceNote="Cobrança por ateliê."
-            cta={{ variant: "glow", label: "Falar com a gente", href: "/app" }}
-            features={[
-              "Tudo do Pro",
-              "Multiusuário",
-              "Biblioteca compartilhada",
-              "Gestão de permissões",
-            ]}
-          />
+        <div className="glass-2 dark:glass-3 flex w-full max-w-[480px] flex-col items-center gap-6 rounded-2xl p-8 text-center shadow-xl">
+          <Sparkles className="text-brand size-6" />
+          <ul className="flex flex-col gap-2">
+            {BENEFITS.map((benefit) => (
+              <li
+                key={benefit}
+                className="flex items-center gap-2 text-sm"
+              >
+                <CircleCheckBig className="text-muted-foreground size-4 shrink-0" />
+                {benefit}
+              </li>
+            ))}
+          </ul>
+          <LinkButton href="/app" variant="glow" size="lg">
+            Começar grátis
+          </LinkButton>
         </div>
       </div>
     </Section>

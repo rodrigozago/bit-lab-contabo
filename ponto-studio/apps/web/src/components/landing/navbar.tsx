@@ -18,7 +18,6 @@ import {
 const NAV_LINKS = [
   { text: "Recursos", href: "#recursos" },
   { text: "Como funciona", href: "#como-funciona" },
-  { text: "Preços", href: "#precos" },
   { text: "FAQ", href: "#faq" },
 ];
 

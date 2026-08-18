@@ -1,4 +1,5 @@
 const express = require('express')
+const helmet = require('helmet')
 const cookieParser = require('cookie-parser')
 const { migrate } = require('./db')
 const { bootstrap } = require('./bootstrapAdmin')
@@ -23,6 +24,12 @@ async function main() {
   // frente) — ninguém de fora injeta XFF direto no container. Ver
   // ponto-studio/docs/SEGURANCA-PRE-LANCAMENTO.md item 15.
   app.set('trust proxy', true)
+
+  // Headers de segurança (docs/SEGURANCA-PRE-LANCAMENTO.md item 8). CSP
+  // desligada pelo mesmo motivo documentado no helmet da API do ponto-studio:
+  // as páginas de login (src/views/login.js) têm <style> e style= inline, e a
+  // CSP default do helmet bloqueia estilo inline — quebraria a tela de login.
+  app.use(helmet({ contentSecurityPolicy: false }))
 
   app.use(cookieParser())
 

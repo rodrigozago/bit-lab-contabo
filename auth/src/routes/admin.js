@@ -4,6 +4,7 @@ const appsModel = require('../models/apps')
 const appAccessModel = require('../models/appAccess')
 const signupTokensModel = require('../models/signupTokens')
 const auditLog = require('../models/auditLog')
+const mailClient = require('../mailClient')
 const { requireSession, requireSuperuser } = require('../middleware')
 
 const router = express.Router()
@@ -77,6 +78,17 @@ router.patch('/api/apps/:id/self-signup', async (req, res) => {
   res.json(app)
 })
 
+// Termo próprio do app (além do termo global do cadastro) — termsVersion
+// vazio/null desliga o gate pra esse app. Ver docs do gate em
+// routes/interaction.js (prompt "consent").
+router.patch('/api/apps/:id/terms', async (req, res) => {
+  const { termsVersion, termsUrl } = req.body
+  const app = await appsModel.setTerms(req.params.id, { termsVersion, termsUrl })
+  if (!app) return res.status(404).json({ error: 'app não encontrado' })
+  await auditLog.record(req.user, 'app.terms_update', app.slug, { termsVersion: termsVersion || null, termsUrl: termsUrl || null })
+  res.json(app)
+})
+
 router.delete('/api/apps/:id', async (req, res) => {
   await appsModel.remove(req.params.id)
   res.json({ ok: true })
@@ -125,7 +137,11 @@ router.post('/api/signup-tokens', async (req, res) => {
     role, email: email || null, appIds, createdBy: req.user.userId, ttlHours: ttlHours || undefined,
   })
   await auditLog.record(req.user, 'signup_token.create', token.id, { role, email: email || null, appIds })
-  res.json({ id: token.id, url: `https://apps.bit-lab.tech/signup?token=${token.raw}`, expiresAt: token.expires_at })
+  const url = `https://apps.bit-lab.tech/signup?token=${token.raw}`
+  // Falha no envio não bloqueia a criação do convite — o superuser sempre
+  // pode copiar o link da resposta abaixo como fallback (ver mailClient.js).
+  if (email) mailClient.sendInvite({ to: email, url, expiresAt: token.expires_at })
+  res.json({ id: token.id, url, expiresAt: token.expires_at })
 })
 
 router.delete('/api/signup-tokens/:id', async (req, res) => {

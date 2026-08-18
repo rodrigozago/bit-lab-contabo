@@ -6,11 +6,17 @@ const users = require('../models/users')
 const apps = require('../models/apps')
 const appAccess = require('../models/appAccess')
 const signupTokens = require('../models/signupTokens')
+const emailVerificationTokens = require('../models/emailVerificationTokens')
+const passwordResetTokens = require('../models/passwordResetTokens')
+const legalAcceptances = require('../models/legalAcceptances')
 const auditLog = require('../models/auditLog')
+const mailClient = require('../mailClient')
 const session = require('../session')
 const { checkLimit } = require('../rateLimit')
 const { requireSession } = require('../middleware')
-const { renderLogin, renderSignup, renderMessage } = require('../views/login')
+const { renderLogin, renderSignup, renderMessage, renderForgotPassword, renderResetPassword } = require('../views/login')
+const legalViews = require('../views/legal')
+const { GLOBAL_TERMS_VERSION } = require('../legal')
 const { MEDIA_DIR, AVATAR_DIR, avatarUrl } = require('../media')
 
 const router = express.Router()
@@ -161,7 +167,7 @@ router.get('/invite/redeem', requireSession, async (req, res) => {
 })
 
 router.post('/signup', express.urlencoded({ extended: false }), async (req, res) => {
-  const { email, password, password2, redirect, token, app: appSlug, name, instagram, whatsapp } = req.body
+  const { email, password, password2, redirect, token, app: appSlug, name, instagram, whatsapp, acceptTerms } = req.body
   const ip = req.ip || 'unknown'
   const fail = (status, error) =>
     res.status(status).type('html').send(renderSignup({ error, redirect, token, app: appSlug, name, instagram, whatsapp }))
@@ -179,6 +185,7 @@ router.post('/signup', express.urlencoded({ extended: false }), async (req, res)
   if (!cleanName) return fail(400, 'Preencha seu nome.')
   if (!cleanInstagram) return fail(400, 'Preencha seu Instagram.')
   if (!cleanWhatsapp) return fail(400, 'Preencha seu WhatsApp.')
+  if (!acceptTerms) return fail(400, 'É preciso aceitar os Termos de Uso e a Política de Privacidade.')
 
   let tokenRow = null
   let selfSignupApp = null
@@ -198,22 +205,123 @@ router.post('/signup', express.urlencoded({ extended: false }), async (req, res)
 
   if (await users.findByEmail(cleanEmail)) return fail(409, 'Já existe uma conta com esse e-mail.')
 
+  // Convite: o token só chega no e-mail certo, já prova posse — sem
+  // verificação extra. Self-signup: e-mail não verificado até clicar no link.
   const user = await users.create({
     email: cleanEmail,
     password,
     name: cleanName,
     instagram: cleanInstagram,
     whatsapp: cleanWhatsapp,
+    emailVerified: !!tokenRow,
   })
+
+  await legalAcceptances.record(user.id, 'global', GLOBAL_TERMS_VERSION)
 
   if (tokenRow) {
     await signupTokens.redeem(tokenRow, user.id)
   } else {
     await appAccess.grant(user.id, selfSignupApp.id, 'end_user')
+    const verifyToken = await emailVerificationTokens.create(user.id)
+    mailClient.sendEmailVerification({
+      to: user.email,
+      url: `https://auth.bit-lab.tech/verify-email?token=${verifyToken.raw}`,
+    })
   }
 
   await session.create(res, user)
   res.redirect(safeRedirectPath(redirect) || 'https://apps.bit-lab.tech/')
+})
+
+// GET /verify-email — link recebido por e-mail no self-signup.
+router.get('/verify-email', async (req, res) => {
+  const { token } = req.query
+  const tokenRow = token && (await emailVerificationTokens.findValidByToken(token))
+  if (!tokenRow) {
+    return res.status(410).type('html').send(renderMessage({
+      title: 'Link inválido',
+      message: 'Este link de confirmação não existe mais, já foi usado ou expirou. Peça um novo pelo app.',
+    }))
+  }
+  await emailVerificationTokens.redeem(tokenRow)
+  res.type('html').send(renderMessage({
+    title: 'E-mail confirmado!',
+    message: 'Seu e-mail foi confirmado. Você já pode fechar esta aba e entrar no app.',
+  }))
+})
+
+// GET/POST /forgot-password — self-service, não existia antes (reset sempre
+// foi manual pelo superuser). Resposta sempre genérica no POST — não revela
+// se a conta existe (evita enumeração de e-mail).
+router.get('/forgot-password', (req, res) => {
+  res.type('html').send(renderForgotPassword({ redirect: req.query.redirect }))
+})
+
+router.post('/forgot-password', express.urlencoded({ extended: false }), async (req, res) => {
+  const { email, redirect } = req.body
+  const ip = req.ip || 'unknown'
+  const cleanEmail = (email || '').trim().toLowerCase()
+
+  const okLimit = await checkLimit(`forgot-password:${ip}`, 5, 60 * 60)
+  if (!okLimit) {
+    return res.status(429).type('html').send(renderForgotPassword({
+      error: 'Muitas tentativas — tente de novo mais tarde.', redirect,
+    }))
+  }
+
+  const user = cleanEmail && (await users.findByEmail(cleanEmail))
+  if (user) {
+    const resetToken = await passwordResetTokens.create(user.id)
+    mailClient.sendPasswordReset({
+      to: user.email,
+      url: `https://auth.bit-lab.tech/reset-password?token=${resetToken.raw}`,
+    })
+  }
+
+  res.type('html').send(renderForgotPassword({ sent: true, redirect }))
+})
+
+router.get('/reset-password', async (req, res) => {
+  const { token, redirect } = req.query
+  const tokenRow = token && (await passwordResetTokens.findValidByToken(token))
+  if (!tokenRow) {
+    return res.status(410).type('html').send(renderMessage({
+      title: 'Link inválido',
+      message: 'Este link de redefinição não existe mais, já foi usado ou expirou. Peça um novo em "Esqueci minha senha".',
+    }))
+  }
+  res.type('html').send(renderResetPassword({ token, redirect }))
+})
+
+router.post('/reset-password', express.urlencoded({ extended: false }), async (req, res) => {
+  const { token, password, password2, redirect } = req.body
+  const fail = (status, error) =>
+    res.status(status).type('html').send(renderResetPassword({ error, token, redirect }))
+
+  if (!password || password.length < 8) return fail(400, 'A senha precisa ter pelo menos 8 caracteres.')
+  if (password !== password2) return fail(400, 'As senhas não conferem.')
+
+  const tokenRow = token && (await passwordResetTokens.findValidByToken(token))
+  if (!tokenRow) {
+    return res.status(410).type('html').send(renderMessage({
+      title: 'Link inválido',
+      message: 'Este link de redefinição não existe mais, já foi usado ou expirou. Peça um novo em "Esqueci minha senha".',
+    }))
+  }
+
+  await passwordResetTokens.redeem(tokenRow, password)
+  res.redirect(safeRedirectPath(redirect) || '/login')
+})
+
+// GET /legal/termos e /legal/privacidade — placeholder até revisão jurídica
+// (ver views/legal.js). Sem auth: precisam estar acessíveis antes de logar
+// (linkadas no form de cadastro).
+router.get('/legal/termos', (req, res) => {
+  res.type('html').send(legalViews.renderTerms())
+})
+
+router.get('/legal/privacidade', (req, res) => {
+  res.type('html').send(legalViews.renderPrivacy())
 })
 
 // GET /verify — alvo do `auth_request` do nginx.
