@@ -7,7 +7,7 @@ const BENEFITS = [
   "Projetos ilimitados",
   "Todos os formatos (DST, PES, JEF, SVG)",
   "Simulador de costura",
-  "Processamento local",
+  "Caneta vetorial pra retoques manuais",
 ];
 
 export function Pricing() {

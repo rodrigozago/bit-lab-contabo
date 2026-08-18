@@ -3,7 +3,7 @@ import {
   Image,
   Layers,
   Circle,
-  Cpu,
+  PenTool,
   FileDown,
   PlayCircle,
   Frame,
@@ -68,10 +68,10 @@ const FEATURES: Feature[] = [
     icon: <History className="size-5 stroke-1" />,
   },
   {
-    title: "Processamento local",
+    title: "Caneta vetorial",
     description:
-      "Seu trabalho é processado no navegador — rápido, privado e sem depender da nuvem.",
-    icon: <Cpu className="size-5 stroke-1" />,
+      "Prefere desenhar na mão? Use a caneta vetorial (curvas Bézier) pra criar áreas personalizadas do zero, sem depender só da análise automática.",
+    icon: <PenTool className="size-5 stroke-1" />,
   },
 ];
 
