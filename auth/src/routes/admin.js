@@ -5,6 +5,9 @@ const appAccessModel = require('../models/appAccess')
 const signupTokensModel = require('../models/signupTokens')
 const auditLog = require('../models/auditLog')
 const mailClient = require('../mailClient')
+const { defaultInviteBody } = require('../inviteTemplates')
+const { renderVars } = require('../templateVars')
+const { APP_DOMAINS } = require('../appDomains')
 const { requireSession, requireSuperuser } = require('../middleware')
 
 const router = express.Router()
@@ -128,8 +131,19 @@ router.get('/api/signup-tokens', async (req, res) => {
   res.json(await signupTokensModel.list())
 })
 
+// GET /api/invite-template?appId=<uuid> — texto padrão (editável) do corpo do
+// convite pra pré-carregar o editor rico no painel. Sem appId (ou mais de um
+// app selecionado — o front só manda um), cai no texto genérico. Variáveis
+// ({name}/{app}/{domain}/{url}) ficam literais aqui — só são substituídas na
+// hora de enviar de verdade (POST abaixo).
+router.get('/api/invite-template', async (req, res) => {
+  const { appId } = req.query
+  const app = appId ? await appsModel.findByIds([appId]).then((rows) => rows[0]) : null
+  res.json({ bodyHtml: defaultInviteBody(app?.slug) })
+})
+
 router.post('/api/signup-tokens', async (req, res) => {
-  const { role, email, appIds, ttlHours } = req.body
+  const { role, email, appIds, ttlHours, name, emailBodyHtml } = req.body
   if (!['end_user', 'app_admin'].includes(role)) return res.status(400).json({ error: 'role inválido' })
   if (!Array.isArray(appIds) || appIds.length === 0) return res.status(400).json({ error: 'selecione pelo menos um app' })
 
@@ -144,10 +158,22 @@ router.post('/api/signup-tokens', async (req, res) => {
   // cai no texto genérico (ver email/src/templates/invite.js).
   if (email) {
     const grantedApps = await appsModel.findByIds(appIds)
-    const appSlug = grantedApps.length === 1 ? grantedApps[0].slug : undefined
+    const singleApp = grantedApps.length === 1 ? grantedApps[0] : null
+    const appSlug = singleApp?.slug
+    const vars = {
+      name: (name || '').trim() || email.split('@')[0],
+      app: singleApp?.name || 'bit-lab',
+      domain: (appSlug && APP_DOMAINS[appSlug]) || 'bit-lab.tech',
+      url,
+    }
+    // Corpo vem do editor rico (já pode ter sido editado pelo admin) ou do
+    // texto padrão daquele app — nos dois casos as variáveis literais só são
+    // substituídas aqui, na hora de enviar de verdade.
+    const bodySource = emailBodyHtml || defaultInviteBody(appSlug)
+    const customBodyHtml = renderVars(bodySource, vars)
     // Falha no envio não bloqueia a criação do convite — o superuser sempre
     // pode copiar o link da resposta abaixo como fallback (ver mailClient.js).
-    mailClient.sendInvite({ to: email, url, expiresAt: token.expires_at, appSlug })
+    mailClient.sendInvite({ to: email, url, expiresAt: token.expires_at, appSlug, customBodyHtml })
   }
   res.json({ id: token.id, url, expiresAt: token.expires_at })
 })

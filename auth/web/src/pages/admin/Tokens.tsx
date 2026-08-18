@@ -3,6 +3,7 @@ import { toast } from "sonner"
 import { Copy } from "lucide-react"
 
 import { api } from "@/lib/api"
+import { RichTextEditor } from "@/components/RichTextEditor"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -32,10 +33,27 @@ export function TokensPage() {
   const [tokens, setTokens] = React.useState<TokenRow[] | null>(null)
   const [role, setRole] = React.useState<TokenRow["role"]>("end_user")
   const [email, setEmail] = React.useState("")
+  const [name, setName] = React.useState("")
   const [ttlHours, setTtlHours] = React.useState("168")
   const [selectedApps, setSelectedApps] = React.useState<string[]>([])
+  const [emailBody, setEmailBody] = React.useState("")
   const [creating, setCreating] = React.useState(false)
   const [generatedUrl, setGeneratedUrl] = React.useState<string | null>(null)
+
+  // Pré-carrega o texto padrão do convite quando exatamente um app está
+  // selecionado (só nesse caso dá pra escolher um texto específico daquele
+  // app — ver routes/admin.js). Só troca quando o app selecionado muda, pra
+  // não sobrescrever uma edição em andamento do admin a cada re-render.
+  const prefilledForRef = React.useRef<string | null>(null)
+  React.useEffect(() => {
+    const appId = selectedApps.length === 1 ? selectedApps[0] : null
+    if (appId === prefilledForRef.current) return
+    prefilledForRef.current = appId
+    if (!appId) return
+    api.get<{ bodyHtml: string }>(`/admin/api/invite-template?appId=${appId}`)
+      .then((res) => setEmailBody(res.bodyHtml))
+      .catch(() => {})
+  }, [selectedApps])
 
   const load = React.useCallback(() => {
     Promise.all([
@@ -58,9 +76,11 @@ export function TokensPage() {
     try {
       const result = await api.post<{ url: string }>("/admin/api/signup-tokens", {
         role, email: email || undefined, appIds: selectedApps, ttlHours: Number(ttlHours) || undefined,
+        name: name || undefined, emailBodyHtml: emailBody || undefined,
       })
       setGeneratedUrl(result.url)
-      setEmail(""); setSelectedApps([])
+      setEmail(""); setName(""); setSelectedApps([]); setEmailBody("")
+      prefilledForRef.current = null
       load()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "erro")
@@ -111,6 +131,10 @@ export function TokensPage() {
                 <Input id="token-email" type="email" placeholder="trava o link a este e-mail" value={email} onChange={(e) => setEmail(e.target.value)} />
               </div>
               <div className="flex flex-col gap-1.5">
+                <Label htmlFor="token-name">Nome do convidado (opcional)</Label>
+                <Input id="token-name" placeholder="usado na variável {name} do e-mail" value={name} onChange={(e) => setName(e.target.value)} />
+              </div>
+              <div className="flex flex-col gap-1.5">
                 <Label htmlFor="ttl">Validade (horas)</Label>
                 <Input id="ttl" type="number" min={1} className="w-32" value={ttlHours} onChange={(e) => setTtlHours(e.target.value)} />
               </div>
@@ -131,6 +155,18 @@ export function TokensPage() {
                 ))}
               </div>
             </div>
+
+            {email && (
+              <div className="flex flex-col gap-1.5">
+                <Label>Texto do e-mail de convite</Label>
+                <RichTextEditor value={emailBody} onChange={setEmailBody} />
+                <p className="text-xs text-muted-foreground">
+                  Variáveis: <code>{"{name}"}</code> (nome acima, ou o início do e-mail se em branco),{" "}
+                  <code>{"{app}"}</code>, <code>{"{domain}"}</code>, <code>{"{url}"}</code> (link de convite).
+                  Só é usado se você preencher o e-mail acima — sem e-mail, o link fica só pra copiar.
+                </p>
+              </div>
+            )}
 
             <div>
               <Button type="submit" disabled={creating}>Gerar link</Button>

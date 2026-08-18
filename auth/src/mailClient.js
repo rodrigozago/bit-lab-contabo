@@ -34,7 +34,8 @@ async function send(template, to, data) {
   }
 }
 
-const sendInvite = ({ to, url, expiresAt, appSlug }) => send('invite', to, { url, expiresAt, appSlug })
+const sendInvite = ({ to, url, expiresAt, appSlug, customBodyHtml }) =>
+  send('invite', to, { url, expiresAt, appSlug, customBodyHtml })
 const sendPasswordReset = ({ to, url }) => send('password-reset', to, { url })
 const sendEmailVerification = ({ to, url }) => send('email-verification', to, { url })
 

@@ -29,10 +29,11 @@ const DEFAULT_COPY = {
   ctaLabel: "Criar minha conta",
 };
 
-// data: { url, expiresAt, appSlug? } — appSlug escolhe o texto específico
-// daquele app quando o convite dá acesso a um único app reconhecido (ver
-// auth/src/routes/admin.js POST /api/signup-tokens); sem match, cai no texto
-// genérico.
+// data: { url, expiresAt, appSlug?, customBodyHtml? } — customBodyHtml é o
+// texto editado pelo admin no painel (já com as variáveis {name}/{app}/
+// {domain}/{url} substituídas em auth/src/routes/admin.js) e substitui o
+// parágrafo padrão; título/CTA continuam vindo do appSlug reconhecido (ou do
+// texto genérico) pra manter a identidade visual do e-mail.
 export function inviteTemplate(data) {
   const copy = (data.appSlug && APP_COPY[data.appSlug]) || DEFAULT_COPY;
   const expires = data.expiresAt
@@ -42,7 +43,7 @@ export function inviteTemplate(data) {
   const html = layout({
     title: copy.subject,
     heading: copy.heading,
-    bodyHtml: copy.bodyHtml,
+    bodyHtml: data.customBodyHtml || copy.bodyHtml,
     ctaLabel: copy.ctaLabel,
     ctaUrl: data.url,
     footerNote: expires
