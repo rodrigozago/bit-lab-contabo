@@ -3,11 +3,13 @@ import { sendEmail } from "../resend.js";
 import { inviteTemplate } from "../templates/invite.js";
 import { passwordResetTemplate } from "../templates/passwordReset.js";
 import { emailVerificationTemplate } from "../templates/emailVerification.js";
+import { feedbackTemplate } from "../templates/feedback.js";
 
 const TEMPLATES = {
   invite: inviteTemplate,
   "password-reset": passwordResetTemplate,
   "email-verification": emailVerificationTemplate,
+  feedback: feedbackTemplate,
 };
 
 const INTERNAL_KEY = process.env.INTERNAL_KEY || "";

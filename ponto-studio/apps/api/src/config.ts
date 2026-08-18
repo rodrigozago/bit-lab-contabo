@@ -51,4 +51,13 @@ export const config = {
     // sem segredo em silêncio na produção.
     clientSecret: envStrict("OIDC_CLIENT_SECRET", "dev-oidc-client-secret"),
   },
+
+  // Microserviço de e-mail (mail.bit-lab.tech) — usado só pelo botão de
+  // feedback por enquanto. `envOr` (não `envStrict`) de propósito: sem essas
+  // vars o envio falha graciosamente (loga e retorna erro pro usuário tentar
+  // depois) em vez de derrubar o boot da API inteira por uma feature opcional.
+  mail: {
+    serviceUrl: envOr("MAIL_SERVICE_URL", "https://mail.bit-lab.tech"),
+    internalKey: envOr("MAIL_INTERNAL_KEY", ""),
+  },
 };

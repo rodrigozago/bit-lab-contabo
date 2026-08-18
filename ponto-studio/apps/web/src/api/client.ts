@@ -103,6 +103,10 @@ export const api = {
     me: () => request<Me>("/me"),
     logout: () => request<{ ssoLogoutUrl: string }>("/auth/logout", { method: "POST" }),
   },
+  feedback: {
+    send: (body: { message: string; browser?: { language?: string; timezone?: string; viewport?: string } }) =>
+      request<null>("/feedback", { method: "POST", body: JSON.stringify(body) }),
+  },
   upload: {
     image: async (file: File): Promise<{ fileId: string; url: string }> => {
       const fd = new FormData();

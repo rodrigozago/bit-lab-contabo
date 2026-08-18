@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Home } from "./components/Home.tsx";
 import { EditorRoute } from "./components/EditorRoute.tsx";
 import { LandingPage } from "./components/landing/index.tsx";
+import { FeedbackButton } from "./components/FeedbackButton.tsx";
 import { api } from "./api/client.ts";
 import { AuthContext, useAuth, loginUrl, type Me } from "./lib/auth.ts";
 import { ToastProvider } from "./components/Toast.tsx";
@@ -111,5 +112,10 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return <>{children}</>;
+  return (
+    <>
+      {children}
+      <FeedbackButton />
+    </>
+  );
 }

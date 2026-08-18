@@ -53,6 +53,8 @@ services:
       EXPORTS_TTL_HOURS: "${EXPORTS_TTL_HOURS:-24}"
       UPLOADS_TTL_HOURS: "${UPLOADS_TTL_HOURS:-24}"
       ROLLBAR_SERVER_TOKEN: "${ROLLBAR_SERVER_TOKEN:-}"
+      MAIL_SERVICE_URL: "${MAIL_SERVICE_URL:-https://mail.bit-lab.tech}"
+      MAIL_INTERNAL_KEY: "${MAIL_INTERNAL_KEY:-}"
     volumes:
       - exports:/app/apps/api/exports
       - uploads:/app/apps/api/uploads

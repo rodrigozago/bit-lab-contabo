@@ -16,6 +16,7 @@ import { analyzeRoutes } from "./routes/analyze.js";
 import { previewRoutes } from "./routes/preview.js";
 import { stitchPreviewRoutes } from "./routes/stitchPreview.js";
 import { authRoutes } from "./routes/auth.js";
+import { feedbackRoutes } from "./routes/feedback.js";
 import { startResultListener } from "./services/jobQueue.js";
 import { startCleanup } from "./services/cleanup.js";
 import { migrate } from "./db.js";
@@ -109,6 +110,7 @@ await app.register(analyzeRoutes, { prefix: "/api/analyze" });
 await app.register(previewRoutes, { prefix: "/api/preview" });
 await app.register(stitchPreviewRoutes, { prefix: "/api/stitch-preview" });
 await app.register(authRoutes);
+await app.register(feedbackRoutes, { prefix: "/api/feedback" });
 
 app.get("/health", async () => ({ ok: true, service: "ponto-studio-api" }));
 
