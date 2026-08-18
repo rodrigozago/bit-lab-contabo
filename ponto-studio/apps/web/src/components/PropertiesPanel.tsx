@@ -3,6 +3,7 @@ import { ChevronRight, Scissors, Sparkles, Trash2 } from "lucide-react";
 import { HOOP_PX_PER_MM, STROKE_FAMILY_STITCH_TYPES, type EmbroideryElement, type StitchParams, type StitchType } from "@ponto-studio/shared";
 import { cn } from "@/lib/utils.ts";
 import { Button } from "@/components/ui/button.tsx";
+import { ColorPicker } from "@/components/ui/color-picker.tsx";
 import { Slider } from "@/components/ui/slider.tsx";
 import { Checkbox } from "@/components/ui/checkbox.tsx";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible.tsx";
@@ -170,15 +171,7 @@ export function PropertiesPanel({ element, onChange, onDelete, regionCount, onSp
 
         <div className="flex flex-col gap-1.5">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Cor do fio</p>
-          <div className="flex items-center gap-2.5">
-            <input
-              type="color"
-              value={color}
-              onChange={(e) => onChange({ color: e.target.value })}
-              className="h-10 w-10 cursor-pointer rounded-md border-0 p-0"
-            />
-            <span className="tabular-nums text-sm text-muted-foreground">{color.toUpperCase()}</span>
-          </div>
+          <ColorPicker value={color} onChange={(hex) => onChange({ color: hex })} />
         </div>
 
         {/* Só partes criadas pelas ferramentas Retângulo/Círculo (SimpleShapeTool)
