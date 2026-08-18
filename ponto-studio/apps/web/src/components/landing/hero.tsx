@@ -52,11 +52,10 @@ export function Hero() {
                 className="bg-background/90 w-full rounded-xl border-0"
               >
                 <Screenshot
-                  srcLight="/hero-light.svg"
-                  srcDark="/hero-dark.svg"
+                  srcLight="/editor-screenshot.png"
                   alt="Editor do Bordado Digital"
-                  width={1248}
-                  height={765}
+                  width={1697}
+                  height={916}
                   loading="eager"
                   className="w-full"
                 />
