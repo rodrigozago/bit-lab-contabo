@@ -18,7 +18,6 @@ export function Video() {
         <div className="relative w-full pt-4">
           <MockupFrame size="small">
             <Mockup type="responsive" className="bg-background/90 w-full border-0">
-              {/* TODO: soltar o arquivo real em public/media/export-demo.mp4 */}
               <video
                 autoPlay
                 muted
