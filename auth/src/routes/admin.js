@@ -151,7 +151,11 @@ router.post('/api/signup-tokens', async (req, res) => {
     role, email: email || null, appIds, createdBy: req.user.userId, ttlHours: ttlHours || undefined,
   })
   await auditLog.record(req.user, 'signup_token.create', token.id, { role, email: email || null, appIds })
-  const url = `https://apps.bit-lab.tech/signup?token=${token.raw}`
+  // auth.bit-lab.tech (serviço `auth`, GET /signup em routes/auth.js) — NÃO
+  // apps.bit-lab.tech: essa é a SPA do painel admin (auth/web), que não tem
+  // rota /signup nenhuma. Um link apontando pra lá caía no catch-all "*" →
+  // redirect pra "/", perdendo o token e mostrando só a tela de "Entrar".
+  const url = `https://auth.bit-lab.tech/signup?token=${token.raw}`
   // Texto do e-mail depende do(s) app(s) concedidos — só quando o convite dá
   // acesso a UM único app é que dá pra escolher um texto específico dele (ex.:
   // convite do alfa do bordado-digital). Convite pra vários apps de uma vez
