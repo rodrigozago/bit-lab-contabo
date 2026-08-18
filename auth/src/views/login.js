@@ -76,19 +76,22 @@ function renderMessage({ title, message }) {
 }
 
 // Tela mostrada no meio do fluxo OIDC (prompt "consent") quando a conta
-// ainda não confirmou o e-mail — ver routes/interaction.js. Fica "pendurada"
-// aqui até o usuário confirmar (clicando no link do e-mail) e tentar entrar
-// de novo no app — não tenta retomar a interação sozinha.
+// ainda não confirmou o e-mail — ver routes/interaction.js. "Já confirmei"
+// só recarrega /interaction/:uid (GET) — como a checagem de email_verified
+// roda de novo a cada carregamento dessa rota, isso é o suficiente pra
+// destravar assim que o usuário clicar no link do e-mail (a interação
+// segue "pendurada", nunca finalizada até isso acontecer).
 function renderVerifyPending({ uid, resent } = {}) {
   return layout('bit-lab — confirme seu e-mail', `  <div style="display:flex;flex-direction:column;gap:16px;">
     <div class="card">
       <h1>Confirme seu e-mail</h1>
       <p>Antes de continuar, você precisa confirmar seu e-mail — mandamos um
       link quando você criou a conta.</p>
-      <p>Depois de clicar no link do e-mail, feche esta aba e tente entrar
-      no app de novo.</p>
+      <p>Depois de clicar no link do e-mail, volte aqui e clique em
+      "Já confirmei".</p>
       ${resent ? '<p style="color:#a3e8b8;">Reenviamos o e-mail de confirmação.</p>' : ''}
     </div>
+    <a class="btn-secondary" href="/interaction/${escapeHtml(uid)}" style="text-align:center;">Já confirmei</a>
     <form method="POST" action="/interaction/${escapeHtml(uid)}/resend-verification">
       <button type="submit">Reenviar e-mail de confirmação</button>
     </form>
