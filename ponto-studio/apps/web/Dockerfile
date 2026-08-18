@@ -29,6 +29,12 @@ ENV VITE_BUILD_SHA=$VITE_BUILD_SHA
 WORKDIR /app/apps/web
 RUN node_modules/.bin/tsc -p tsconfig.json --noEmit
 RUN node_modules/.bin/vite build
+# Pré-renderiza só a landing (rota "/") pro dist/index.html — ver
+# scripts/prerender.tsx. Roda em Node puro (vite-node), sem browser/Chromium;
+# não toca nas rotas autenticadas. `pnpm exec` (não node_modules/.bin direto):
+# node-linker=hoisted deixa os bins só no node_modules/.bin da raiz do
+# monorepo, não em apps/web/node_modules/.bin.
+RUN pnpm exec vite-node scripts/prerender.tsx
 
 # ── Serve estático com nginx ───────────────────────────────────────────────────
 FROM nginx:1.27-alpine AS runtime

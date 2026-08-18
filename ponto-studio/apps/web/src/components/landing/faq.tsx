@@ -56,7 +56,15 @@ const faqJsonLd = {
 export function FAQ() {
   return (
     <Section id="faq">
-      <script type="application/ld+json">{JSON.stringify(faqJsonLd)}</script>
+      {/* dangerouslySetInnerHTML (não children de texto): renderToString escapa
+          texto de <script> como qualquer outro nó (vira &quot; etc.), quebrando
+          o JSON — dangerouslySetInnerHTML grava o HTML cru, igual no client
+          render. Conteúdo é gerado só a partir de FAQS (estático, sem input de
+          usuário), sem risco de XSS. */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
+      />
       <div className="max-w-container mx-auto flex max-w-[720px] flex-col items-center gap-6 sm:gap-12">
         <h2 className="text-center text-3xl leading-tight font-semibold text-balance sm:text-5xl sm:leading-tight">
           Perguntas frequentes

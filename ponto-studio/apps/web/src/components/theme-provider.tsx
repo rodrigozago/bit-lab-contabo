@@ -17,9 +17,12 @@ export function ThemeProvider({
   storageKey = "vite-ui-theme",
   ...props
 }: ThemeProviderProps) {
-  const [theme, setTheme] = React.useState<Theme>(
-    () => (localStorage.getItem(storageKey) as Theme) || defaultTheme
-  )
+  // typeof window guard: precisa rodar sem erro no script de pré-renderização
+  // da landing (scripts/prerender.tsx, via vite-node em Node puro, sem DOM).
+  const [theme, setTheme] = React.useState<Theme>(() => {
+    if (typeof window === "undefined") return defaultTheme
+    return (localStorage.getItem(storageKey) as Theme) || defaultTheme
+  })
 
   React.useEffect(() => {
     const root = window.document.documentElement

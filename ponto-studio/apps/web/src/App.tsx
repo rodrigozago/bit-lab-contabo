@@ -1,7 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { Home } from "./components/Home.tsx";
-import { EditorRoute } from "./components/EditorRoute.tsx";
+import { useState, useEffect, useCallback, lazy, Suspense } from "react";
+import { Routes, Route } from "react-router-dom";
 import { LandingPage } from "./components/landing/index.tsx";
 import { FeedbackButton } from "./components/FeedbackButton.tsx";
 import { api } from "./api/client.ts";
@@ -12,6 +10,16 @@ import { Logo } from "@/components/logo.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Card, CardContent } from "@/components/ui/card.tsx";
 import { Toaster } from "@/components/ui/sonner.tsx";
+
+// lazy: Home/EditorRoute (via Editor.tsx) puxam @tldraw/tldraw, que não roda
+// em Node — scripts/prerender.tsx importa este App.tsx inteiro (pra bater
+// exatamente com a árvore de componentes do client e o useId() do Radix não
+// dessincronizar na hidratação, ver comentário lá) mas só a rota "/" é
+// renderizada nesse passo, então o import() de dentro do lazy() nunca chega
+// a rodar — sem isso, o `import` estático no topo do arquivo já teria
+// carregado o tldraw e quebrado o build.
+const Home = lazy(() => import("./components/Home.tsx").then((m) => ({ default: m.Home })));
+const EditorRoute = lazy(() => import("./components/EditorRoute.tsx").then((m) => ({ default: m.EditorRoute })));
 
 export default function App() {
   const [me, setMe] = useState<Me | null>(null);
@@ -36,7 +44,17 @@ export default function App() {
       <AuthContext.Provider value={{ me, loading: authLoading, refresh }}>
         <ToastProvider>
           <Toaster />
-          <BrowserRouter>
+          {/* Router (BrowserRouter no client, StaticRouter no
+              scripts/prerender.tsx) fica por conta de quem monta o App —
+              main.tsx e o prerender precisam do mesmo Router "por fora"
+              pra não afetar a árvore de componentes daqui pra dentro. */}
+          <Suspense
+            fallback={
+              <div className="flex min-h-svh items-center justify-center bg-muted">
+                <Logo size={40} variant="transparent" />
+              </div>
+            }
+          >
             <Routes>
               {/* Landing pública na raiz — sem gate de auth */}
               <Route path="/" element={<LandingPage />} />
@@ -58,7 +76,7 @@ export default function App() {
                 }
               />
             </Routes>
-          </BrowserRouter>
+          </Suspense>
         </ToastProvider>
       </AuthContext.Provider>
     </ThemeProvider>

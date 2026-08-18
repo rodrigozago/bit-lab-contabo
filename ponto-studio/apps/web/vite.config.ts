@@ -5,6 +5,16 @@ import { resolve } from "path";
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  // react-router-dom@6.26.2 não tem "exports" no package.json — resolução
+  // Node padrão (usada pelo scripts/prerender.tsx via vite-node) pega o
+  // build CJS/UMD, enquanto o resto do app (via Vite) pega o build ESM.
+  // Duas instâncias do Context do react-router → useRoutes() não acha o
+  // Router (erro "may be used only in the context of a <Router>"). Isso
+  // força o Vite a processar/bundlar esses pacotes também no SSR, em vez de
+  // deixar o Node resolver "cru" — resolve pra uma instância só.
+  ssr: {
+    noExternal: ["react-router-dom", "react-router"],
+  },
   test: {
     environment: "happy-dom",
     // node-linker=hoisted duplica react na raiz e no app; os testes precisam
