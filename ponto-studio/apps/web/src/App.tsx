@@ -8,6 +8,7 @@ import { api } from "./api/client.ts";
 import { AuthContext, useAuth, loginUrl, type Me } from "./lib/auth.ts";
 import { ToastProvider } from "./components/Toast.tsx";
 import { ThemeProvider } from "@/components/theme-provider";
+import { Logo } from "@/components/logo.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Card, CardContent } from "@/components/ui/card.tsx";
 import { Toaster } from "@/components/ui/sonner.tsx";
@@ -70,7 +71,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   if (loading) {
     return (
       <div className="flex min-h-svh items-center justify-center bg-muted">
-        <span className="text-4xl">🪡</span>
+        <Logo size={40} variant="transparent" />
       </div>
     );
   }
@@ -83,7 +84,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
           <Card className="overflow-hidden">
             <CardContent className="grid p-0 md:grid-cols-2">
               <div className="flex flex-col items-center justify-center gap-4 p-8 text-center md:p-10">
-                <span className="text-4xl">🪡</span>
+                <Logo size={40} variant="transparent" />
                 <h1 className="text-2xl font-bold">Bordado Digital</h1>
                 {pending ? (
                   <>
@@ -103,7 +104,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
                 )}
               </div>
               <div className="relative hidden bg-muted md:flex md:items-center md:justify-center">
-                <span className="text-8xl opacity-80">🪡</span>
+                <Logo size={140} variant="transparent" className="opacity-80" />
               </div>
             </CardContent>
           </Card>

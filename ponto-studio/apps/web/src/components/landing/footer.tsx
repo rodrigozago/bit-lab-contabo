@@ -1,4 +1,5 @@
 import { ModeToggle } from "@/components/mode-toggle";
+import { Logo } from "@/components/logo";
 import {
   Footer as FooterContainer,
   FooterBottom,
@@ -41,7 +42,7 @@ export function Footer() {
           <FooterContent>
             <FooterColumn className="col-span-2 sm:col-span-3 md:col-span-1">
               <a href="/" className="flex items-center gap-2 text-xl font-bold">
-                <span className="text-2xl">🪡</span>
+                <Logo size={28} variant="transparent" />
                 Bordado Digital
               </a>
               <p className="text-muted-foreground text-sm text-balance">

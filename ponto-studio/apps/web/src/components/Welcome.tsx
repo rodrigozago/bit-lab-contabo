@@ -3,6 +3,7 @@ import { Trash2 } from "lucide-react";
 import type { Hoop } from "@ponto-studio/shared";
 import { api } from "../api/client.ts";
 import { cn } from "@/lib/utils.ts";
+import { Logo } from "@/components/logo.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Card, CardContent } from "@/components/ui/card.tsx";
 import { Input } from "@/components/ui/input.tsx";
@@ -151,7 +152,7 @@ export function Welcome({ onStart, onCancel }: Props) {
           )}
 
           <div className="flex flex-col items-center gap-1 text-center">
-            <span className="text-3xl">🪡</span>
+            <Logo size={36} variant="transparent" />
             <h1 className="text-xl font-bold">Novo projeto</h1>
             <p className="text-sm font-semibold text-primary">Digitalize seus bordados</p>
           </div>

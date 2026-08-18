@@ -7,6 +7,7 @@ import { composeThumbnail } from "../utils/svgLayers.ts";
 import { Welcome } from "./Welcome.tsx";
 import { useToast } from "./Toast.tsx";
 import { BaseLayout } from "@/components/layouts/base-layout";
+import { Logo } from "@/components/logo.tsx";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
@@ -35,7 +36,7 @@ export function Home() {
     return (
       <BaseLayout>
         <div className="flex flex-1 items-center justify-center py-24">
-          <span className="text-3xl">🪡</span>
+          <Logo size={36} variant="transparent" />
         </div>
       </BaseLayout>
     );
@@ -104,7 +105,7 @@ function ProjectCard({ project }: { project: EmbroideryProject }) {
             {thumbnail ? (
               <div className="h-4/5 w-4/5" dangerouslySetInnerHTML={{ __html: thumbnail }} />
             ) : (
-              <span className="text-3xl opacity-40">🪡</span>
+              <Logo size={36} variant="transparent" className="opacity-40" />
             )}
           </div>
           <span className="truncate text-sm font-semibold">{project.name}</span>

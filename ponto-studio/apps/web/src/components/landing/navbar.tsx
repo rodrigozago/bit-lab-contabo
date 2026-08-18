@@ -30,7 +30,6 @@ export function Navbar() {
           <NavbarLeft>
             <a href="/" className="flex items-center gap-2 text-xl font-bold">
               <Logo size={28} variant="transparent" />
-              Bordado Digital
             </a>
             <nav className="hidden items-center gap-6 md:flex">
               {NAV_LINKS.map((link) => (
@@ -74,7 +73,6 @@ export function Navbar() {
                     className="flex items-center gap-2 text-xl font-bold"
                   >
                     <Logo size={28} variant="transparent" />
-                    Bordado Digital
                   </a>
                   {NAV_LINKS.map((link) => (
                     <a
